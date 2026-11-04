@@ -31,6 +31,8 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // The Docker build sets NEXT_OUTPUT=standalone; local `npm start` keeps the default output.
+  ...(process.env.NEXT_OUTPUT === "standalone" ? { output: "standalone" as const } : {}),
   cacheComponents: true,
   partialPrefetching: true,
   poweredByHeader: false,

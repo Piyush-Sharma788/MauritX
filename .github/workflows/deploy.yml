@@ -1,0 +1,156 @@
+name: Deploy
+
+# Reusable deployment over SSH + Docker Compose. Called by cd.yml.
+#
+# Per GitHub environment ("staging", "production"):
+#   secrets  SSH_PRIVATE_KEY   private key of a deploy user on the server
+#            SSH_KNOWN_HOSTS   the server's host key line(s) (ssh-keyscan output, verified out of band)
+#            GHCR_READ_TOKEN   token with read:packages, so the server can pull images
+#   vars     DEPLOY_HOST       server hostname or IP
+#            DEPLOY_USER       SSH user (member of the docker group)
+#            DEPLOY_PATH       directory holding docker-compose.yml and .env.production
+#            APP_URL           public HTTPS URL, used for the post-deploy smoke test
+#            GHCR_READ_USER    GitHub username that owns GHCR_READ_TOKEN
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      image_tag:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy ${{ inputs.image_tag }} to ${{ inputs.environment }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment:
+      name: ${{ inputs.environment }}
+      url: ${{ vars.APP_URL }}
+    concurrency:
+      group: deploy-${{ inputs.environment }}
+      cancel-in-progress: false
+    env:
+      DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+      APP_URL: ${{ vars.APP_URL }}
+      IMAGE_TAG: ${{ inputs.image_tag }}
+    steps:
+      - name: Check out deployment files
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: deploy
+
+      - name: Check configuration
+        shell: bash
+        env:
+          HAS_KEY: ${{ secrets.SSH_PRIVATE_KEY != '' }}
+          HAS_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS != '' }}
+          HAS_TOKEN: ${{ secrets.GHCR_READ_TOKEN != '' }}
+          GHCR_READ_USER: ${{ vars.GHCR_READ_USER }}
+        run: |
+          missing=()
+          for name in DEPLOY_HOST DEPLOY_USER DEPLOY_PATH APP_URL GHCR_READ_USER; do
+            [ -n "${!name}" ] || missing+=("var $name")
+          done
+          [ "$HAS_KEY" = "true" ] || missing+=("secret SSH_PRIVATE_KEY")
+          [ "$HAS_HOSTS" = "true" ] || missing+=("secret SSH_KNOWN_HOSTS")
+          [ "$HAS_TOKEN" = "true" ] || missing+=("secret GHCR_READ_TOKEN")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Environment '${{ inputs.environment }}' is missing: ${missing[*]}"
+            exit 1
+          fi
+          case "$APP_URL" in https://*) ;; *) echo "::error::APP_URL must be https://"; exit 1 ;; esac
+
+      - name: Configure SSH
+        shell: bash
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # Pinned host key: never trust-on-first-use in CI.
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<EOF
+          Host deploy-target
+            HostName ${DEPLOY_HOST}
+            User ${DEPLOY_USER}
+            IdentityFile ~/.ssh/deploy_key
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            ServerAliveInterval 15
+            ConnectTimeout 15
+          EOF
+          chmod 600 ~/.ssh/config
+
+      - name: Upload compose file
+        shell: bash
+        run: |
+          ssh deploy-target "mkdir -p '$DEPLOY_PATH' && test -f '$DEPLOY_PATH/.env.production'" \
+            || { echo "::error::$DEPLOY_PATH/.env.production is missing on the server (see SETUP.md → Deployment)"; exit 1; }
+          scp deploy/docker-compose.prod.yml "deploy-target:$DEPLOY_PATH/docker-compose.yml"
+
+      - name: Deploy with automatic rollback
+        shell: bash
+        env:
+          GHCR_READ_USER: ${{ vars.GHCR_READ_USER }}
+          GHCR_READ_TOKEN: ${{ secrets.GHCR_READ_TOKEN }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+        run: |
+          image_prefix="ghcr.io/${REPOSITORY_OWNER,,}"
+          # Values go over stdin (not the remote command line) so the token never appears in process lists.
+          {
+            printf 'DEPLOY_PATH=%q\nIMAGE_TAG=%q\nIMAGE_PREFIX=%q\nGHCR_USER=%q\nGHCR_TOKEN=%q\n' \
+              "$DEPLOY_PATH" "$IMAGE_TAG" "$image_prefix" "$GHCR_READ_USER" "$GHCR_READ_TOKEN"
+            cat <<'REMOTE'
+          set -euo pipefail
+          cd "$DEPLOY_PATH"
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GHCR_USER" --password-stdin >/dev/null
+          trap 'docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
+
+          previous="$(cat .deployed-tag 2>/dev/null || true)"
+          up() {
+            MARUTIX_IMAGE_PREFIX="$IMAGE_PREFIX" MARUTIX_IMAGE_TAG="$1" \
+              docker compose up -d --remove-orphans --wait --wait-timeout 240
+          }
+
+          echo "Deploying $IMAGE_TAG (previous: ${previous:-none})"
+          MARUTIX_IMAGE_PREFIX="$IMAGE_PREFIX" MARUTIX_IMAGE_TAG="$IMAGE_TAG" docker compose pull --quiet
+          if up "$IMAGE_TAG"; then
+            printf '%s\n' "$IMAGE_TAG" > .deployed-tag
+            docker image prune --force --filter "until=168h" >/dev/null || true
+            echo "Deployed $IMAGE_TAG"
+          else
+            echo "Health checks failed for $IMAGE_TAG"
+            MARUTIX_IMAGE_PREFIX="$IMAGE_PREFIX" MARUTIX_IMAGE_TAG="$IMAGE_TAG" docker compose logs --tail 100 || true
+            if [ -n "$previous" ]; then
+              echo "Rolling back to $previous"
+              up "$previous"
+            fi
+            exit 1
+          fi
+          REMOTE
+          } | ssh deploy-target 'bash -s'
+
+      - name: Smoke test
+        shell: bash
+        run: |
+          curl --fail --silent --show-error --retry 10 --retry-delay 6 --retry-all-errors \
+            --max-time 10 "${APP_URL%/}/api/health"
+          echo
+          echo "### Deployed \`$IMAGE_TAG\` to ${{ inputs.environment }}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove SSH credentials
+        if: always()
+        run: rm -rf ~/.ssh

@@ -1,0 +1,113 @@
+name: CD
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Deploy the current commit to
+        type: choice
+        options: [staging, production]
+        default: staging
+
+permissions:
+  contents: read
+
+# Never cancel a deployment halfway; queue the next one instead.
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+
+  images:
+    name: Publish image (${{ matrix.image }})
+    needs: ci
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - image: web
+            dockerfile: Dockerfile
+          - image: worker
+            dockerfile: Dockerfile.worker
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image metadata
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/marutix-${{ matrix.image }}
+          flavor: latest=false
+          tags: |
+            type=sha,format=long
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      - name: Build and push
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            WHATSAPP_WEB_PUBLIC_NUMBER=${{ vars.WHATSAPP_WEB_PUBLIC_NUMBER }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+          provenance: mode=max
+          sbom: true
+
+  staging:
+    name: Deploy to staging
+    needs: images
+    if: >-
+      vars.STAGING_DEPLOY_ENABLED == 'true' &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+       (github.event_name == 'workflow_dispatch' && inputs.environment == 'staging'))
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: staging
+      image_tag: sha-${{ github.sha }}
+    secrets: inherit
+
+  production:
+    name: Deploy to production
+    needs: images
+    # Version tags only (or an explicit manual run). Add required reviewers to the
+    # "production" environment in repository settings to gate this on approval.
+    if: >-
+      vars.PRODUCTION_DEPLOY_ENABLED == 'true' &&
+      (startsWith(github.ref, 'refs/tags/v') ||
+       (github.event_name == 'workflow_dispatch' && inputs.environment == 'production'))
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: production
+      image_tag: sha-${{ github.sha }}
+    secrets: inherit

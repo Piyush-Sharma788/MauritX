@@ -1,0 +1,21 @@
+# Keep the build context small and free of secrets.
+.git
+.github
+.next
+node_modules
+coverage
+tests
+deploy
+*.md
+!README.md
+.env*
+!.env.example
+.data
+.wwebjs_auth
+.wwebjs_cache
+*.tsbuildinfo
+next-env.d.ts
+.DS_Store
+npm-debug.log*
+Dockerfile*
+.dockerignore
