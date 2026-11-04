@@ -13,8 +13,8 @@ import { decryptPii, phoneLookupToken } from "@/lib/security/crypto";
 import type { InboundMessage } from "@/server/conversations/bot";
 import { beginConversation, saveConversation, toFlowSnapshot, type ConversationRecord } from "@/server/conversations/store";
 import { allowedCoordination, canAdvanceCoordination } from "@/server/coordination/status";
-import { recordOptOut } from "@/server/messaging/opt-out";
-import { queueBotReplies, queueCoordinatorAlert, queueSystemReply } from "@/server/messaging/queue";
+import { notifyRequesterOfDonor } from "@/server/coordination/requester";
+import { queueBotReplies, queueCoordinatorAlert } from "@/server/messaging/queue";
 import { formatNeededBy } from "@/server/messaging/templates";
 import { EmergencyRequest } from "@/server/models/emergency-request";
 import { Institution } from "@/server/models/institution";
@@ -36,15 +36,15 @@ const ALERT_REPLY_WINDOW_MS = 72 * 60 * 60 * 1000;
 const isDuplicateKeyError = (error: unknown) => (error as { code?: number })?.code === 11000;
 const isAlertable = (s: string) => (ALERTABLE_STATUSES as readonly string[]).includes(s);
 
-export type AlertReply = DonorResponse | "more_info" | "stop";
+export type AlertReply = DonorResponse | "more_info";
 
 /** Text that answers an alert: the numbered options and their common words. */
 export function parseAlertReply(text: string): AlertReply | null {
   const t = text.trim().toUpperCase().replace(/\s+/g, " ").replace(/\bMX-?[0-9A-Z]{8}\b/, "").trim();
-  if (/^(1|INTERESTED|I'?M INTERESTED|I CAN HELP|I CAN DONATE|AVAILABLE|YES I CAN)$/.test(t)) return "interested";
+  if (/^(1|INTERESTED|I'?M INTERESTED|I AM INTERESTED|I CAN HELP|I CAN DONATE|AVAILABLE|YES I CAN)$/.test(t)) return "interested";
   if (/^(2|UNAVAILABLE|NOT AVAILABLE|CAN'?T|CANNOT|BUSY)$/.test(t)) return "unavailable";
-  if (/^(3|MORE INFO|MORE INFORMATION|INFO|DETAILS)$/.test(t)) return "more_info";
-  if (/^(4|STOP ALERTS)$/.test(t)) return "stop";
+  if (/^(3|LATER|CONTACT ME LATER|CALL ME LATER|MAYBE LATER)$/.test(t)) return "later";
+  if (/^(4|MORE INFO|MORE INFORMATION|INFO|DETAILS)$/.test(t)) return "more_info";
   return null;
 }
 
@@ -106,9 +106,9 @@ export async function recordDonorResponse(
 
   const changeSet: Record<string, unknown> = { response, respondedAt: now };
   const push: Record<string, unknown> = {};
-  if (response === "unavailable" && existing.coordinationStatus && existing.coordinationStatus !== "donation_confirmed") {
+  if (response !== "interested" && existing.coordinationStatus && existing.coordinationStatus !== "donation_confirmed") {
     changeSet.coordinationStatus = "not_proceeding";
-    push.coordinationHistory = { status: "not_proceeding", at: now, actor: "donor", note: "Donor replied unavailable" };
+    push.coordinationHistory = { status: "not_proceeding", at: now, actor: "donor", note: response === "later" ? "Donor asked to be contacted later" : "Donor replied unavailable" };
   } else if (response === "interested") {
     changeSet.coordinationStatus = "interested";
     push.coordinationHistory = { status: "interested", at: now, actor: "donor" };
@@ -138,8 +138,12 @@ function moreInfoText(r: AlertContext["request"]): string {
   ].join("\n");
 }
 
-const SHARE_PROMPT =
-  "May we share your name and WhatsApp number with the MarutiX coordinator and the hospital's blood bank for this request only? Reply YES or NO. (If you say NO, the MarutiX team will contact you instead.)";
+const SHARE_PROMPT = [
+  "May we share your first name, area and WhatsApp number for this request only with:",
+  "• the patient's family, and one person they choose (such as the hospital coordinator),",
+  "• the MarutiX coordinator and the hospital's blood bank?",
+  "Reply YES or NO. If you say NO, your number stays private and the MarutiX team will contact you instead.",
+].join("\n");
 
 /**
  * Handles an alert reply. Returns false when there's no alert it could refer
@@ -150,11 +154,6 @@ export async function handleAlertReply(msg: InboundMessage, reply: AlertReply, p
   if (!context) return false;
   const send = (texts: string[]) => queueBotReplies(msg.fromE164, msg.providerMessageId, texts, context.donorUserId);
 
-  if (reply === "stop") {
-    await recordOptOut(msg.fromE164, "whatsapp_stop", now);
-    await queueSystemReply("opt_out_confirmation", msg.fromE164, now);
-    return true;
-  }
   if (!isAlertable(context.request.status) || context.request.expiresAt <= now) {
     await send([`Thank you for replying. Request ${context.request.publicRequestId} no longer needs donors (${STATUS_LABELS[context.request.status].toLowerCase()}). We'll let you know if someone nearby needs help.`]);
     return true;
@@ -167,6 +166,10 @@ export async function handleAlertReply(msg: InboundMessage, reply: AlertReply, p
   const { outcome, responseId } = await recordDonorResponse(context, reply, now);
   if (outcome === "duplicate") {
     await send([`We already have your reply for ${context.request.publicRequestId}. Thank you! Reply ${reply === "interested" ? "2 if you can no longer help" : "1 if you can help after all"}.`]);
+    return true;
+  }
+  if (reply === "later") {
+    await send([`Thank you. We've noted that you may be able to help with ${context.request.publicRequestId} later. A coordinator may contact you if it's still needed. Reply 1 if you can help now.`]);
     return true;
   }
   if (reply === "unavailable") {
@@ -205,10 +208,13 @@ export async function continueDonorResponse(conversation: ConversationRecord, ms
     answer ? { $set: { contactSharingConsentAt: now }, $unset: { contactSharingDeclinedAt: 1 } } : { $set: { contactSharingDeclinedAt: now }, $unset: { contactSharingConsentAt: 1 } },
   );
   const request = await EmergencyRequest.findById(response.requestId).lean();
-  if (request) await notifyCoordinators(request, response._id, response.donorUserId, answer ? "shared" : "private");
+  if (request) {
+    await notifyCoordinators(request, response._id, response.donorUserId, answer ? "shared" : "private");
+    await notifyRequesterOfDonor(request, response._id, now);
+  }
   await send([
     [
-      answer ? "Thank you. The coordinator and hospital blood bank can now contact you about this request." : "Understood. Your number stays private; the MarutiX team will contact you if you're needed.",
+      answer ? "Thank you. The patient's family, the coordinator and the hospital blood bank can now contact you about this request." : "Understood. Your number stays private; the MarutiX team will contact you if you're needed.",
       "Next steps:",
       "• Please don't go to the hospital until a coordinator asks you to.",
       "• Carry a photo ID. The blood centre will check whether you can donate (health, haemoglobin and screening).",

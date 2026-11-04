@@ -10,3 +10,4 @@ process.env.OTP_PROVIDER = "development";
 process.env.WHATSAPP_WEB_WORKER_SECRET = randomBytes(32).toString("base64");
 process.env.WHATSAPP_WEB_TEST_RECIPIENTS = "+919000000001, 9000000002";
 process.env.WHATSAPP_WEB_SESSION_DIR = ".data/test-whatsapp-session";
+process.env.DISCOVERY_WEBSITE_ENRICHMENT = "false";

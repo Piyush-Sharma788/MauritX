@@ -8,7 +8,8 @@ import type { CoordinationStatus } from "@/features/coordination/schemas";
 const NEXT: Record<CoordinationStatus, CoordinationStatus[]> = {
   interested: ["coordinator_contacted", "hospital_coordination", "not_proceeding"],
   coordinator_contacted: ["hospital_coordination", "not_proceeding"],
-  hospital_coordination: ["donation_confirmed", "not_proceeding"],
+  hospital_coordination: ["donor_arrived", "donation_confirmed", "not_proceeding"],
+  donor_arrived: ["donation_confirmed", "not_proceeding"],
   donation_confirmed: [],
   not_proceeding: [],
 };

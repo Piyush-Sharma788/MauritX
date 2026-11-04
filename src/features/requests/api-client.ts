@@ -1,4 +1,4 @@
-import type { AdminRequestDetail, CreateRequestResponse, TrackedRequestView } from "@/features/requests/types";
+import type { AdminRequestDetail, CreateRequestResponse, DonorContactView, TrackedRequestView } from "@/features/requests/types";
 import type { RequestStatus } from "@/features/requests/schemas";
 import { apiRequest } from "@/lib/api/browser-client";
 
@@ -16,6 +16,12 @@ export const requestApi = {
     apiRequest<{ id: string; url: string; expiresAt: string }>("POST", `${BASE}/${id}/share-links`, { body: { hours }, headers: tokenHeader(token) }),
   revokeFamilyLink: (token: string, id: string, linkId: string) =>
     apiRequest<{ revoked: true }>("DELETE", `${BASE}/${id}/share-links/${linkId}`, { headers: tokenHeader(token) }),
+  revealDonor: (token: string, id: string, responseId: string) =>
+    apiRequest<DonorContactView>("POST", `${BASE}/${id}/donors/${responseId}/reveal`, { headers: tokenHeader(token) }),
+  markDonorContacted: (token: string, id: string, responseId: string) =>
+    apiRequest<{ contacted: true }>("POST", `${BASE}/${id}/donors/${responseId}/contacted`, { headers: tokenHeader(token) }),
+  createContactLink: (token: string, id: string, hours: 6 | 24 | 72) =>
+    apiRequest<{ id: string; url: string; expiresAt: string }>("POST", `${BASE}/${id}/contact-links`, { body: { hours }, headers: tokenHeader(token) }),
 };
 
 export const adminRequestApi = {

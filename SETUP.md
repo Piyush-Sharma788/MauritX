@@ -341,6 +341,51 @@ The full design is in WHATSAPP_BOT.md §10.
 - **Not built yet:** the institutional web portal (Phase 6), interactive WhatsApp buttons, automatic radius expansion and a requester-facing list of responders.
 - **Not tested against real services.** AI calls were tested with fake providers only; no live Claude call was made during development. Real WhatsApp delivery of Phase 5 flows hasn't been tested with phones.
 
+## Phase 6: automated discovery, outreach and zone-wise donor waves
+
+The design is in WHATSAPP_BOT.md §11 and SYSTEM_DESIGN.md §14.
+
+### Processes to run
+| Process | Command | Notes |
+|---|---|---|
+| Web app | `npm run dev` / `npm start` | As before |
+| WhatsApp worker | `npm run whatsapp:worker` | Exactly one; drains the outbox |
+| **Jobs worker (new)** | `npm run jobs:worker` | Discovery, outreach email and donor waves. Safe to run more than one. Without it, activated requests wait (Operations shows queued jobs) |
+
+### What happens when an admin activates a request
+1. **Discovery.** It searches for hospitals and blood banks within `OUTREACH_RADIUS_KM`: institutions already in MarutiX, plus OpenStreetMap if `DISCOVERY_PROVIDER=openstreetmap`. The 10 best are ranked, blood banks first, then by distance.
+2. **Outreach.** Email goes to reviewed or verified addresses (`EMAIL_PROVIDER=smtp`), and WhatsApp to verified institution contacts. Each message carries a secure answer link.
+3. **Donor waves.** Wave 1 alerts donors 0–5 km away. Every `DONOR_WAVE_INTERVAL_MINUTES` the next wave goes out, widening to 10, 25 and then 50 km, until enough donors are interested.
+4. **Replies** from donors and institutions appear on `/admin/coordination`, on the request page, and on the requester's private link.
+
+### Configuration (all optional, with safe defaults)
+- **Email.** `EMAIL_PROVIDER=smtp` plus `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `EMAIL_FROM`. Without it, outreach shows "Email not configured" and nothing is claimed as sent.
+- **Discovery.** `DISCOVERY_PROVIDER=openstreetmap` and `DISCOVERY_CONTACT_EMAIL`, a real operator address. OpenStreetMap requires identification, and Nominatim rejects fake contacts with 403. For production volume, run your own Overpass and Nominatim (`OVERPASS_URL`, `NOMINATIM_URL`).
+- **Coordinator contact.** `COORDINATOR_CONTACT_PHONE` and `COORDINATOR_CONTACT_EMAIL` are shown in outreach as the responsible MarutiX coordinator.
+- **Automation.** `COORDINATION_AUTOSTART=false` turns off automation; admins then use the Phase 5 manual batches.
+
+### Admin work this creates
+- **Review discovered institutions** at `/admin/institutions?review=unreviewed`. OpenStreetMap often has no email (in a live Prayagraj test, 1 of 114 nearby places had one), so:
+  - add the official blood bank email or phone from the institution's own website;
+  - approve relevant institutions and exclude irrelevant ones.
+  Approval allows outreach email; it doesn't verify the institution or give WhatsApp access.
+- **Monitor** `/admin/coordination`, and use the request page to pause, resume, cancel, send the next wave now, search again, or retry or record an answer.
+- **Dead jobs** appear on `/admin/operations` with a Retry button.
+
+### Testing locally
+- **Automated:** `npm run test:integration`.
+  - `tests/phase6-units.test.ts` covers zones, OSM normalisation and deduplication, robots.txt, contact-link extraction, SSRF guards, outreach planning and message content.
+  - `tests/phase6-workflows.integration.test.ts` covers the brief's 12-step workflow and its edge cases with fake discovery, email and WhatsApp providers.
+- **By hand:** run all three processes, register test donors on WhatsApp, create and activate a request. Use your own test numbers and a test mailbox; never real patient data. For email, point SMTP at a test inbox service.
+
+### Limitations (Phase 6)
+- **Sparse source data.** OpenStreetMap contact data for Indian hospitals is sparse and can be stale (a listed website had no DNS record). Most outreach needs an admin to add official contacts first. Discovery never invents them.
+- **No SMS.** SMS isn't wired: India requires DLT-registered templates and an approved provider.
+- **No inbound email parsing.** Institutions answer through the secure link, on WhatsApp, or by phone (recorded by an admin).
+- **Public OSM services are slow.** Public Overpass responses took 28–45 s in testing, and are sometimes refused with 502. Discovery retries up to 3 times in the background.
+- **Requests without any location** (no pin, geocoding failed) are matched by city, so the zones don't apply.
+- **Not tested end to end:** real SMTP delivery and real WhatsApp delivery of Phase 6 messages. OpenStreetMap discovery, geocoding and website enrichment were run live in development.
+
 ## CI
 
 `.github/workflows/ci.yml` runs on every pull request, every push to `main`, and on demand. It runs one job:

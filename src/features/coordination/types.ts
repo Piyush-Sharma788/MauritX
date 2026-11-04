@@ -1,5 +1,12 @@
 import type {
   AvailabilityStatus,
+  ChannelStatus,
+  ChannelType,
+  InstitutionCapability,
+  InstitutionResponse,
+  InstitutionSource,
+  OutreachStatus,
+  ReviewStatus,
   ContactRole,
   ContactStatus,
   CoordinationStatus,
@@ -28,7 +35,8 @@ export interface MatchingRunView {
   createdAt: string;
   radiusKm: number;
   basis: "distance" | "city";
-  originSource: "institution" | "requester_device" | null;
+  originSource: "institution" | "requester_device" | "geocoded_address" | null;
+  trigger: "admin" | "automatic";
   policyVersion: string;
   policyReviewStatus: string;
   eligibleGroups: string[];
@@ -76,6 +84,10 @@ export interface InstitutionSummary {
   verificationStatus: InstitutionStatus;
   verifiedContacts: number;
   createdAt: string;
+  source: InstitutionSource;
+  reviewStatus: ReviewStatus;
+  capability: InstitutionCapability;
+  contactChannels: number;
 }
 
 export interface InstitutionContactView {
@@ -106,6 +118,12 @@ export interface InstitutionDetail extends InstitutionSummary {
   statusNote: string | null;
   contacts: InstitutionContactView[];
   availability: AvailabilityReportView[];
+  externalRefs: { ref: string; url: string | null }[];
+  capabilitySource: string;
+  review: { status: ReviewStatus; reviewedAt: string | null; note: string | null };
+  discoveredAt: string | null;
+  lastSeenAt: string | null;
+  channels: ContactChannelView[];
   openRequests: { publicRequestId: string; status: RequestStatus; bloodGroup: BloodGroup; acknowledgedAt: string | null }[];
 }
 
@@ -168,4 +186,30 @@ export interface AuditEntryView {
   resourceType: string | null;
   resourceId: string | null;
   createdAt: string;
+}
+
+export interface ContactChannelView {
+  id: string;
+  type: ChannelType;
+  value: string;
+  status: ChannelStatus;
+  source: string;
+  sourceUrl: string | null;
+  retrievedAt: string;
+}
+
+export interface OutreachView {
+  id: string;
+  institutionId: string;
+  name: string;
+  capability: InstitutionCapability;
+  source: InstitutionSource;
+  verificationStatus: InstitutionStatus;
+  reviewStatus: ReviewStatus;
+  distanceKm: number | null;
+  status: OutreachStatus;
+  channels: ContactChannelView[];
+  deliveries: { channel: "email" | "whatsapp"; target: string; status: string; failureCode: string | null; sentAt: string | null }[];
+  response: { status: InstitutionResponse; at: string; source: string; contactName: string | null; contactPhone: string | null; note: string | null } | null;
+  followUp: string;
 }

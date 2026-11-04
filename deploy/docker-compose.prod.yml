@@ -70,6 +70,19 @@ services:
       retries: 3
       start_period: 40s
 
+  # Background jobs: institution discovery, outreach email and donor waves (Phase 6).
+  # Stateless; it never touches WhatsApp (it writes to the outbox the worker drains).
+  # Needs outbound internet for OpenStreetMap (if DISCOVERY_PROVIDER=openstreetmap) and SMTP.
+  jobs:
+    <<: *hardening
+    image: ${MARUTIX_IMAGE_PREFIX:?set MARUTIX_IMAGE_PREFIX}/marutix-worker:${MARUTIX_IMAGE_TAG:?set MARUTIX_IMAGE_TAG}
+    command: ["node_modules/.bin/tsx", "--conditions=react-server", "src/worker/jobs/main.ts"]
+    environment:
+      NODE_ENV: production
+    healthcheck:
+      disable: true
+    stop_grace_period: 30s
+
 volumes:
   # WhatsApp session credentials. Keep the host disk encrypted; back up only encrypted.
   whatsapp-data:

@@ -31,6 +31,10 @@ const requestResponseSchema = new Schema(
     coordinationStatus: { type: String, enum: COORDINATION_STATUSES },
     coordinationHistory: { type: [coordinationEntrySchema], default: [] },
     respondedAt: { type: Date, required: true },
+    // The requester said they contacted this donor. Not a donation.
+    requesterContactedAt: { type: Date },
+    // The requester was told about this donor (WhatsApp and/or web).
+    requesterNotifiedAt: { type: Date },
   },
   { collection: "request_responses", timestamps: true, strict: "throw" },
 );

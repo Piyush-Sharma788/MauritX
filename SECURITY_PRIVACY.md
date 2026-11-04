@@ -52,6 +52,22 @@ Collect the minimum data necessary. Avoid patient names, diagnoses, government I
   - Before enabling it in production, get legal review of sending user text to a third-party processor (DPDP Act), and sign a data-processing agreement.
 - **Conversation logs** in the admin UI show flow and step metadata only. Message text is never stored.
 
+### Phase 6 privacy and safety decisions
+- **Contact sharing with the family.**
+  - The donor's YES names everyone who may receive their first name, area and number for this request: the patient's family and one person they choose, the coordinator and the hospital blood bank.
+  - A donor's number goes by WhatsApp only to a requester whose number WhatsApp authenticated (requests created on WhatsApp). Web requesters typed a number that may be wrong, so they get a nudge and see contacts behind their private link.
+  - Each reveal, share link, link view and revocation is written to `contact_access_logs`.
+  - Share links are scoped to donor contacts, expire within 72 hours (and never after the manage link), and can be revoked.
+- **Institution data.**
+  - Discovered records keep only contacts the source publishes, with source and time. They are never verified automatically.
+  - Unreviewed discovered email addresses aren't used unless the operator opts in.
+  - Outreach never contains patient names, requester numbers or medical details.
+  - Every email can be stopped from its secure link, and permanent bounces mark the address invalid.
+  - Institution answers are labelled "may be able to assist (stock not confirmed)".
+- **Outbound requests.** Discovery and website enrichment fetch only public addresses on default ports, re-check redirects, honour robots.txt and limit size and time. OpenStreetMap data is publicly editable, so a URL in it is never trusted to be internal-safe.
+- **Third-party services.** OpenStreetMap (Overpass, Nominatim) receives the search area and the hospital address for geocoding. That address is institutional, but get legal review before production. The SMTP provider receives the outreach emails.
+- **Legal review needed before production:** institutional email outreach (unsolicited-communication rules) and the OpenStreetMap usage policy (identification, rate) or a self-hosted instance.
+
 ## 5. Application security
 - Validate every request with a strict schema and size limits.
 - Use parameterised/typed database operations; never accept raw MongoDB operators from clients.
@@ -118,3 +134,4 @@ Collect the minimum data necessary. Avoid patient names, diagnoses, government I
 - [ ] whatsapp-web.js pilot retired or replaced by the official Cloud API before public launch (WHATSAPP_BOT.md §2a).
 - [ ] Clinical review and approval of the donor matching policy (`policy.ts`).
 - [ ] Legal review and DPA before enabling the AI provider with real users.
+- [ ] Legal review of automated institutional email outreach; SMTP provider DPA; a real operator contact for OpenStreetMap services (or a self-hosted Overpass/Nominatim).

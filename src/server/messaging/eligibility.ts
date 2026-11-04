@@ -2,6 +2,7 @@ import "server-only";
 import type { Types } from "mongoose";
 import { Types as MongooseTypes } from "mongoose";
 import { ALERTABLE_STATUSES } from "@/features/coordination/schemas";
+import { OPEN_STATUSES } from "@/features/requests/schemas";
 import type { MessageKind, MessageStatus } from "@/features/whatsapp/types";
 import { getCoordinationConfig } from "@/lib/coordination/config";
 import { DonorProfile } from "@/server/models/donor-profile";
@@ -124,6 +125,12 @@ export async function checkEligibility(input: EligibilityInput): Promise<Eligibi
       if (!consent.ok) return consent;
       if (!(await underDailyCap(input.phoneLookup, input.stage ?? "enqueue"))) return { ok: false, reason: "FREQUENCY_CAP" };
       return consent;
+    }
+    case "requester_update": {
+      // Updates about the person's own request, only while it is open.
+      if (!input.requestId || !MongooseTypes.ObjectId.isValid(input.requestId)) return { ok: false, reason: "REQUEST_NOT_ALERTABLE" };
+      const request = await EmergencyRequest.findById(input.requestId, { status: 1 }).lean();
+      return request && (OPEN_STATUSES as readonly string[]).includes(request.status) ? { ok: true } : { ok: false, reason: "REQUEST_NOT_ALERTABLE" };
     }
     case "coordinator_alert":
       return (await verifiedInstitutionContact(input.phoneLookup)) ? { ok: true } : { ok: false, reason: "NOT_VERIFIED_INSTITUTION" };

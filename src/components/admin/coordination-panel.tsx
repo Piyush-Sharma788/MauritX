@@ -141,7 +141,7 @@ export function CoordinationPanel({
           <div className="mt-4 rounded-2xl border border-line">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3 text-xs text-ink-muted">
               <span>
-                Search {when(latestRun.createdAt)} · {latestRun.basis === "distance" ? `within ${latestRun.radiusKm} km of the ${latestRun.originSource === "institution" ? "linked institution" : "requester's shared location"}` : "same city (no location on the request)"} · {latestRun.scanned} profiles checked · groups {latestRun.eligibleGroups.join(", ") || "none"}
+                {latestRun.trigger === "automatic" ? "Automatic search" : "Search"} {when(latestRun.createdAt)} · {latestRun.basis === "distance" ? `within ${latestRun.radiusKm} km of the ${latestRun.originSource === "institution" ? "linked institution" : latestRun.originSource === "geocoded_address" ? "hospital address (geocoded, approximate)" : "requester's shared location"}` : "same city (no location on the request)"} · {latestRun.scanned} profiles checked · groups {latestRun.eligibleGroups.join(", ") || "none"}
               </span>
               <span className="rounded-full bg-warning-50 px-2 py-0.5 font-semibold text-warning-800">Policy {latestRun.policyVersion}: {latestRun.policyReviewStatus.replace(/_/g, " ")}</span>
             </div>

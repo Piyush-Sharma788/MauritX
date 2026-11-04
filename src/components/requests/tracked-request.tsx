@@ -8,6 +8,7 @@ import { BLOOD_GROUP_LABELS } from "@/features/donors/schemas";
 import { requestApi } from "@/features/requests/api-client";
 import { COMPONENT_LABELS, PRIORITY_LABELS, type RequestStatus } from "@/features/requests/schemas";
 import type { TrackedRequestView } from "@/features/requests/types";
+import { CoordinationSection, DonorContactsView } from "@/components/requests/coordination-section";
 
 const SAFETY =
   "MarutiX helps coordinate contacts. It does not guarantee donor eligibility, blood availability or compatibility. Contact the treating hospital/blood centre immediately; do not delay urgent medical care while using this app.";
@@ -78,7 +79,10 @@ export function TrackedRequest({ initial, token }: { initial: TrackedRequestView
         </section>
       </div>
 
-      {view.manage ? <ManagePanel view={view} token={token} onChange={setView} /> : (
+      {view.donorContacts && <DonorContactsView view={view} />}
+      {view.coordination && <CoordinationSection view={view} token={token} />}
+
+      {view.donorContacts ? null : view.manage ? <ManagePanel view={view} token={token} onChange={setView} /> : (
         <p className="flex gap-2 rounded-2xl bg-paper-deep/70 px-4 py-3 text-sm text-ink-soft">
           <InfoIcon className="mt-0.5 size-4 shrink-0" />
           View-only link. It stops working on {formatIST(view.link.expiresAt)}.
@@ -207,7 +211,7 @@ function ManagePanel({ view, token, onChange }: { view: TrackedRequestView; toke
             {manage.shareLinks.map((l) => (
               <li key={l.id} className="flex items-center justify-between gap-3 py-2.5">
                 <span className="text-ink-soft">
-                  Created {formatIST(l.createdAt)} · {l.revoked ? "turned off" : new Date(l.expiresAt) < new Date() ? "expired" : `expires ${formatIST(l.expiresAt)}`}
+                  {l.scope === "donor_contacts" ? "Donor contact link" : "View-only link"} · created {formatIST(l.createdAt)} · {l.revoked ? "turned off" : new Date(l.expiresAt) < new Date() ? "expired" : `expires ${formatIST(l.expiresAt)}`}
                 </span>
                 {!l.revoked && new Date(l.expiresAt) > new Date() && (
                   <Button variant="ghost" className="h-8 px-3 text-xs" onClick={() => revoke(l.id)} disabled={pending !== null}>Turn off</Button>

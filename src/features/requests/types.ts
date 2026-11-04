@@ -27,15 +27,48 @@ export interface TrackedRequestView {
   updatedAt: string;
   expiresAt: string;
   history: PublicHistoryEntry[];
-  link: { scope: "manage" | "view"; expiresAt: string };
+  link: { scope: "manage" | "view" | "donor_contacts"; expiresAt: string };
   /** Present only for the requester's manage link. */
   manage: {
     contactMaskedPhone: string;
     allowedStatuses: RequestStatus[];
     deviceLocationShared: boolean;
     whatsappUpdates: boolean;
-    shareLinks: { id: string; createdAt: string; expiresAt: string; revoked: boolean }[];
+    shareLinks: { id: string; createdAt: string; expiresAt: string; revoked: boolean; scope: "view" | "donor_contacts" }[];
   } | null;
+  /** Phase 6 coordination: institutions and donors. Absent on donor-contact links. */
+  coordination: RequesterCoordinationView | null;
+  /** Only on a donor_contacts link: consenting donors' contacts. Each view is logged. */
+  donorContacts: DonorContactView[] | null;
+}
+
+export interface RequesterDonorView {
+  responseId: string;
+  firstName: string;
+  bloodGroup: string;
+  area: string;
+  response: "interested" | "unavailable" | "later";
+  coordinationStatus: string | null;
+  /** The donor agreed to share their contact; it is revealed on request and logged. */
+  contactAvailable: boolean;
+  requesterContactedAt: string | null;
+}
+
+export interface RequesterCoordinationView {
+  automation: { status: string; donorPhase: string; currentZone: string | null; donorsAlerted: number } | null;
+  institutions: { name: string; type: string; distanceKm: number | null; contacted: boolean; response: { status: string; label: string; at: string } | null }[];
+  donorCounts: { interested: number; contactsShared: number };
+  /** Manage link only. */
+  donors: RequesterDonorView[] | null;
+  history: { summary: string; at: string }[];
+}
+
+export interface DonorContactView {
+  responseId: string;
+  firstName: string;
+  bloodGroup: string;
+  area: string;
+  phone: string;
 }
 
 export interface CreateRequestResponse {
@@ -83,7 +116,7 @@ export interface AdminRequestDetail extends AdminRequestSummary {
   closedAt: string | null;
   history: AdminHistoryEntry[];
   allowedStatuses: RequestStatus[];
-  links: { id: string; scope: "manage" | "view"; createdBy: string; createdAt: string; expiresAt: string; revoked: boolean }[];
+  links: { id: string; scope: "manage" | "view" | "donor_contacts"; createdBy: string; createdAt: string; expiresAt: string; revoked: boolean }[];
 }
 
 export interface AdminRequestStats {

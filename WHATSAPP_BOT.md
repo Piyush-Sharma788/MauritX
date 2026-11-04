@@ -20,6 +20,11 @@ Mandatory controls (implemented in `src/worker/whatsapp`, `src/server/messaging`
 - **Consent only.** Messages go only to donors with recorded, unwithdrawn WhatsApp consent, or to numbers in `WHATSAPP_WEB_TEST_RECIPIENTS`. Consent and the suppression list are re-checked immediately before every send.
 - **No bulk or unsolicited messaging.** There is no broadcast feature.
   - *Decision (Phase 5, 2026-11-04):* emergency alerts are sent only in small batches that an admin triggers by hand. The request must be verified and active, and alerts go only to donors who opted in to alerts. See §10.
+  - *Updated (Phase 6):* once an admin has verified **and** activated a request, the jobs worker sends zone-wise waves automatically:
+    - nearest zone first, `DONOR_WAVE_SIZE` donors per wave, every `DONOR_WAVE_INTERVAL_MINUTES`;
+    - it stops when enough donors are interested.
+
+    The same consent re-check, per-donor daily cap, per-request cap and pause switch apply. Admins can pause, cancel or send a wave now. See §11. `COORDINATION_AUTOSTART=false` restores manual-only batches.
   - Batches are capped: `ALERT_BATCH_SIZE`, default 5; `ALERT_MAX_PER_REQUEST`, default 40; `ALERT_MAX_PER_DONOR_PER_DAY`, default 2.
   - Nothing is ever sent automatically.
   - All sends are also paced (`WHATSAPP_WEB_MIN_SEND_INTERVAL_MS`, default 4 s) and capped (`WHATSAPP_WEB_MAX_MESSAGES_PER_HOUR`, default 30). The cap is a safety limit, not a target.
@@ -240,10 +245,10 @@ Each alert is deduplicated per (request, donor). These are re-checked when it is
 Alerts expire after `ALERT_TTL_MINUTES`. Closing a request (fulfilled, cancelled or expired) withdraws its queued alerts at once.
 
 **Donor replies:**
-- **1 / INTERESTED.** Recorded once per (request, donor); a repeat is acknowledged, not counted. The donor is then asked separately whether their name and number may be shared with the coordinator and the hospital blood bank. YES or NO is recorded on the response. Verified coordinator contacts of a linked institution get a `coordinator_alert`; the donor's number is included only after YES.
+- **1 / INTERESTED.** Recorded once per (request, donor); a repeat is acknowledged, not counted. The donor is then asked separately whether their first name, area and number may be shared for this request. The question names everyone who may receive them: the patient's family and one person they choose, the coordinator and the hospital blood bank. YES or NO is recorded on the response. Verified coordinator contacts of a linked institution get a `coordinator_alert`; the donor's number is included only after YES.
 - **2 / UNAVAILABLE.** Recorded and replaces any earlier interest. Their coordination becomes "not proceeding", and they aren't asked about that request again.
-- **3 / MORE INFO.** Request status, hospital address, component, units and time. No patient data.
-- **4.** The same as STOP.
+- **3 / CONTACT ME LATER** (Phase 6). Recorded as `later`: the donor isn't counted as interested and isn't asked again about that request.
+- **4 / MORE INFO.** Request status, hospital address, component, units and time. No patient data. *(Before Phase 6: 3 was MORE INFO and 4 was the same as STOP. STOP still works as a word.)*
 
 **Coordination states** are kept separate from the reply:
 - `interested` → `coordinator_contacted` → `hospital_coordination` → `donation_confirmed`, or `not_proceeding`.
@@ -307,3 +312,57 @@ Alerts expire after `ALERT_TTL_MINUTES`. Closing a request (fulfilled, cancelled
 - Interactive WhatsApp buttons; replies are text.
 - Template messages. The pilot can't use the official Business Platform or its templates.
 - Automatic radius expansion or automatic waves.
+
+## 11. Phase 6: automated coordination (implemented 2026-11-04)
+
+Activating a request (admin, after verification) enqueues `coordinate_request`. The jobs worker (`npm run jobs:worker`) then runs two processes. Neither depends on the other succeeding.
+
+### 11.1 Institution discovery and outreach
+**Discovery** (`server/discovery`):
+1. **Search centre.** The linked institution's location, else the requester's pin. Failing both, the hospital address is geocoded with Nominatim to an approximate point.
+2. **Search.** OpenStreetMap Overpass, within `OUTREACH_RADIUS_KM`, for:
+   - `healthcare=blood_donation` or `blood_bank` (shown as "blood bank");
+   - hospitals whose specialities say transfusion (shown as "hospital with blood bank");
+   - other hospitals (shown as "blood services not confirmed").
+3. **Deduplication.** By source ID, or the same name within 300 m.
+4. **Contacts.** Only values the source publishes are kept, with source URL and retrieval time.
+5. **Optional website enrichment.** It reads explicit `mailto:`/`tel:` links from the institution's own website:
+   - it honours robots.txt and reads at most two pages, a few sites per run;
+   - it refuses private, loopback and non-default-port addresses (the data is publicly editable).
+6. **Status.** Discovered records are `pending` + `unreviewed`. They are never verified automatically, and no contact is ever invented.
+
+**Outreach** (`server/outreach`):
+- **Email** (SMTP, `EMAIL_PROVIDER=smtp`):
+  - addresses an admin verified, or unverified ones once the institution is approved in review;
+  - `OUTREACH_INCLUDE_UNREVIEWED=true` also emails unreviewed discovered addresses.
+- **WhatsApp:** only to verified contacts of verified institutions (Phase 5).
+- **Never contacted:** phone numbers (shown to coordinators for calling); invalid, opted-out or excluded entries.
+- **Message content.** The request ID, blood group, component, units, patient location (hospital and area), required-by time, priority, the coordinator contact (if configured) and a secure answer link (`/respond/<token>`). Never the patient's name or the requester's number.
+- **Answers.** Institutions answer on that page: *may be able to assist* / *can't assist* / *need more information*, with an optional institutional contact. On WhatsApp they reply `ASSIST MX-…` or `UNABLE MX-…`, and admins can record a phone answer.
+- **Stopping email.** The same page lets an institution stop MarutiX email to that address.
+- **Tracked separately:** discovered, contact available or awaiting review, queued, sent (accepted by the mail server), failed (with reason), answered, follow-up. "Sent" is never treated as an answer, and "may assist" is never treated as stock.
+- **Limits.** Retries with backoff happen only when the message certainly wasn't delivered. A permanent bounce marks the address invalid. There are caps of `OUTREACH_MAX_INSTITUTIONS` per request, `OUTREACH_MAX_PER_INSTITUTION_PER_DAY` and `EMAIL_MAX_PER_HOUR`.
+
+### 11.2 Zone-wise donor waves
+- **Zones** (`DONOR_ZONES_KM`, default 0–5, 5–10, 10–25, 25–50 km) are operational distances, not medical rules. Donors in the same city without a location form a final stage.
+- **Each wave:**
+  1. runs the Phase 5 matching engine (same exact-group policy and exclusions);
+  2. alerts up to `DONOR_WAVE_SIZE` not-yet-contacted donors in the current zone or nearer;
+  3. moves outward only when that zone is used up.
+- **Stopping.** Waves stop when interested donors reach the target (`DONOR_TARGET_INTERESTED`, default twice the units), when no matching donor is left, at the per-request alert cap, or when the request closes.
+- **Pause.** The global "pause alerts" switch defers waves without losing them.
+- **Alert text** (`emergency_alert_v2`): adds "Distance: approximately N km (straight line)" when both points are known. Replies are 1 interested, 2 not available, 3 contact me later, 4 more information, or STOP.
+
+### 11.3 Connecting the patient with a donor
+After a donor replies 1 and then YES to sharing:
+- **Requests created on WhatsApp.** WhatsApp authenticated the requester's number, so they receive a message with the donor's first name, self-reported blood group, area and number.
+- **Web requests with WhatsApp updates.** The phone number was typed and may be mistyped, so they only get a nudge to open their private link. Donor numbers are never sent to an unverified number.
+- **Private manage link.** Shows interested donors and reveals each consenting donor's number on request. The requester can mark "I've contacted this donor", and can create a short-lived (6–72 h), revocable link for one responsible person, which shows only those contacts.
+- **Family view links** never show donors.
+- **Logging.** Every disclosure (sent by WhatsApp, revealed, link created, viewed or revoked) is written to `contact_access_logs`.
+
+### 11.4 Not implemented
+- **SMS and voice.** India requires DLT-registered templates and an approved provider, so no SMS provider is wired; the interface is ready.
+- **Inbound email parsing.** Institutions answer through the secure link instead.
+- **AI categorisation of free-text institution notes.** Notes are stored and shown to admins as written.
+- **Other sources.** e-RaktKosh and other official directories need written permission and API access (README); scraping is avoided.

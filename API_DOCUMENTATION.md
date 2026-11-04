@@ -66,6 +66,24 @@ No account is needed. A tracking token, sent in the `X-Tracking-Token` header, a
 
 `410 TRACKING_LINK_EXPIRED` / `410 TRACKING_LINK_REVOKED` are returned for expired or turned-off links.
 
+*Phase 6, requester endpoints.* All take the manage token in `X-Tracking-Token`.
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| POST | `/requests/:id/donors/:responseId/reveal` | The contact of one donor who agreed to share it. Logged. `404` otherwise |
+| POST | `/requests/:id/donors/:responseId/contacted` | The requester says they contacted this donor |
+| POST | `/requests/:id/contact-links` | `{ "hours": 6 \| 24 \| 72 }`. Creates a `donor_contacts` link for one responsible person. Revoke it with `DELETE /requests/:id/share-links/:linkId` |
+
+`GET /requests/:id` (and `/track/<token>`) adds:
+- **`coordination`:** institutions contacted with their answers, donor counts, history. With the manage scope it also lists `donors`, without contact details.
+- **`donorContacts`:** only on a `donor_contacts` link. Each view is logged.
+
+### Institution answers (Phase 6, public)
+| Method | Endpoint | Purpose |
+|---|---|---|
+| POST | `/outreach/respond` | `X-Outreach-Token` header plus `{ response: can_assist \| cannot_assist \| need_info, contactName?, contactPhone?, note? }`. Rate-limited per IP |
+| POST | `/outreach/unsubscribe` | `X-Outreach-Token`. Stops MarutiX email to the address(es) the link was sent to |
+
 Create payload:
 ```json
 {
@@ -127,6 +145,20 @@ All require the `admin` role, mutations must be same-origin, and every change is
 | GET | `/admin/audit?action=&cursor=&limit=` | Audit events, newest first, cursor-paginated |
 
 Donor phone numbers appear in responses only after that donor agreed to share them for that request.
+
+*Phase 6, admin endpoints:*
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| GET | `/admin/coordination` | One row per open request. Separate counts for institutions found, contacted and answered; donors matched, notified and interested; awaiting coordination; failed; donated |
+| POST | `/admin/requests/:id/automation` | `{ action: start \| pause \| resume \| cancel \| run_wave_now \| rediscover }`. `202` |
+| POST | `/admin/requests/:id/outreach/:outreachId` | `{ action: send \| retry \| cancel }` or `{ action: record_response, response, note? }`. `409 NOT_RETRYABLE` when nothing can be sent |
+| POST | `/admin/institutions/:id/review` | `{ status: approved \| excluded, note? }` |
+| POST | `/admin/institutions/:id/channels` | `{ type: email \| phone \| website, value, status }`. Adds an official contact |
+| PATCH | `/admin/institutions/:id/channels/:channelId` | Corrects a contact. A changed value is recorded as source `admin` |
+| POST | `/admin/institutions/:id/channels/:channelId/status` | `{ status: unverified \| verified \| invalid \| opted_out }` |
+| GET | `/admin/jobs` | Queue counts and dead-lettered jobs |
+| POST | `/admin/jobs/:jobId/retry` | Requeues a dead job |
 
 ## Responses
 *Planned for the website. In Phase 5 donors respond on WhatsApp (WHATSAPP_BOT.md §10.3), and responses are managed through the admin endpoints above.*

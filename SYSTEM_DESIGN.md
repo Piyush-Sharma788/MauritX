@@ -175,3 +175,38 @@ Admin UI -> /api/v1/admin/requests/:id/{matching,alerts,institution,responses}
 - The Operations page reads only live database counts.
 
 **Restarts:** conversations, the outbox and the lease are all in MongoDB, so a restarted worker carries on where it stopped. A send interrupted mid-way is marked `UNKNOWN_DELIVERY_STATE`, never resent.
+
+## 14. Phase 6: automated discovery, outreach and zone-wise waves
+```text
+Admin activates request ─> requests/service.applyTransition ─> jobs: coordinate_request
+jobs worker (npm run jobs:worker, any number of instances; atomic claims)
+  coordinate_request ─> discover_institutions ─┬─> institution_outreach ─> send_outreach_email (SMTP)
+                                               │                        └─> WhatsApp outbox (verified institution contacts)
+                                               └─> donor_wave 1 ─> donor_wave 2 … (every DONOR_WAVE_INTERVAL_MINUTES)
+                                                     matching/engine (Phase 5) ─> zones.planWave ─> WhatsApp outbox
+WhatsApp worker (unchanged, single client) drains the outbox; replies ─> coordination/responses ─> coordination/requester
+Institutions answer on /respond/<token> (or ASSIST/UNABLE on WhatsApp) ─> outreach/service
+Requester sees /track/<manage token>: institutions, donors, history; reveals contacts (logged)
+```
+
+**Job queue** (`server/jobs`). MongoDB-backed:
+- Enqueueing is idempotent through a unique `key`; a claim is an atomic `findOneAndUpdate` with a 5-minute lock, and expired locks are recovered.
+- Failures back off at 1, 5, 15 and 60 minutes, then the job becomes `dead` (dead-letter), visible on Operations with a retry button.
+- A deferral (alerts paused, hourly email cap) doesn't use up an attempt.
+- Request creation never waits for discovery, email or WhatsApp.
+
+**Idempotency:**
+- Wave N runs once, recorded on the request. Alerts are deduplicated per (request, donor).
+- An outreach record is claimed only while it has no deliveries. An email left "sending" by a crash is failed, never re-sent.
+- The requester is notified once per response (`requesterNotifiedAt`).
+
+**Stopping.** Closing a request:
+- withdraws queued alerts;
+- cancels pending jobs and pending outreach;
+- marks automation `completed`.
+
+Every handler also re-checks the request's state when it runs.
+
+**Discovery provider** (`DiscoveryProvider`). OpenStreetMap is implemented. Overpass is queried by bounding box, then filtered by exact distance; public instances can take 30 s or more, so discovery has a 60 s timeout and retries up to 3 times. Meanwhile, institutions already known are still contacted and donor waves still start.
+
+**Outbound fetches** use `discovery/safe-fetch.ts`: public addresses only, default ports, redirects re-checked hop by hop, size and time limits.

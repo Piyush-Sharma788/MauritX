@@ -234,7 +234,9 @@ describe("alert and institutional reply parsing", () => {
     expect(parseAlertReply("Interested MX-7K3Q9P2A")).toBe("interested");
     expect(parseAlertReply("2")).toBe("unavailable");
     expect(parseAlertReply("more info")).toBe("more_info");
-    expect(parseAlertReply("4")).toBe("stop");
+    expect(parseAlertReply("4")).toBe("more_info");
+    expect(parseAlertReply("3")).toBe("later");
+    expect(parseAlertReply("contact me later")).toBe("later");
     expect(parseAlertReply("hello")).toBeNull();
   });
   it("reads availability lines", () => {

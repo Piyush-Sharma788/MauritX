@@ -101,8 +101,15 @@ No TTL: requests are records. Free-text notes from requesters are deliberately n
   - a request created on WhatsApp gets the note "Created on WhatsApp".
 - **Indexes.** `{ requesterPhoneLookup: 1, status: 1 }` and `{ institutionId: 1, status: 1 }`.
 
+*Phase 6 additions:*
+- **`requesterPhoneEncrypted?`.** The WhatsApp sender, the only requester number known to be genuine.
+- **`geocodedLocation?`.** `{ Point, source: "openstreetmap", at }`, an approximate point from the hospital address.
+- **`automation`.** `{ status: not_started | running | paused | cancelled | completed, startedAt?, changedAt?, changedBy?, donorPhase: pending | running | target_reached | exhausted | stopped, zoneIndex, waves[{ number, zoneIndex, zoneKm?, matchingRunId, queued, suppressed, at }], nextWaveAt?, discoveryStatus, discoveredAt? }`.
+- **Counters.** `responseStats.later`.
+- **Index.** `{ "automation.status": 1, status: 1 }`.
+
 ### `request_share_links`
-`{ requestId, tokenHash (unique), scope: "manage" | "view", createdBy: "requester" | "admin" | "system", expiresAt, revokedAt?, createdAt }`
+`{ requestId, tokenHash (unique), scope: "manage" | "view" | "donor_contacts" (Phase 6), createdBy: "requester" | "admin" | "system", expiresAt, revokedAt?, createdAt }`
 - **Tokens.** Each URL token is a random 256-bit value. Only its keyed hash is stored.
 - **Manage links.** The requester's link: update or cancel the request. It expires 7 days after the request expires.
 - **View links.** For family (24 hours, 3 days or 7 days), or sent in the WhatsApp confirmation. Read-only.
@@ -136,6 +143,15 @@ Indexes: `location: "2dsphere"` (sparse), `{ type: 1, verificationStatus: 1 }`, 
 - `licenceReferenceEncrypted` (AES-256-GCM, admin-only) replaces `licenceReference`.
 - Added fields: `city`, `cityNormalized`, `locality`, `statusNote` and `createdBy`.
 - Contact numbers live in `institution_contacts` rather than `whatsappPhone`.
+
+*Phase 6:*
+- **Provenance.** `source: "admin" | "openstreetmap"` and `externalRefs[]` (for example `osm:node/123`; unique, used to deduplicate).
+- **Capability.** `capability: "blood_bank" | "hospital_with_blood_bank" | "hospital"` and `capabilitySource: "admin" | "source_tags" | "name"`.
+- **Contacts.** `contactChannels[]: { type: "email" | "phone" | "website", value, source: "openstreetmap" | "official_website" | "admin", sourceUrl?, retrievedAt, status: "unverified" | "verified" | "invalid" | "opted_out", statusChangedAt?, statusChangedBy? }`.
+- **Review.** `review: { status: "unreviewed" | "approved" | "excluded", reviewedAt?, reviewedBy?, note? }`.
+- **Seen in source.** `discoveredAt?` and `lastSeenAt?`.
+- **Creator.** `createdBy` is now optional, since discovered records have no creator.
+- **Defaults.** Discovered records start `pending` + `unreviewed`. Admin-added records start `approved`.
 
 ### `institution_contacts` (Phase 5)
 `{ institutionId, nameEncrypted, phoneLookup (unique), phoneEncrypted, role: "coordinator" | "staff", status: "pending" | "verified" | "revoked", verifiedAt?, verifiedBy?, revokedAt?, createdBy }`
@@ -173,10 +189,33 @@ Indexes: `{ requestId: 1, createdAt: -1 }`, unique compound key to prevent dupli
   - What happened next is `coordinationStatus`.
 - **Institutions.** Institution acknowledgements are on the request, and stock reports are in `institution_availability_reports`.
 
+*Phase 6:* `response` also takes `"later"` ("contact me later"). There are also `requesterContactedAt?` (the requester says they contacted the donor) and `requesterNotifiedAt?`. `coordinationStatus` gains `"donor_arrived"`, between hospital coordination and donation confirmed.
+
+### `institution_outreach` (Phase 6, InstitutionalOutreach + MessageDeliveryLog)
+`{ requestId, institutionId (unique together), rank, distanceKm?, status, deliveries[], responseTokenHash?, responseTokenExpiresAt?, response?, followUp, discoveredAt }`
+- **`status`:** `awaiting_review`, `no_contact`, `channel_unavailable`, `queued`, `sent`, `partially_sent`, `failed`, `excluded` or `cancelled`.
+- **`deliveries[]`:** `{ channel: "email" | "whatsapp", target, contactChannelId?, notificationEventId?, status: queued | sending | sent | failed | suppressed, attempts, subject?, bodyEncrypted? (erased after sending), providerMessageId?, failureCode?, queuedAt, sentAt?, failedAt? }`.
+- **`response`:** `{ status: can_assist | cannot_assist | need_info, at, source: secure_link | whatsapp | admin, contactNameEncrypted?, contactPhoneEncrypted?, note?, recordedBy? }`.
+- **`followUp`:** `{ status: none | needed | done, at? }`.
+- **Indexes.** `{ requestId, institutionId }` (unique), `{ requestId, rank }`, `{ institutionId, createdAt }`, `responseTokenHash` (unique, sparse).
+
+### `jobs` (Phase 6)
+`{ type: coordinate_request | discover_institutions | institution_outreach | send_outreach_email | donor_wave, key (unique), payload (IDs only), status: queued | running | succeeded | dead | cancelled, attempts, maxAttempts, runAt, lockedUntil?, lockedBy?, lastError?, finishedAt?, expiresAt? }`
+- **Retention.** Succeeded jobs are deleted after 30 days through a TTL index. Dead jobs are kept until handled.
+
+### `coordination_events` (Phase 6)
+`{ requestId, type, summary, visibleToRequester, actor, actorUserId?, at }`
+- **The request's coordination history.** Events marked visible are shown on the manage and family links, worded without donor or patient identities.
+
+### `contact_access_logs` (Phase 6, ContactSharingLog)
+`{ requestId, responseId?, donorUserId?, action: revealed | sent_by_whatsapp | share_link_created | share_link_viewed | share_link_revoked, via: manage_link | donor_contacts_link | whatsapp | admin, linkId?, actorUserId?, at }`
+- **Append-only.** One row per disclosure. It never stores the contact itself.
+
 ### `matching_runs` (Phase 5)
 `{ requestId, radiusKm, policyVersion, policyReviewStatus, basis: "distance" | "city", eligibleGroups, candidates: [{ donorUserId, rank, distanceKm?, basis, reasons[] }], excluded: { <reason>: count }, scanned, createdBy, createdAt }`
 - **One explainable donor search.** Candidates hold user IDs only, never contact details.
 - **Index.** `{ requestId: 1, createdAt: -1 }`.
+- **Phase 6.** `trigger: "admin" | "automatic"`; `createdBy` is optional for automatic runs.
 
 ## 6. `notification_events`
 ```ts

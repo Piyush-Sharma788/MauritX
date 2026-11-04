@@ -29,7 +29,9 @@ const matchingRunSchema = new Schema(
     candidates: { type: [candidateSchema], default: [] },
     excluded: { type: Map, of: Number, default: {} },
     scanned: { type: Number, required: true },
-    createdBy: { type: Types.ObjectId, ref: "User", required: true },
+    // Absent when the run came from automated coordination.
+    createdBy: { type: Types.ObjectId, ref: "User" },
+    trigger: { type: String, enum: ["admin", "automatic"], required: true, default: "admin" },
   },
   { collection: "matching_runs", timestamps: { createdAt: true, updatedAt: false }, strict: "throw" },
 );

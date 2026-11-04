@@ -5,11 +5,13 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
 import { BotSwitches, RetryMessageButton } from "@/components/admin/admin-actions";
+import { RetryJobButton } from "@/components/admin/coordination-actions";
 import { Card, EmptyState, PageHeader, Pill, Stat } from "@/components/admin/kit";
 import { formatIST } from "@/components/requests/status";
 import { Spinner } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { getOperationsOverview, listConversations, listFailedMessages } from "@/server/admin/operations";
+import { jobStats, listDeadJobs } from "@/server/jobs/queue";
 
 export const metadata: Metadata = { title: "Operations · Admin", robots: { index: false } };
 
@@ -38,10 +40,12 @@ async function OperationsContent() {
   if (!user) redirect("/login");
   if (user.role !== "admin") notFound();
 
-  const [o, failed, { conversations }] = await Promise.all([
+  const [o, failed, { conversations }, jobs, dead] = await Promise.all([
     getOperationsOverview(),
     listFailedMessages(15),
     listConversations(new Types.ObjectId(user.id), randomUUID(), undefined, 15),
+    jobStats(),
+    listDeadJobs(10),
   ]);
   const wa = o.whatsapp;
   const waTone = wa.workerOnline && wa.state === "connected" ? "good" : wa.state === "qr_required" ? "warn" : "bad";
@@ -103,6 +107,25 @@ async function OperationsContent() {
           </div>
         </Card>
       </div>
+
+      <Card title="Background jobs" id="jobs" note="Discovery, outreach email and donor waves run in the jobs worker (npm run jobs:worker). Jobs that keep failing stop here for review.">
+        <div className="grid grid-cols-3 gap-3">
+          <Stat label="Queued" value={jobs.queued} />
+          <Stat label="Running" value={jobs.running} />
+          <Stat label="Dead (needs review)" value={jobs.dead} tone={jobs.dead ? "bad" : "neutral"} />
+        </div>
+        {dead.length > 0 && (
+          <ul className="mt-4 divide-y divide-line text-sm">
+            {dead.map((j) => (
+              <li key={j.id} className="flex flex-wrap items-center justify-between gap-3 py-2.5">
+                <span><span className="font-medium text-ink">{j.type.replace(/_/g, " ")}</span><span className="block text-xs text-ink-muted">{j.attempts} attempts{j.finishedAt ? ` · ${formatIST(j.finishedAt)}` : ""} · {j.lastError ?? "no error recorded"}</span></span>
+                <RetryJobButton jobId={j.id} />
+              </li>
+            ))}
+          </ul>
+        )}
+        {jobs.queued > 0 && jobs.running === 0 && <p className="mt-3 text-xs text-warning-800">Jobs are waiting. If this persists, check that the jobs worker is running.</p>}
+      </Card>
 
       <Card title="Emergency coordination" id="coord" note="Interest is not a donation. Donations count only when a coordinator confirms them. Alert figures cover the last 7 days.">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">

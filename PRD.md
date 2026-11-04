@@ -19,7 +19,11 @@ PRANEX is a mobile-first coordination platform that helps a patient or family me
   - the whole journey can also run in WhatsApp (REQUEST, TRACK, CANCEL);
   - step 7 runs as admin-triggered, small, consent-checked alert batches to matched donors;
   - step 8 is coordinated by MarutiX admins and verified institutions. The requester sees aggregate response counts, and donor contacts are shared only with coordinators, after the donor's consent.
-- **Not yet built:** the requester-facing list of nearby results and the route ETA in step 6.
+- **Phase 6:**
+  - activation automatically discovers nearby hospitals and blood banks (OpenStreetMap) and contacts them by email (reviewed addresses) or WhatsApp (verified institutions);
+  - zone-wise donor waves run automatically;
+  - the requester sees the institutions contacted with their answers, and the donors who responded, with consenting donors' contacts revealed on request and shareable with one responsible person.
+- **Not yet built:** route ETA in step 6.
 
 1. Open PRANEX and choose **Emergency** (the homepage "Request Blood" button).
 2. Explain location permission and ask for consent. Offer manual location/hospital search if permission is denied.

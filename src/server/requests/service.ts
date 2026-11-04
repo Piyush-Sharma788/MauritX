@@ -30,10 +30,15 @@ import {
 } from "@/lib/security/crypto";
 import { maskPhone } from "@/lib/validation/phone";
 import { withdrawQueuedAlerts } from "@/server/coordination/alerts";
+import { onRequestActivated, onRequestClosed } from "@/server/coordination/automation";
+import { recordEvent } from "@/server/coordination/events";
+import { disclosedDonors } from "@/server/coordination/requester";
+import { requesterCoordination } from "@/server/coordination/requester-view";
 import { queueRequestConfirmation } from "@/server/requests/notifications";
 import { allowedTransitions, canTransition, computeExpiry } from "@/server/requests/status";
 import { EmergencyRequest, type EmergencyRequestDoc } from "@/server/models/emergency-request";
 import { IdempotencyRecord } from "@/server/models/idempotency-record";
+import { ContactAccessLog } from "@/server/models/contact-access-log";
 import { RequestShareLink, type RequestShareLinkDoc } from "@/server/models/request-share-link";
 import { recordAudit } from "@/server/services/audit";
 import { enforceRateLimit } from "@/server/services/rate-limit";
@@ -158,7 +163,7 @@ export async function createRequest(
       : {}),
     whatsappUpdates: input.whatsappUpdates,
     createdVia: requesterLookup ? ("whatsapp" as const) : ("web" as const),
-    ...(requesterLookup ? { requesterPhoneLookup: requesterLookup } : {}),
+    ...(requesterLookup ? { requesterPhoneLookup: requesterLookup, requesterPhoneEncrypted: encryptPii(options.requesterE164!) } : {}),
     consent: { sharingAcceptedAt: now, privacyNoticeVersion: input.privacyNoticeVersion },
     dedupeKey,
     history: [{ status: "pending_verification" as const, at: now, actor: "requester" as const, ...(requesterLookup ? { note: "Created on WhatsApp" } : {}) }],
@@ -236,9 +241,13 @@ export async function resolveTrackingToken(token: string, now = new Date()): Pro
 
 async function toTrackedView(request: RequestRecord, link: LinkRecord): Promise<TrackedRequestView> {
   const manage = link.scope === "manage";
+  const contactsLink = link.scope === "donor_contacts";
   const shareLinks = manage
-    ? ((await RequestShareLink.find({ requestId: request._id, scope: "view", createdBy: "requester" }).sort({ createdAt: -1 }).limit(20).lean()) as LinkRecord[])
+    ? ((await RequestShareLink.find({ requestId: request._id, scope: { $in: ["view", "donor_contacts"] }, createdBy: "requester" }).sort({ createdAt: -1 }).limit(20).lean()) as LinkRecord[])
     : [];
+  const coordination = contactsLink ? null : await requesterCoordination(request, manage ? "manage" : "view");
+  // A donor-contacts link shows consenting donors' contacts; each view is logged.
+  const donorContacts = contactsLink ? await disclosedDonors(request, { via: "donor_contacts_link", linkId: link._id }) : null;
   return {
     publicRequestId: request.publicRequestId,
     status: request.status,
@@ -271,9 +280,12 @@ async function toTrackedView(request: RequestRecord, link: LinkRecord): Promise<
             createdAt: l.createdAt.toISOString(),
             expiresAt: l.expiresAt.toISOString(),
             revoked: Boolean(l.revokedAt),
+            scope: l.scope === "donor_contacts" ? ("donor_contacts" as const) : ("view" as const),
           })),
         }
       : null,
+    coordination,
+    donorContacts,
   };
 }
 
@@ -284,7 +296,7 @@ export async function getTrackedRequest(token: string, publicRequestId?: string)
   return toTrackedView(request, link);
 }
 
-async function requireManageLink(token: string, publicRequestId: string) {
+export async function requireManageLink(token: string, publicRequestId: string) {
   const { link, request } = await resolveTrackingToken(token);
   // A view link, or a link for another request, gets the same answer as a missing one.
   if (link.scope !== "manage" || request.publicRequestId !== publicRequestId) throw notFound();
@@ -323,7 +335,14 @@ export async function applyTransition(request: RequestRecord, to: RequestStatus,
     resourceId: `${request.publicRequestId}:${request.status}->${to}`,
   });
   // A closed request must not reach anyone else.
-  if (!isOpenStatus(to)) await withdrawQueuedAlerts(request._id, now);
+  if (!isOpenStatus(to)) {
+    await withdrawQueuedAlerts(request._id, now);
+    await onRequestClosed(request._id, now);
+    await recordEvent(request._id, "request_closed", `Request marked ${to.replace(/_/g, " ")}.`, { visibleToRequester: true, actor: actor.type === "requester" ? "requester" : actor.type === "institution" ? "institution" : "admin", at: now });
+  } else if (to === "active") {
+    // Automated discovery, outreach and donor waves begin only after an admin activates the request.
+    await onRequestActivated(request._id);
+  }
 }
 
 /** The requester (manage link) cancels or reports their own outcome. */
@@ -345,11 +364,15 @@ export async function createFamilyLink(token: string, publicRequestId: string, h
 export async function revokeFamilyLink(token: string, publicRequestId: string, linkId: string, ctx: ApiContext) {
   const { request } = await requireManageLink(token, publicRequestId);
   if (!Types.ObjectId.isValid(linkId)) throw notFound();
-  const result = await RequestShareLink.updateOne(
-    { _id: linkId, requestId: request._id, scope: "view", revokedAt: null },
+  const link = await RequestShareLink.findOneAndUpdate(
+    { _id: linkId, requestId: request._id, scope: { $in: ["view", "donor_contacts"] }, revokedAt: null },
     { $set: { revokedAt: new Date() } },
+    { returnDocument: "after", lean: true },
   );
-  if (result.matchedCount !== 1) throw notFound();
+  if (!link) throw notFound();
+  if (link.scope === "donor_contacts") {
+    await ContactAccessLog.create({ requestId: request._id, action: "share_link_revoked", via: "manage_link", linkId: link._id, at: new Date() });
+  }
   await recordAudit({ action: "request.link_revoked", outcome: "success", requestId: ctx.requestId, resourceType: "emergency_request", resourceId: request.publicRequestId });
 }
 

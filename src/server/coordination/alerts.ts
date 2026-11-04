@@ -6,7 +6,7 @@ import { AppError } from "@/lib/api/errors";
 import { getCoordinationConfig } from "@/lib/coordination/config";
 import { connectToDatabase } from "@/lib/db/mongoose";
 import { encryptPii } from "@/lib/security/crypto";
-import { loadRun } from "@/server/matching/service";
+import { loadRun, RETRYABLE_FAILURES } from "@/server/matching/service";
 import { queueEmergencyRequestNotification } from "@/server/messaging/queue";
 import { emergencyRequestText, type EmergencyRequestSummary } from "@/server/messaging/templates";
 import { EmergencyRequest, type EmergencyRequestDoc } from "@/server/models/emergency-request";
@@ -102,7 +102,35 @@ export async function withdrawQueuedAlerts(requestObjectId: Types.ObjectId | str
 }
 
 /** Codes where the message certainly wasn't delivered, so sending it again can't create a duplicate. */
-export const RETRYABLE_FAILURES = new Set(["EXPIRED", "NOT_CONNECTED", "SEND_FAILED", "PROVIDER_ACK_ERROR"]);
+export { RETRYABLE_FAILURES };
+
+/**
+ * Puts an alert that certainly wasn't delivered back in the queue, with text
+ * rebuilt from the current request. Used by admin retries and by donor waves
+ * (so a WhatsApp outage that let alerts expire doesn't leave donors skipped).
+ * The dispatcher still re-checks consent and the request before sending.
+ */
+export async function requeueUndeliveredAlert(
+  messageId: Types.ObjectId,
+  request: Parameters<typeof alertSummary>[0],
+  distanceKm: number | null,
+  now = new Date(),
+): Promise<boolean> {
+  const updated = await NotificationEvent.updateOne(
+    { _id: messageId, kind: "emergency_request", status: "failed", failureCode: { $in: [...RETRYABLE_FAILURES] } },
+    {
+      $set: {
+        status: "queued",
+        bodyEncrypted: encryptPii(emergencyRequestText({ ...alertSummary(request), distanceKm })),
+        attempts: 0,
+        nextAttemptAt: now,
+        expiresAt: new Date(now.getTime() + getCoordinationConfig().alertTtlMs),
+      },
+      $unset: { failureCode: 1, failedAt: 1, lockedUntil: 1 },
+    },
+  );
+  return updated.modifiedCount === 1;
+}
 
 /** Re-queues one failed emergency alert, rebuilt from the current request, if it is still safe and useful. */
 export async function retryFailedAlert(messageId: string, adminUserId: Types.ObjectId, requestId: string, now = new Date()): Promise<{ status: "queued" }> {
@@ -121,20 +149,7 @@ export async function retryFailedAlert(messageId: string, adminUserId: Types.Obj
     throw new AppError(409, "NOT_RETRYABLE", "The request is no longer active, so this alert won't be resent.");
   }
 
-  const updated = await NotificationEvent.updateOne(
-    { _id: message._id, status: "failed" },
-    {
-      $set: {
-        status: "queued",
-        bodyEncrypted: encryptPii(emergencyRequestText(alertSummary(request))),
-        attempts: 0,
-        nextAttemptAt: now,
-        expiresAt: new Date(now.getTime() + getCoordinationConfig().alertTtlMs),
-      },
-      $unset: { failureCode: 1, failedAt: 1, lockedUntil: 1 },
-    },
-  );
-  if (updated.modifiedCount !== 1) throw new AppError(409, "CONFLICT", "This message changed just now. Refresh and try again.");
+  if (!(await requeueUndeliveredAlert(message._id, request, null, now))) throw new AppError(409, "CONFLICT", "This message changed just now. Refresh and try again.");
   await recordAudit({ action: "alerts.message_retried", outcome: "success", requestId, actorUserId: adminUserId, resourceType: "notification_event", resourceId: messageId });
   return { status: "queued" };
 }

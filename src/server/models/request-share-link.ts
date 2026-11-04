@@ -10,7 +10,9 @@ const requestShareLinkSchema = new Schema(
   {
     requestId: { type: Types.ObjectId, ref: "EmergencyRequest", required: true },
     tokenHash: { type: String, required: true },
-    scope: { type: String, enum: ["manage", "view"], required: true },
+    // donor_contacts: the requester shares consenting donors' contact details with one
+    // responsible person (family member, hospital coordinator). Short-lived; every view is logged.
+    scope: { type: String, enum: ["manage", "view", "donor_contacts"], required: true },
     createdBy: { type: String, enum: ["requester", "admin", "system"], required: true },
     expiresAt: { type: Date, required: true },
     revokedAt: { type: Date },

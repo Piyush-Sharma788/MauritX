@@ -50,6 +50,13 @@ const nextConfig: NextConfig = {
       { source: "/(.*)", headers: securityHeaders },
       // Tracking URLs carry a bearer token: never leak them in Referer headers, never index them.
       {
+        source: "/respond/:path*",
+        headers: [
+          { key: "Referrer-Policy", value: "no-referrer" },
+          { key: "X-Robots-Tag", value: "noindex, nofollow" },
+        ],
+      },
+      {
         source: "/track/:path*",
         headers: [
           { key: "Referrer-Policy", value: "no-referrer" },

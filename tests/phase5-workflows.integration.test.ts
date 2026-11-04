@@ -257,13 +257,13 @@ describe.skipIf(!enabled)("Phase 5 workflows (MongoDB, fake WhatsApp)", () => {
 
       const { provider, sent } = fakeWhatsApp();
       await drain(provider);
-      const alert = sent.find((m) => m.phone === donor.phone && m.body.includes("EMERGENCY BLOOD ALERT"))!;
-      expect(alert.body).toMatch(/EMERGENCY BLOOD ALERT[\s\S]*B\+ blood[\s\S]*City Hospital[\s\S]*1 — Interested/);
+      const alert = sent.find((m) => m.phone === donor.phone && m.body.includes("URGENT BLOOD REQUEST"))!;
+      expect(alert.body).toMatch(/URGENT BLOOD REQUEST[\s\S]*Blood group: B\+[\s\S]*City Hospital[\s\S]*1 — I am interested[\s\S]*3 — Contact me later/);
       expect(alert.body).not.toMatch(/S\. D\.|Rohit/);
       expect(alert.body).toContain(request.publicRequestId);
 
       await say(donor.phone, "1");
-      expect(await lastReply(donor.phone)).toMatch(/May we share your name and WhatsApp number/);
+      expect(await lastReply(donor.phone)).toMatch(/May we share your first name, area and WhatsApp number[\s\S]*the patient's family/);
       await say(donor.phone, "yes");
       expect(await lastReply(donor.phone)).toMatch(/Next steps/);
 
@@ -296,7 +296,7 @@ describe.skipIf(!enabled)("Phase 5 workflows (MongoDB, fake WhatsApp)", () => {
       await queueEmergencyRequestNotification({ requestId: request._id.toString(), donorUserId: donor.userId, summary: alertSummaryFor(request) });
       await drain(fakeWhatsApp().provider);
 
-      await say(donor.phone, "3");
+      await say(donor.phone, "4");
       expect(await lastReply(donor.phone)).toMatch(/Address: 12 MG Road[\s\S]*Only the blood centre can decide/);
       await say(donor.phone, "1");
       await say(donor.phone, "2");

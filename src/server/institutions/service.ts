@@ -1,7 +1,7 @@
 import "server-only";
 import { Types } from "mongoose";
 import type { z } from "zod";
-import type { addContactSchema, ContactStatus, createInstitutionSchema, InstitutionStatus } from "@/features/coordination/schemas";
+import type { addContactSchema, channelUpdateSchema, ChannelStatus, ContactStatus, createInstitutionSchema, InstitutionStatus, ReviewStatus } from "@/features/coordination/schemas";
 import type { InstitutionDetail, InstitutionSummary } from "@/features/coordination/types";
 import { OPEN_STATUSES } from "@/features/requests/schemas";
 import { AppError } from "@/lib/api/errors";
@@ -43,6 +43,10 @@ async function toSummary(doc: InstitutionRecord): Promise<InstitutionSummary> {
     verificationStatus: doc.verificationStatus,
     verifiedContacts: await InstitutionContact.countDocuments({ institutionId: doc._id, status: "verified" }),
     createdAt: doc.createdAt.toISOString(),
+    source: doc.source ?? "admin",
+    reviewStatus: doc.review?.status ?? "approved",
+    capability: doc.capability ?? "hospital",
+    contactChannels: (doc.contactChannels ?? []).filter((c) => c.status !== "invalid").length,
   };
 }
 
@@ -60,14 +64,24 @@ export async function createInstitution(input: z.output<typeof createInstitution
     ...(input.licenceReference ? { licenceReferenceEncrypted: encryptPii(input.licenceReference) } : {}),
     verificationStatus: "pending",
     createdBy: adminUserId,
+    source: "admin",
+    capability: input.type === "blood_bank" ? "blood_bank" : "hospital",
+    capabilitySource: "admin",
+    review: { status: "approved", reviewedAt: new Date(), reviewedBy: adminUserId },
+    contactChannels: input.publicPhone
+      ? [{ type: "phone", value: input.publicPhone, source: "admin", retrievedAt: new Date(), status: "verified", statusChangedAt: new Date(), statusChangedBy: adminUserId }]
+      : [],
   });
   await recordAudit({ action: "institution.created", outcome: "success", requestId, actorUserId: adminUserId, resourceType: "institution", resourceId: doc._id.toString() });
   return toSummary(doc.toObject() as InstitutionRecord);
 }
 
-export async function listInstitutions(filter: { status?: InstitutionStatus } = {}): Promise<InstitutionSummary[]> {
+export async function listInstitutions(filter: { status?: InstitutionStatus; review?: ReviewStatus } = {}): Promise<InstitutionSummary[]> {
   await connectToDatabase();
-  const docs = (await Institution.find(filter.status ? { verificationStatus: filter.status } : {}).sort({ createdAt: -1 }).limit(200).lean()) as InstitutionRecord[];
+  const query: Record<string, unknown> = {};
+  if (filter.status) query.verificationStatus = filter.status;
+  if (filter.review) query["review.status"] = filter.review;
+  const docs = (await Institution.find(query).sort({ createdAt: -1 }).limit(200).lean()) as InstitutionRecord[];
   return Promise.all(docs.map(toSummary));
 }
 
@@ -105,6 +119,12 @@ export async function getInstitutionDetail(id: string): Promise<InstitutionDetai
       reportedAt: r.reportedAt.toISOString(),
       reportedBy: contactName.get(r.contactId.toString()) ?? "Former contact",
     })),
+    externalRefs: (doc.externalRefs ?? []).map((ref) => ({ ref, url: ref.startsWith("osm:") ? `https://www.openstreetmap.org/${ref.slice(4)}` : null })),
+    capabilitySource: doc.capabilitySource ?? "admin",
+    review: { status: doc.review?.status ?? "approved", reviewedAt: iso(doc.review?.reviewedAt), note: doc.review?.note ?? null },
+    discoveredAt: iso(doc.discoveredAt),
+    lastSeenAt: iso(doc.lastSeenAt),
+    channels: (doc.contactChannels ?? []).map((c) => ({ id: c._id.toString(), type: c.type, value: c.value, status: c.status, source: c.source, sourceUrl: c.sourceUrl ?? null, retrievedAt: c.retrievedAt.toISOString() })),
     openRequests: requests.map((r) => ({ publicRequestId: r.publicRequestId, status: r.status, bloodGroup: r.bloodGroup, acknowledgedAt: iso(r.institutionAcknowledgedAt) })),
   };
 }
@@ -167,4 +187,59 @@ export async function linkRequestInstitution(publicRequestId: string, institutio
     await EmergencyRequest.updateOne({ _id: request._id }, { $unset: { institutionId: 1, institutionAcknowledgedAt: 1, institutionAcknowledgedBy: 1 } });
   }
   await recordAudit({ action: "request.institution_linked", outcome: "success", requestId, actorUserId: adminUserId, resourceType: "emergency_request", resourceId: `${publicRequestId}:${institutionId ?? "none"}` });
+}
+
+/** Admin review of a (usually discovered) institution: relevant and official, or excluded. */
+export async function reviewInstitution(id: string, status: "approved" | "excluded", note: string | undefined, adminUserId: Types.ObjectId, requestId: string) {
+  await connectToDatabase();
+  const doc = await loadInstitution(id);
+  await Institution.updateOne({ _id: doc._id }, { $set: { review: { status, reviewedAt: new Date(), reviewedBy: adminUserId, ...(note ? { note } : {}) } } });
+  await recordAudit({ action: "institution.reviewed", outcome: "success", requestId, actorUserId: adminUserId, resourceType: "institution", resourceId: `${id}:${status}` });
+}
+
+/** Adds a contact channel, or corrects an existing one. An admin edit is recorded as source "admin". */
+export async function upsertChannel(id: string, channelId: string | null, input: z.output<typeof channelUpdateSchema>, adminUserId: Types.ObjectId, requestId: string) {
+  await connectToDatabase();
+  const doc = await loadInstitution(id);
+  const now = new Date();
+  if (channelId) {
+    if (!Types.ObjectId.isValid(channelId)) throw notFound();
+    const current = doc.contactChannels.find((c) => c._id.toString() === channelId);
+    if (!current) throw notFound();
+    const changed = current.value !== input.value || current.type !== input.type;
+    await Institution.updateOne(
+      { _id: doc._id, "contactChannels._id": current._id },
+      {
+        $set: {
+          "contactChannels.$.type": input.type,
+          "contactChannels.$.value": input.value,
+          "contactChannels.$.status": input.status,
+          "contactChannels.$.statusChangedAt": now,
+          "contactChannels.$.statusChangedBy": adminUserId,
+          ...(changed ? { "contactChannels.$.source": "admin", "contactChannels.$.retrievedAt": now, "contactChannels.$.sourceUrl": null } : {}),
+        },
+      },
+    );
+  } else {
+    if (doc.contactChannels.some((c) => c.type === input.type && c.value.toLowerCase() === input.value.toLowerCase())) {
+      throw new AppError(409, "CONFLICT", "That contact is already recorded.");
+    }
+    await Institution.updateOne(
+      { _id: doc._id },
+      { $push: { contactChannels: { type: input.type, value: input.value, source: "admin", retrievedAt: now, status: input.status, statusChangedAt: now, statusChangedBy: adminUserId } } },
+    );
+  }
+  await recordAudit({ action: "institution.channel_changed", outcome: "success", requestId, actorUserId: adminUserId, resourceType: "institution", resourceId: `${id}:${channelId ?? "new"}:${input.type}:${input.status}` });
+}
+
+export async function setChannelStatus(id: string, channelId: string, status: ChannelStatus, adminUserId: Types.ObjectId, requestId: string) {
+  await connectToDatabase();
+  const doc = await loadInstitution(id);
+  if (!Types.ObjectId.isValid(channelId)) throw notFound();
+  const result = await Institution.updateOne(
+    { _id: doc._id, "contactChannels._id": new Types.ObjectId(channelId) },
+    { $set: { "contactChannels.$.status": status, "contactChannels.$.statusChangedAt": new Date(), "contactChannels.$.statusChangedBy": adminUserId } },
+  );
+  if (result.matchedCount !== 1) throw notFound();
+  await recordAudit({ action: "institution.channel_changed", outcome: "success", requestId, actorUserId: adminUserId, resourceType: "institution", resourceId: `${id}:${channelId}:${status}` });
 }

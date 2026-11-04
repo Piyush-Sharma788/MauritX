@@ -27,6 +27,8 @@ export const emergencyRequestSummarySchema = z.strictObject({
   component: z.enum(Object.keys(COMPONENT_LABELS) as [keyof typeof COMPONENT_LABELS, ...(keyof typeof COMPONENT_LABELS)[]]),
   unitsRequested: z.number().int().min(1).max(20),
   neededBy: z.date(),
+  /** Straight-line distance to this donor, when both points are known. */
+  distanceKm: z.number().min(0).max(500).nullable().optional(),
 });
 
 export type EmergencyRequestSummary = z.input<typeof emergencyRequestSummarySchema>;
@@ -38,24 +40,25 @@ export const componentLabel = (c: keyof typeof COMPONENT_LABELS) => COMPONENT_LA
 export function emergencyRequestText(input: EmergencyRequestSummary): string {
   const s = emergencyRequestSummarySchema.parse(input);
   return [
-    "MARUTIX — EMERGENCY BLOOD ALERT",
+    "MARUTIX — URGENT BLOOD REQUEST",
     "",
-    `A patient requires ${s.bloodGroup === "unknown" ? "blood (group to be confirmed by the hospital)" : `${s.bloodGroup} blood`}.`,
-    "",
-    `Hospital: ${s.hospitalName}`,
-    `Location: ${s.locality}, ${s.city}`,
+    `Blood group: ${s.bloodGroup === "unknown" ? "to be confirmed by the hospital" : s.bloodGroup}`,
     `Component: ${COMPONENT_LABELS[s.component]}`,
     `Units required: ${s.unitsRequested}`,
+    `Hospital: ${s.hospitalName}`,
+    `Location: ${s.locality}, ${s.city}`,
+    ...(s.distanceKm !== null && s.distanceKm !== undefined ? [`Distance: approximately ${s.distanceKm < 1 ? "under 1" : Math.round(s.distanceKm)} km (straight line)`] : []),
     `Required by: ${formatNeededBy(s.neededBy)}`,
     `Ref: ${s.publicRequestId}`,
     "",
-    "Can you help?",
+    "Can you help with this request?",
     "",
     "Reply:",
-    "1 — Interested",
-    "2 — Unavailable",
-    "3 — More information",
-    "4 — Stop alerts",
+    "1 — I am interested",
+    "2 — Not available",
+    "3 — Contact me later",
+    "4 — More information",
+    "Reply STOP to stop all alerts.",
     "",
     "Please coordinate with the hospital. Final donor eligibility and compatibility will be assessed by the blood centre.",
   ].join("\n");
@@ -88,6 +91,7 @@ export const INSTITUTION_HELP_TEXT = [
   "REQUESTS: open requests linked to your institution",
   "STATUS: your institution's response status (or STATUS MX-XXXXXXXX)",
   "ACK MX-XXXXXXXX: acknowledge a request",
+  "ASSIST MX-XXXXXXXX or UNABLE MX-XXXXXXXX: say whether you can assist",
   "AVAILABLE <group> <component> <units>: report stock, e.g. AVAILABLE O+ PRBC 3 (use 0 if none)",
   "FULFILLED MX-XXXXXXXX or PARTIAL MX-XXXXXXXX: coordinators only",
   "HELP: this list",

@@ -79,6 +79,19 @@ ANTHROPIC_API_KEY=
 AI_MODEL=
 AI_TIMEOUT_MS=
 AI_MAX_CALLS_PER_NUMBER_PER_HOUR=
+# Phase 6: automated coordination, discovery and outreach email (see .env.example)
+COORDINATION_AUTOSTART=
+DONOR_ZONES_KM=
+DONOR_WAVE_SIZE=
+DONOR_WAVE_INTERVAL_MINUTES=
+OUTREACH_RADIUS_KM=
+OUTREACH_INCLUDE_UNREVIEWED=
+DISCOVERY_PROVIDER=
+DISCOVERY_CONTACT_EMAIL=
+EMAIL_PROVIDER=
+SMTP_HOST=
+EMAIL_FROM=
+COORDINATOR_CONTACT_PHONE=
 # WhatsApp Web pilot (whatsapp-web.js), see WHATSAPP_BOT.md §2a
 WHATSAPP_WEB_WORKER_URL=
 WHATSAPP_WEB_WORKER_SECRET=
@@ -149,7 +162,7 @@ docs/
 India's e-RaktKosh already provides blood-centre discovery and blood availability information. Treat it as a potential partner/integration, not as an API you can assume is publicly available. Obtain written permission and documented API access before integrating; do not scrape it.
 
 ## Status
-- **Phases 1–5 are implemented as a pilot:**
+- **Phases 1–6 are implemented as a pilot.** Phase 6 adds automated institution discovery and outreach, zone-wise donor waves, and patient–donor connection with consent and access logging. Earlier phases:
   - web emergency requests;
   - WhatsApp-first donor registration;
   - WhatsApp coordination for patients, donors and verified institutions;

@@ -16,21 +16,34 @@ import { RequestResponse } from "@/server/models/request-response";
 import { User } from "@/server/models/user";
 import { recordAudit } from "@/server/services/audit";
 
+/** Failure codes where the alert certainly never reached the donor. Kept here to avoid an import cycle with alerts.ts. */
+export const RETRYABLE_FAILURES = new Set(["EXPIRED", "NOT_CONNECTED", "SEND_FAILED", "PROVIDER_ACK_ERROR"]);
+
 const SCAN_LIMIT = 2000;
 const escapeRegex = (v: string) => v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const toPoint = (coords?: number[] | null) => (coords?.length === 2 ? { longitude: coords[0], latitude: coords[1] } : null);
 
 type RunRecord = MatchingRunDoc & { _id: Types.ObjectId; createdAt: Date };
 
-/** Where to measure distance from: the linked institution's location if known, else the requester's approximate device location. */
-async function originFor(request: { institutionId?: Types.ObjectId | null; location?: { coordinates?: number[] | null } | null }) {
+/**
+ * Where to measure distance from: the linked institution's location if known,
+ * else the requester's approximate device location, else the point geocoded
+ * from the hospital address during discovery.
+ */
+export async function originFor(request: {
+  institutionId?: Types.ObjectId | null;
+  location?: { coordinates?: number[] | null } | null;
+  geocodedLocation?: { coordinates?: number[] | null } | null;
+}): Promise<{ point: { latitude: number; longitude: number }; source: "institution" | "requester_device" | "geocoded_address" } | null> {
   if (request.institutionId) {
     const institution = await Institution.findById(request.institutionId, { location: 1 }).lean();
     const point = toPoint(institution?.location?.coordinates);
-    if (point) return { point, source: "institution" as const };
+    if (point) return { point, source: "institution" };
   }
-  const point = toPoint(request.location?.coordinates);
-  return point ? { point, source: "requester_device" as const } : null;
+  const device = toPoint(request.location?.coordinates);
+  if (device) return { point: device, source: "requester_device" };
+  const geocoded = toPoint(request.geocodedLocation?.coordinates);
+  return geocoded ? { point: geocoded, source: "geocoded_address" } : null;
 }
 
 /** Donor profiles in the search area, of any blood group, so the run can explain every exclusion. */
@@ -48,6 +61,20 @@ async function loadAreaDonors(origin: { latitude: number; longitude: number } | 
 }
 
 export async function runMatching(publicRequestId: string, radiusKm: RadiusKm, adminUserId: Types.ObjectId, requestId: string, now = new Date()): Promise<MatchingRunView> {
+  const { run, originSource } = await executeMatching(publicRequestId, radiusKm, { trigger: "admin", adminUserId, requestId }, now);
+  return toRunView(run, originSource);
+}
+
+/**
+ * Runs and saves one donor search. Used by admins (`runMatching`) and by
+ * automated zone waves (`trigger: "automatic"`, no admin user).
+ */
+export async function executeMatching(
+  publicRequestId: string,
+  radiusKm: number,
+  by: { trigger: "admin" | "automatic"; adminUserId?: Types.ObjectId; requestId: string },
+  now = new Date(),
+): Promise<{ run: RunRecord; originSource: "institution" | "requester_device" | "geocoded_address" | null }> {
   await connectToDatabase();
   const request = await EmergencyRequest.findOne({ publicRequestId }).lean();
   if (!request) throw new AppError(404, "NOT_FOUND", "We couldn't find that request.");
@@ -65,7 +92,11 @@ export async function runMatching(publicRequestId: string, radiusKm: RadiusKm, a
     (await MessagingOptOut.find({ phoneLookup: { $in: users.map((u) => u.phoneLookup) }, channel: "whatsapp" }, { phoneLookup: 1 }).lean()).map((o) => o.phoneLookup),
   );
   const contacted = new Set([
-    ...(await NotificationEvent.find({ requestId: request._id.toString(), kind: "emergency_request", recipientUserId: { $in: userIds } }, { recipientUserId: 1 }).lean()).map((n) => n.recipientUserId!.toString()),
+    // An alert that certainly wasn't delivered (expired, not connected) doesn't count as contact.
+    ...(await NotificationEvent.find(
+      { requestId: request._id.toString(), kind: "emergency_request", recipientUserId: { $in: userIds }, $nor: [{ status: "failed", failureCode: { $in: [...RETRYABLE_FAILURES] } }] },
+      { recipientUserId: 1 },
+    ).lean()).map((n) => n.recipientUserId!.toString()),
     ...(await RequestResponse.find({ requestId: request._id, donorUserId: { $in: userIds } }, { donorUserId: 1 }).lean()).map((r) => r.donorUserId.toString()),
   ]);
 
@@ -115,17 +146,18 @@ export async function runMatching(publicRequestId: string, radiusKm: RadiusKm, a
     candidates: result.candidates.map((c) => ({ ...c, donorUserId: new Types.ObjectId(c.donorUserId) })),
     excluded: Object.fromEntries(Object.entries(result.excluded).filter(([, n]) => n > 0)),
     scanned: result.scanned,
-    createdBy: adminUserId,
+    trigger: by.trigger,
+    ...(by.adminUserId ? { createdBy: by.adminUserId } : {}),
   });
   await recordAudit({
     action: "matching.run_created",
     outcome: "success",
-    requestId,
-    actorUserId: adminUserId,
+    requestId: by.requestId,
+    actorUserId: by.adminUserId,
     resourceType: "emergency_request",
-    resourceId: `${publicRequestId}:${result.candidates.length}`,
+    resourceId: `${publicRequestId}:${by.trigger}:${result.candidates.length}`,
   });
-  return toRunView(run.toObject() as RunRecord, origin?.source ?? null);
+  return { run: run.toObject() as RunRecord, originSource: origin?.source ?? null };
 }
 
 export async function getLatestRun(requestObjectId: Types.ObjectId): Promise<MatchingRunView | null> {
@@ -134,12 +166,14 @@ export async function getLatestRun(requestObjectId: Types.ObjectId): Promise<Mat
   return run ? toRunView(run, null) : null;
 }
 
+export type { RunRecord };
+
 export async function loadRun(runId: string, requestObjectId: Types.ObjectId): Promise<RunRecord | null> {
   if (!Types.ObjectId.isValid(runId)) return null;
   return (await MatchingRun.findOne({ _id: runId, requestId: requestObjectId }).lean()) as RunRecord | null;
 }
 
-async function toRunView(run: RunRecord, originSource: "institution" | "requester_device" | null): Promise<MatchingRunView> {
+async function toRunView(run: RunRecord, originSource: "institution" | "requester_device" | "geocoded_address" | null): Promise<MatchingRunView> {
   const ids = run.candidates.map((c) => c.donorUserId);
   const [users, alerted, responses] = await Promise.all([
     User.find({ _id: { $in: ids } }, { displayName: 1 }).lean(),
@@ -154,6 +188,7 @@ async function toRunView(run: RunRecord, originSource: "institution" | "requeste
     id: run._id.toString(),
     createdAt: run.createdAt.toISOString(),
     radiusKm: run.radiusKm,
+    trigger: run.trigger ?? "admin",
     basis: run.basis,
     originSource,
     policyVersion: run.policyVersion,

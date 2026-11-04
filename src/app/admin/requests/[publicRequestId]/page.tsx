@@ -4,6 +4,7 @@ import { Types } from "mongoose";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Suspense, type ReactNode } from "react";
+import { AutomationCard, HistoryCard, OutreachCard } from "@/components/admin/coordination-detail";
 import { CoordinationPanel } from "@/components/admin/coordination-panel";
 import { RequestStatusActions, RevokeLinkButton } from "@/components/admin/request-actions";
 import { StatusBadge, StatusTimeline, formatIST } from "@/components/requests/status";
@@ -99,7 +100,10 @@ async function DetailContent({ params }: Pick<PageProps<"/admin/requests/[public
         <RequestStatusActions publicRequestId={r.publicRequestId} allowed={r.allowedStatuses} />
       </Card>
 
-      <Card title="Donor coordination" note="Alerts go only to consenting donors, in small batches you send yourself, and only while the request is active.">
+      <AutomationCard publicRequestId={r.publicRequestId} c={coordination} />
+      <OutreachCard publicRequestId={r.publicRequestId} c={coordination} />
+
+      <Card title="Donor coordination" note="Automatic waves run after activation; you can also search and send a batch yourself. Alerts go only to consenting donors, and only while the request is active.">
         <CoordinationPanel
           publicRequestId={r.publicRequestId}
           summary={coordination.summary}
@@ -129,6 +133,8 @@ async function DetailContent({ params }: Pick<PageProps<"/admin/requests/[public
           ]} />
         </Card>
       </div>
+
+      <HistoryCard c={coordination} />
 
       <div className="grid gap-5 lg:grid-cols-[1fr_1fr]">
         <Card title="Status history" note="Notes are internal and never shown on tracking links.">

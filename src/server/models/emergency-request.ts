@@ -1,6 +1,21 @@
 import { Schema, Types, model, models, type InferSchemaType, type Model } from "mongoose";
 import { BLOOD_GROUPS } from "@/features/donors/schemas";
+import { AUTOMATION_STATUSES, DONOR_PHASE_STATUSES } from "@/features/coordination/schemas";
 import { COMPONENTS, PRIORITIES, REQUEST_STATUSES } from "@/features/requests/schemas";
+
+const waveSchema = new Schema(
+  {
+    number: { type: Number, required: true },
+    zoneIndex: { type: Number, required: true },
+    // Outer distance of the zone; null for the final "same city, no location" stage.
+    zoneKm: { type: Number },
+    matchingRunId: { type: Types.ObjectId, ref: "MatchingRun" },
+    queued: { type: Number, required: true },
+    suppressed: { type: Number, required: true },
+    at: { type: Date, required: true },
+  },
+  { _id: false },
+);
 
 const historyEntrySchema = new Schema(
   {
@@ -57,6 +72,29 @@ const emergencyRequestSchema = new Schema(
     // Keyed hash of the WhatsApp number that created the request (WhatsApp-created requests only).
     // Only that number can cancel it through the bot.
     requesterPhoneLookup: { type: String },
+    // The same WhatsApp sender, encrypted: the only requester number MarutiX knows is genuine,
+    // so the only one that may receive donor contact details by message.
+    requesterPhoneEncrypted: { type: String },
+    // Approximate point geocoded from the hospital address when no pin was shared.
+    geocodedLocation: {
+      type: { type: String, enum: ["Point"] },
+      coordinates: { type: [Number], default: undefined },
+      source: { type: String, enum: ["openstreetmap"] },
+      at: { type: Date },
+    },
+    // Automated coordination after activation (Phase 6).
+    automation: {
+      status: { type: String, enum: AUTOMATION_STATUSES, required: true, default: "not_started" },
+      startedAt: { type: Date },
+      changedAt: { type: Date },
+      changedBy: { type: Types.ObjectId, ref: "User" },
+      donorPhase: { type: String, enum: DONOR_PHASE_STATUSES, required: true, default: "pending" },
+      zoneIndex: { type: Number, required: true, default: 0 },
+      waves: { type: [waveSchema], default: [] },
+      nextWaveAt: { type: Date },
+      discoveryStatus: { type: String, enum: ["pending", "running", "done", "failed"], required: true, default: "pending" },
+      discoveredAt: { type: Date },
+    },
     // The verified institution coordinating this request, linked by an admin.
     institutionId: { type: Types.ObjectId, ref: "Institution" },
     institutionAcknowledgedAt: { type: Date },
@@ -66,6 +104,7 @@ const emergencyRequestSchema = new Schema(
       alertsQueued: { type: Number, required: true, default: 0 },
       interested: { type: Number, required: true, default: 0 },
       unavailable: { type: Number, required: true, default: 0 },
+      later: { type: Number, required: true, default: 0 },
     },
     consent: {
       sharingAcceptedAt: { type: Date, required: true },
@@ -90,6 +129,7 @@ emergencyRequestSchema.index({ contactPhoneLookup: 1, status: 1 });
 emergencyRequestSchema.index({ location: "2dsphere" }, { sparse: true });
 emergencyRequestSchema.index({ requesterPhoneLookup: 1, status: 1 }, { sparse: true });
 emergencyRequestSchema.index({ institutionId: 1, status: 1 }, { sparse: true });
+emergencyRequestSchema.index({ "automation.status": 1, status: 1 });
 
 export type EmergencyRequestDoc = InferSchemaType<typeof emergencyRequestSchema>;
 

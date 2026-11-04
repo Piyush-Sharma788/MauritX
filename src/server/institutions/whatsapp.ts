@@ -12,6 +12,8 @@ import { verifiedInstitutionContact } from "@/server/messaging/eligibility";
 import { queueBotReplies } from "@/server/messaging/queue";
 import { INSTITUTION_HELP_TEXT } from "@/server/messaging/templates";
 import { AvailabilityReport } from "@/server/models/availability-report";
+import { InstitutionOutreach } from "@/server/models/institution-outreach";
+import { recordWhatsAppInstitutionResponse } from "@/server/outreach/service";
 import { EmergencyRequest } from "@/server/models/emergency-request";
 import { applyTransition, expireOverdueRequests, type RequestRecord } from "@/server/requests/service";
 import { findRequestId } from "@/server/requests/whatsapp";
@@ -23,8 +25,8 @@ import { recordAudit } from "@/server/services/audit";
  * are both verified and that the request is linked to that institution.
  */
 
-export const INSTITUTION_KEYWORDS = new Set(["REQUESTS", "ACK", "ACKNOWLEDGE", "AVAILABLE", "FULFILLED", "PARTIAL", "STATUS", "HELP"]);
-const PRIVILEGED = new Set(["REQUESTS", "ACK", "ACKNOWLEDGE", "FULFILLED", "PARTIAL"]);
+export const INSTITUTION_KEYWORDS = new Set(["REQUESTS", "ACK", "ACKNOWLEDGE", "AVAILABLE", "FULFILLED", "PARTIAL", "STATUS", "HELP", "ASSIST", "UNABLE"]);
+const PRIVILEGED = new Set(["REQUESTS", "ACK", "ACKNOWLEDGE", "FULFILLED", "PARTIAL", "ASSIST", "UNABLE"]);
 
 export interface AvailabilityLine {
   bloodGroup: Exclude<BloodGroup, "unknown">;
@@ -175,6 +177,25 @@ export async function handleInstitutionCommand(msg: InboundMessage, keyword: str
       await recordAudit({ action: "institution.availability_reported", outcome: "success", requestId: randomUUID(), resourceType: "institution", resourceId: institution._id.toString() });
       await reply(msg, [
         `Recorded at ${formatIstShort(now)}: ${line.bloodGroup} ${COMPONENT_LABELS[line.component]}, ${line.units > 0 ? `${line.units} unit(s)` : "none available"}, reported by ${decryptPii(contact.nameEncrypted).split(" ")[0]}. Coordinators see this as your institution's report with its time, not as confirmed live stock.`,
+      ]);
+      return true;
+    }
+
+    case "ASSIST":
+    case "UNABLE": {
+      const id = findRequestId(text);
+      const r = id ? ((await EmergencyRequest.findOne({ publicRequestId: id }).lean()) as RequestRecord | null) : null;
+      // Only for a request this institution was contacted about, or is linked to.
+      const involved = r && (r.institutionId?.equals(institution._id) || (await InstitutionOutreach.exists({ requestId: r._id, institutionId: institution._id })));
+      if (!r || !involved || !OPEN_STATUSES.includes(r.status)) {
+        await reply(msg, [id ? "That request isn't open, or your institution wasn't contacted about it." : `Please include the request ID, for example ${first} MX-7K3Q9P2A.`]);
+        return true;
+      }
+      await recordWhatsAppInstitutionResponse(r, institution._id, institution.displayName, first === "ASSIST" ? "can_assist" : "cannot_assist", now);
+      await reply(msg, [
+        first === "ASSIST"
+          ? `Thank you. We've recorded that ${institution.displayName} may be able to assist with ${r.publicRequestId}. The family will be told to contact you; this doesn't confirm stock.`
+          : `Thank you for letting us know. We've recorded that ${institution.displayName} can't assist with ${r.publicRequestId}.`,
       ]);
       return true;
     }

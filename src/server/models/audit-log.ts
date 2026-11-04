@@ -47,6 +47,23 @@ export const AUDIT_ACTIONS = [
   "settings.alerts_paused_changed",
   "conversations.viewed_by_admin",
   "ai.action_proposed",
+  "automation.started",
+  "automation.changed",
+  "discovery.completed",
+  "discovery.failed",
+  "institution.reviewed",
+  "institution.channel_changed",
+  "outreach.queued",
+  "outreach.sent",
+  "outreach.failed",
+  "outreach.response_recorded",
+  "outreach.email_unsubscribed",
+  "outreach.changed",
+  "donor_contact.revealed",
+  "donor_contact.link_created",
+  "donor_contact.link_viewed",
+  "donor_contact.marked_contacted",
+  "jobs.retried",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
