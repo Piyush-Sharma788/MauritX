@@ -1,6 +1,6 @@
 # PRANEX
 
-[![CI](https://github.com/Piyush-Sharma788/MauritX/actions/workflows/ci.yml/badge.svg)](https://github.com/Piyush-Sharma788/MauritX/actions/workflows/ci.yml) [![CodeQL](https://github.com/Piyush-Sharma788/MauritX/actions/workflows/codeql.yml/badge.svg)](https://github.com/Piyush-Sharma788/MauritX/actions/workflows/codeql.yml)
+[![CI](https://github.com/Piyush-Sharma788/MauritX/actions/workflows/ci.yml/badge.svg)](https://github.com/Piyush-Sharma788/MauritX/actions/workflows/ci.yml)
 
 **A mobile-first blood emergency coordination platform connecting patients, voluntary donors, blood banks and hospitals.**
 

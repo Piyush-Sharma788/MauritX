@@ -286,54 +286,20 @@ Final states can't be changed.
 
 ---
 
-## CI/CD and deployment
+## CI
 
-### Workflows (`.github/workflows/`)
-| File | Trigger | What it does |
-|---|---|---|
-| `ci.yml` | Pull requests, pushes to non-`main` branches, called by `cd.yml` | Lint and typecheck · tests on Node 24 and 26 against a MongoDB 8 service · standalone production build · `npm audit signatures` plus a high/critical audit gate with a reviewed allowlist · Docker build check on pull requests |
-| `cd.yml` | Push to `main`, tags `v*.*.*`, manual | Reruns CI, publishes the `marutix-web` and `marutix-worker` images to GHCR (tagged `sha-<commit>`, branch name and semver, with SBOM and provenance), then deploys: `main` → **staging**, `v*` tags → **production** |
-| `deploy.yml` | Called by `cd.yml` | Deploys over SSH with Docker Compose, waits for health checks, rolls back automatically, then smoke-tests `APP_URL/api/health` |
-| `codeql.yml` | Pull requests and pushes to `main`, plus weekly | CodeQL security analysis (security-extended queries) |
-| `.github/dependabot.yml` | Weekly | Grouped updates for npm, GitHub Actions and Docker base images |
+`.github/workflows/ci.yml` runs on every pull request, every push to `main`, and on demand. It runs one job:
+1. `npm ci`
+2. `npm run typecheck` (Next route types + `tsc --noEmit`)
+3. `npm run build`
 
-Every third-party action is pinned to a full commit SHA (Dependabot keeps the pins current). Workflows default to read-only permissions; only image publishing gets `packages: write`.
+Actions are pinned to full commit SHAs, and the workflow has read-only permissions. Make **CI / Typecheck & build** a required status check in branch protection for `main`.
 
-### Release flow
-1. Open a pull request. CI must pass. Make **CI** a required status check in branch protection for `main`.
-2. Merge to `main`. This publishes images and deploys to staging (if enabled).
-3. Tag a release: `git tag v1.0.0 && git push origin v1.0.0`. This deploys that commit to production after approval.
-4. **Rollback:**
-   - **Automatic:** if the new containers fail their health checks, the previous image tag is restored.
-   - **Manual:** re-run an older successful CD run, or on the server run `MARUTIX_IMAGE_PREFIX=ghcr.io/<owner> MARUTIX_IMAGE_TAG=sha-<old> docker compose up -d`.
+Lint, tests, audits, image publishing and deployments are not run in CI. Run them locally (`npm run lint`, `npm run test:integration`) before merging.
 
-### One-time setup
+## Manual deployment with Docker
 
-**Server** (one per environment; a Linux VM with Docker Engine and the Compose plugin):
-1. Create a deploy user in the `docker` group, and add the public half of the deploy SSH key to its `authorized_keys`.
-2. Create the deploy directory, for example `/opt/marutix`.
-3. Create `/opt/marutix/.env.production` with `chmod 600`. Base it on `.env.example`, with these production values:
-   - **Database:** `MONGODB_URI`, a MongoDB Atlas connection string.
-   - **URL:** `APP_BASE_URL`, the public https URL.
-   - **Secrets:** fresh `AUTH_JWT_SECRET`, `OTP_HASH_SECRET`, `PII_ENCRYPTION_KEY` and `WHATSAPP_WEB_WORKER_SECRET`.
-   - **Sign-in codes:** the WhatsApp Cloud API OTP settings (`WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_OTP_TEMPLATE_NAME`). In production the app refuses to issue codes without them.
-4. Put a TLS reverse proxy (Caddy or Nginx) in front of `127.0.0.1:3000`. The web container only listens on localhost.
-5. Keep the disk encrypted. The `whatsapp-data` volume holds the WhatsApp session.
-
-**GitHub → Settings → Environments:** create `staging` and `production`. Add required reviewers to `production`.
-
-| Kind | Name | Where | Value |
-|---|---|---|---|
-| Secret | `SSH_PRIVATE_KEY` | each environment | Private deploy key |
-| Secret | `SSH_KNOWN_HOSTS` | each environment | Output of `ssh-keyscan <host>`, verified against the server's fingerprint |
-| Secret | `GHCR_READ_TOKEN` | each environment | Personal access token with `read:packages`. Not needed if the packages are public, but the workflow expects it |
-| Variable | `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_PATH` | each environment | Server address, deploy user and directory |
-| Variable | `APP_URL` | each environment | Public `https://` URL |
-| Variable | `GHCR_READ_USER` | each environment | GitHub username for the token |
-| Variable | `STAGING_DEPLOY_ENABLED`, `PRODUCTION_DEPLOY_ENABLED` | repository | `true` to switch each deploy on. Until then, CD only publishes images |
-| Variable | `WHATSAPP_WEB_PUBLIC_NUMBER` | repository | Optional. Built into the web image for the "Become a Donor" links |
-
-### Containers
+### Images and compose file
 - **`Dockerfile` (web):** a multi-stage build producing the Next.js standalone server. Runs as the non-root `node` user and has a health check on `/api/health`, which also checks the database.
 - **`Dockerfile.worker`:** the WhatsApp pilot worker with Debian's Chromium (no Puppeteer download), running as the non-root user, with its session on a volume.
 - **`deploy/docker-compose.prod.yml`:**
@@ -342,5 +308,11 @@ Every third-party action is pinned to a full commit SHA (Dependabot keeps the pi
   - runs a single worker;
   - shares the network namespace, so the worker's control channel stays on loopback.
 
-### Accepted audit findings
-`ci.yml` allowlists four high-severity advisories. All of them come in through `whatsapp-web.js` → Puppeteer and apply only to the worker image, mostly in code paths that aren't used: the Chrome downloader, FTP proxy support, and zod v3 inside `chromium-bidi`. Each is listed in the workflow with its reason. Any other high or critical advisory fails CI. Re-review the list whenever Dependabot's `whatsapp` group upgrades.
+To deploy by hand on a server with Docker:
+```bash
+docker build -t marutix-web --build-arg WHATSAPP_WEB_PUBLIC_NUMBER=+91XXXXXXXXXX .
+docker build -t marutix-worker -f Dockerfile.worker .
+# Put deploy/docker-compose.prod.yml and .env.production in one directory, then:
+MARUTIX_IMAGE_PREFIX=docker.io/library MARUTIX_IMAGE_TAG=latest docker compose up -d --wait
+```
+Put a TLS reverse proxy in front of `127.0.0.1:3000`. `/api/health` reports whether the app and the database are up.

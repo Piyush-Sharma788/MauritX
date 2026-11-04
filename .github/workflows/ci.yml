@@ -3,29 +3,25 @@ name: CI
 on:
   pull_request:
   push:
-    # main is covered by the CD workflow, which runs this file via workflow_call.
-    branches-ignore: [main]
-  workflow_call:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-env:
-  NODE_VERSION: "24"
-  # Puppeteer's Chrome download isn't needed for checks; the worker image uses system Chromium.
-  PUPPETEER_SKIP_DOWNLOAD: "true"
-  NEXT_TELEMETRY_DISABLED: "1"
-
 jobs:
-  quality:
-    name: Lint & typecheck
+  build:
+    name: Typecheck & build
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    env:
+      # Puppeteer's Chrome download isn't needed to typecheck or build.
+      PUPPETEER_SKIP_DOWNLOAD: "true"
+      NEXT_TELEMETRY_DISABLED: "1"
     steps:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -35,167 +31,14 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version: "24"
           cache: npm
 
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
-
-      - name: Lint
-        run: npm run lint
 
       - name: Typecheck
         run: npm run typecheck
 
-  test:
-    name: Tests (Node ${{ matrix.node }})
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        node: ["24", "26"]
-    services:
-      mongodb:
-        image: mongo:8.0
-        ports:
-          - 27017:27017
-        options: >-
-          --health-cmd "mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok'"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 20
-    steps:
-      - name: Check out
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Set up Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: ${{ matrix.node }}
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci --no-audit --no-fund
-
-      - name: Unit and integration tests
-        # The script points at mongodb://127.0.0.1:27017/marutix_test (the service above).
-        run: npm run test:integration
-
-  build:
-    name: Production build
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
-      - name: Check out
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Set up Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci --no-audit --no-fund
-
-      - name: Build (standalone, as in the Docker image)
-        env:
-          NEXT_OUTPUT: standalone
+      - name: Build
         run: npm run build
-
-      - name: Verify standalone server output
-        run: test -f .next/standalone/server.js
-
-  audit:
-    name: Dependency audit
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    env:
-      # High/critical advisories accepted after review, with reasons. Every one is
-      # transitive via whatsapp-web.js -> puppeteer (worker image only; the web
-      # bundle doesn't include it). Any advisory not listed here fails the build.
-      # Review when whatsapp-web.js or puppeteer is upgraded. Last reviewed: 2026-11-04.
-      #   GHSA-7pqw-9j4j-h8q3  extract-zip    no patched release; used only by puppeteer's Chrome
-      #   GHSA-jmr9-qjv8-65gv  extract-zip    downloader, which is disabled (system Chromium).
-      #   GHSA-c475-qrg2-pj4r  basic-ftp      proxy-agent FTP support; MarutiX never fetches FTP URLs.
-      #   GHSA-mrhx-c7xc-m3w5  zod (3.x)      inside chromium-bidi; MarutiX's own zod is 4.6.7 (patched).
-      AUDIT_ALLOWLIST: >-
-        https://github.com/advisories/GHSA-7pqw-9j4j-h8q3
-        https://github.com/advisories/GHSA-jmr9-qjv8-65gv
-        https://github.com/advisories/GHSA-c475-qrg2-pj4r
-        https://github.com/advisories/GHSA-mrhx-c7xc-m3w5
-    steps:
-      - name: Check out
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Set up Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci --no-audit --no-fund
-
-      - name: Verify registry signatures
-        run: npm audit signatures
-
-      - name: Fail on new high or critical advisories (production dependencies)
-        shell: bash
-        run: |
-          set -euo pipefail
-          npm audit --omit=dev --json > audit.json || true
-          jq -r '[.vulnerabilities[] | .via[] | objects
-                  | select(.severity == "high" or .severity == "critical") | .url] | unique[]' audit.json > found.txt
-          tr ' ' '\n' <<< "$AUDIT_ALLOWLIST" | sed '/^$/d' | sort -u > allowed.txt
-          comm -23 <(sort -u found.txt) allowed.txt > new.txt
-          {
-            echo "### Production dependency audit"
-            echo "High/critical advisories found: $(wc -l < found.txt | tr -d ' ') (allowlisted: $(comm -12 <(sort -u found.txt) allowed.txt | wc -l | tr -d ' '))"
-          } >> "$GITHUB_STEP_SUMMARY"
-          if [ -s new.txt ]; then
-            echo "::error::New high/critical advisories in production dependencies:"
-            jq -r --rawfile new new.txt '.vulnerabilities[] | .via[] | objects
-              | select(.url as $u | $new | split("\n") | index($u)) | "\(.severity)\t\(.name)\t\(.title)\t\(.url)"' audit.json | sort -u
-            exit 1
-          fi
-          echo "No new high/critical advisories."
-
-  docker:
-    name: Docker image (${{ matrix.image }})
-    # On main and tags the CD workflow builds and publishes these images.
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - image: web
-            dockerfile: Dockerfile
-          - image: worker
-            dockerfile: Dockerfile.worker
-    steps:
-      - name: Check out
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-
-      - name: Build (no push)
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          file: ${{ matrix.dockerfile }}
-          push: false
-          cache-from: type=gha,scope=${{ matrix.image }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.image }}

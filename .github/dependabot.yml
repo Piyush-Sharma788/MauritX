@@ -17,7 +17,7 @@ updates:
       nextjs:
         patterns: [next, eslint-config-next, react, react-dom, "@types/react", "@types/react-dom"]
       whatsapp:
-        # Upgrades here can resolve the allowlisted advisories in ci.yml: review that list.
+        # Puppeteer-based; test WhatsApp pairing locally after these upgrades.
         patterns: [whatsapp-web.js, puppeteer*]
       dev-tooling:
         dependency-type: development
