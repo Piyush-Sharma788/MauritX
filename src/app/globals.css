@@ -1,0 +1,101 @@
+@import "tailwindcss";
+
+/*
+ * MarutiX design tokens. One warm, clinical-but-human palette:
+ * paper (warm off-white), ink (aubergine-black), crimson brand, and a
+ * restrained set of semantic colours.
+ */
+@theme {
+  --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-bricolage), var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --font-deva: var(--font-noto-devanagari), ui-sans-serif, system-ui, sans-serif;
+
+  --color-paper: #fbf8f5;
+  --color-paper-deep: #f4eee8;
+  --color-surface: #ffffff;
+  --color-line: #ebe2da;
+  --color-line-strong: #d9ccc1;
+
+  --color-ink: #1d1418;
+  --color-ink-soft: #4f444a;
+  --color-ink-muted: #7a6d73;
+
+  --color-brand-50: #fdf2f3;
+  --color-brand-100: #fbe1e4;
+  --color-brand-200: #f6c2c9;
+  --color-brand-400: #e35a6d;
+  --color-brand-500: #d2283f;
+  --color-brand-600: #b81c33;
+  --color-brand-700: #94162a;
+  --color-brand-900: #4a0c17;
+
+  --color-success-50: #eefaf3;
+  --color-success-600: #18794e;
+  --color-warning-50: #fff8eb;
+  --color-warning-200: #f6dca5;
+  --color-warning-800: #7a4b06;
+  --color-danger-50: #fdf1f1;
+  --color-danger-600: #c22a2a;
+
+  --radius-card: 1.25rem;
+  --shadow-soft: 0 1px 2px rgb(29 20 24 / 0.04), 0 8px 24px -12px rgb(29 20 24 / 0.12);
+  --shadow-lift: 0 2px 4px rgb(29 20 24 / 0.04), 0 24px 48px -24px rgb(148 22 42 / 0.28);
+
+  --animate-rise: rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-pulse-ring: pulse-ring 3.6s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+  --animate-float: float 6s ease-in-out infinite;
+  --animate-shake: shake 0.36s ease-in-out;
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes pulse-ring {
+  0% { transform: scale(0.6); opacity: 0.55; }
+  80%, 100% { transform: scale(1.35); opacity: 0; }
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  75% { transform: translateX(5px); }
+}
+
+:root {
+  color-scheme: light;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--color-brand-100);
+  color: var(--color-brand-900);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-brand-500);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
