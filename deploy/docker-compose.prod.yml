@@ -1,0 +1,75 @@
+# MarutiX production stack: web app + WhatsApp Web pilot worker.
+#
+# The CD workflow copies this file to $DEPLOY_PATH/docker-compose.yml on the server
+# and runs it with MARUTIX_IMAGE_PREFIX and MARUTIX_IMAGE_TAG set. Secrets live only
+# on the server in $DEPLOY_PATH/.env.production (see SETUP.md → Deployment).
+# MongoDB is external (MongoDB Atlas). Put a TLS reverse proxy (Caddy/Nginx) in
+# front of 127.0.0.1:3000.
+
+name: marutix
+
+x-hardening: &hardening
+  restart: unless-stopped
+  env_file: .env.production
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
+
+services:
+  web:
+    <<: *hardening
+    image: ${MARUTIX_IMAGE_PREFIX:?set MARUTIX_IMAGE_PREFIX}/marutix-web:${MARUTIX_IMAGE_TAG:?set MARUTIX_IMAGE_TAG}
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      HOSTNAME: 0.0.0.0
+    ports:
+      # Only reachable through the reverse proxy on the same host.
+      - "127.0.0.1:3000:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  worker:
+    <<: *hardening
+    image: ${MARUTIX_IMAGE_PREFIX:?set MARUTIX_IMAGE_PREFIX}/marutix-worker:${MARUTIX_IMAGE_TAG:?set MARUTIX_IMAGE_TAG}
+    # Share the web container's network namespace: the worker's control channel
+    # must stay on loopback (127.0.0.1:3100), never on a container network.
+    network_mode: "service:web"
+    depends_on:
+      web:
+        condition: service_healthy
+    # Exactly one worker may own the WhatsApp session (also enforced by a MongoDB lease).
+    deploy:
+      replicas: 1
+    init: true
+    shm_size: "512m"
+    stop_grace_period: 45s
+    environment:
+      NODE_ENV: production
+      WHATSAPP_WEB_WORKER_URL: http://127.0.0.1:3100
+      WHATSAPP_WEB_SESSION_DIR: /app/.data/whatsapp-session
+      PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
+      # Chromium's own sandbox needs privileges the container doesn't have.
+      WHATSAPP_WEB_NO_SANDBOX: "true"
+    volumes:
+      - whatsapp-data:/app/.data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3100/health',{headers:{Authorization:'Bearer '+process.env.WHATSAPP_WEB_WORKER_SECRET}}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  # WhatsApp session credentials. Keep the host disk encrypted; back up only encrypted.
+  whatsapp-data:

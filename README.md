@@ -1,5 +1,7 @@
 # PRANEX
 
+[![CI](https://github.com/Piyush-Sharma788/MauritX/actions/workflows/ci.yml/badge.svg)](https://github.com/Piyush-Sharma788/MauritX/actions/workflows/ci.yml) [![CodeQL](https://github.com/Piyush-Sharma788/MauritX/actions/workflows/codeql.yml/badge.svg)](https://github.com/Piyush-Sharma788/MauritX/actions/workflows/codeql.yml)
+
 **A mobile-first blood emergency coordination platform connecting patients, voluntary donors, blood banks and hospitals.**
 
 > PRANEX coordinates communication and discovery. It does not collect, test, store, transport or certify blood, and it does not replace a licensed blood centre or a clinician.
