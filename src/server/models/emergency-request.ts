@@ -6,8 +6,9 @@ const historyEntrySchema = new Schema(
   {
     status: { type: String, enum: REQUEST_STATUSES, required: true },
     at: { type: Date, required: true },
-    actor: { type: String, enum: ["requester", "admin", "system"], required: true },
+    actor: { type: String, enum: ["requester", "admin", "institution", "system"], required: true },
     actorUserId: { type: Types.ObjectId, ref: "User" },
+    actorContactId: { type: Types.ObjectId, ref: "InstitutionContact" },
     // Internal to MarutiX admins; never shown on tracking links.
     note: { type: String, maxlength: 300 },
   },
@@ -52,6 +53,20 @@ const emergencyRequestSchema = new Schema(
     verifiedAt: { type: Date },
     verifiedBy: { type: Types.ObjectId, ref: "User" },
     whatsappUpdates: { type: Boolean, required: true, default: false },
+    createdVia: { type: String, enum: ["web", "whatsapp"], required: true, default: "web" },
+    // Keyed hash of the WhatsApp number that created the request (WhatsApp-created requests only).
+    // Only that number can cancel it through the bot.
+    requesterPhoneLookup: { type: String },
+    // The verified institution coordinating this request, linked by an admin.
+    institutionId: { type: Types.ObjectId, ref: "Institution" },
+    institutionAcknowledgedAt: { type: Date },
+    institutionAcknowledgedBy: { type: Types.ObjectId, ref: "InstitutionContact" },
+    // Counters kept in step with notification_events and request_responses.
+    responseStats: {
+      alertsQueued: { type: Number, required: true, default: 0 },
+      interested: { type: Number, required: true, default: 0 },
+      unavailable: { type: Number, required: true, default: 0 },
+    },
     consent: {
       sharingAcceptedAt: { type: Date, required: true },
       privacyNoticeVersion: { type: String, required: true },
@@ -73,6 +88,8 @@ emergencyRequestSchema.index({ cityNormalized: 1, status: 1 });
 emergencyRequestSchema.index({ dedupeKey: 1, createdAt: -1 });
 emergencyRequestSchema.index({ contactPhoneLookup: 1, status: 1 });
 emergencyRequestSchema.index({ location: "2dsphere" }, { sparse: true });
+emergencyRequestSchema.index({ requesterPhoneLookup: 1, status: 1 }, { sparse: true });
+emergencyRequestSchema.index({ institutionId: 1, status: 1 }, { sparse: true });
 
 export type EmergencyRequestDoc = InferSchemaType<typeof emergencyRequestSchema>;
 

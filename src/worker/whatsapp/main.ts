@@ -13,9 +13,12 @@ import { hostname } from "node:os";
 import mongoose from "mongoose";
 import { connectToDatabase } from "@/lib/db/mongoose";
 import { logger } from "@/lib/logger";
+import { getAiConfig } from "@/lib/ai/config";
+import { getCoordinationConfig } from "@/lib/coordination/config";
 import { getWhatsAppWebConfig } from "@/lib/whatsapp-web/config";
 import { dispatchNext, recordDeliveryAck } from "@/server/messaging/dispatcher";
 import { handleInboundMessage } from "@/server/messaging/inbound";
+import { getMessagingSettings } from "@/server/settings/service";
 import {
   acquireLease,
   HEARTBEAT_INTERVAL_MS,
@@ -34,6 +37,9 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const errorName = (error: unknown) => (error instanceof Error ? error.name : "UnknownError");
 
 async function main() {
+  // Fail fast on misconfiguration rather than on the first message.
+  const ai = getAiConfig();
+  getCoordinationConfig();
   const baseConfig = getWhatsAppWebConfig();
   const config = { ...baseConfig, sessionDir: resolveSessionDir(baseConfig.sessionDir) };
   const owner = `${hostname()}:${process.pid}:${randomUUID().slice(0, 8)}`;
@@ -44,7 +50,7 @@ async function main() {
     await mongoose.disconnect();
     process.exit(1);
   }
-  logger.info("whatsapp.worker.started", { owner });
+  logger.info("whatsapp.worker.started", { owner, aiProvider: ai.provider });
 
   const manager = new WhatsAppSessionManager(config, owner, {
     onInbound: async (message) => {
@@ -93,12 +99,29 @@ async function main() {
     await writeConnection(owner, { state: "disconnected", busy: false });
   }
 
+  // The admin "pause alerts" switch, re-read every few seconds.
+  let alertsPaused = false;
+  let settingsReadAt = 0;
+  const refreshSettings = async () => {
+    if (Date.now() - settingsReadAt < 5_000) return;
+    try {
+      alertsPaused = (await getMessagingSettings()).alertsPaused;
+      settingsReadAt = Date.now();
+    } catch (error) {
+      // Fail closed: hold alerts until the setting can be read again.
+      alertsPaused = true;
+      logger.warn("whatsapp.settings_read_failed", { errorName: errorName(error) });
+    }
+  };
+
   // Outbox dispatcher: one message at a time, paced and capped.
   while (running) {
     let wait = IDLE_POLL_MS;
     if (manager.isReady()) {
       try {
+        await refreshSettings();
         const outcome = await dispatchNext(manager, {
+          alertsPaused,
           maxMessagesPerHour: config.maxMessagesPerHour,
           maxRepliesPerHour: config.maxRepliesPerHour,
           testRecipients: config.testRecipients,

@@ -15,6 +15,8 @@ export interface DispatchOptions {
   /** Separate cap for replies in conversations the person started. */
   maxRepliesPerHour: number;
   testRecipients: Set<string>;
+  /** Admin switch: hold emergency alerts (they stay queued until they expire). */
+  alertsPaused?: boolean;
 }
 
 export type DispatchOutcome = "idle" | "rate_limited" | "sent" | "retry" | "failed" | "suppressed";
@@ -59,14 +61,20 @@ export async function dispatchNext(
   if (allowed.length === 0) return "rate_limited";
 
   const message = await NotificationEvent.findOneAndUpdate(
-    { status: "queued", provider: provider.name, priority: { $in: allowed }, nextAttemptAt: { $lte: now } },
+    {
+      status: "queued",
+      provider: provider.name,
+      priority: { $in: allowed },
+      nextAttemptAt: { $lte: now },
+      ...(options.alertsPaused ? { kind: { $ne: "emergency_request" } } : {}),
+    },
     { $set: { status: "sending", lockedUntil: new Date(now.getTime() + SEND_LOCK_MS) }, $inc: { attempts: 1 } },
     // Conversational replies first, then oldest first.
     { sort: { priority: 1, nextAttemptAt: 1, createdAt: 1 }, returnDocument: "after", lean: true },
   );
   if (!message) {
     // Distinguish "nothing to do" from "work is waiting behind a cap".
-    if (allowed.length < 2 && (await NotificationEvent.exists({ status: "queued", provider: provider.name, nextAttemptAt: { $lte: now } }))) {
+    if (allowed.length < 2 && (await NotificationEvent.exists({ status: "queued", provider: provider.name, priority: { $nin: allowed }, nextAttemptAt: { $lte: now } }))) {
       return "rate_limited";
     }
     return "idle";
@@ -81,6 +89,8 @@ export async function dispatchNext(
     phoneLookup: message.recipientLookup,
     recipientUserId: message.recipientUserId ?? undefined,
     testRecipients: options.testRecipients,
+    requestId: message.requestId,
+    stage: "dispatch",
   });
   if (!eligibility.ok) {
     await NotificationEvent.updateOne(

@@ -88,6 +88,19 @@ Indexes:
 
 No TTL: requests are records. Free-text notes from requesters are deliberately not collected.
 
+*Phase 5 additions:*
+- **Origin and sender.**
+  - `createdVia: "web" | "whatsapp"`;
+  - `requesterPhoneLookup?`, the keyed hash of the WhatsApp sender, which is the only number that can cancel a request through the bot.
+- **Institution.**
+  - `institutionId?`, the verified institution coordinating the request, linked by an admin;
+  - `institutionAcknowledgedAt?` and `institutionAcknowledgedBy?`.
+- **Counters.** `responseStats: { alertsQueued, interested, unavailable }`, updated atomically.
+- **History.**
+  - `history[].actor` may now be `"institution"`, with `actorContactId`;
+  - a request created on WhatsApp gets the note "Created on WhatsApp".
+- **Indexes.** `{ requesterPhoneLookup: 1, status: 1 }` and `{ institutionId: 1, status: 1 }`.
+
 ### `request_share_links`
 `{ requestId, tokenHash (unique), scope: "manage" | "view", createdBy: "requester" | "admin" | "system", expiresAt, revokedAt?, createdAt }`
 - **Tokens.** Each URL token is a random 256-bit value. Only its keyed hash is stored.
@@ -98,7 +111,7 @@ No TTL: requests are records. Free-text notes from requesters are deliberately n
 ### `idempotency_records`
 `{ key (unique), responseEncrypted, expiresAt (TTL 24h) }`: the encrypted response to a create call, replayed when the same `Idempotency-Key` is retried.
 
-## 4. `institutions`
+## 4. `institutions` (implemented in Phase 5)
 ```ts
 {
   _id: ObjectId,
@@ -117,7 +130,24 @@ No TTL: requests are records. Free-text notes from requesters are deliberately n
   updatedAt: Date
 }
 ```
-Indexes: `location: "2dsphere"`, `{ type: 1, verificationStatus: 1 }`.
+Indexes: `location: "2dsphere"` (sparse), `{ type: 1, verificationStatus: 1 }`, `{ cityNormalized: 1, verificationStatus: 1 }`.
+
+*As implemented:*
+- `licenceReferenceEncrypted` (AES-256-GCM, admin-only) replaces `licenceReference`.
+- Added fields: `city`, `cityNormalized`, `locality`, `statusNote` and `createdBy`.
+- Contact numbers live in `institution_contacts` rather than `whatsappPhone`.
+
+### `institution_contacts` (Phase 5)
+`{ institutionId, nameEncrypted, phoneLookup (unique), phoneEncrypted, role: "coordinator" | "staff", status: "pending" | "verified" | "revoked", verifiedAt?, verifiedBy?, revokedAt?, createdBy }`
+- **Access.** A number has institutional access on WhatsApp only while this record is `verified` *and* its institution is `verified`.
+- **Roles.** Coordinators can also confirm fulfilment.
+- **Numbers.** One institution per number.
+
+### `institution_availability_reports` (Phase 5)
+`{ institutionId, contactId, bloodGroup (known groups only), component, status: "available" | "unavailable", units?, source: "whatsapp", reportedAt }`.
+- **Append-only.** Each row is a timestamped, attributed self-report.
+- **Not confirmed stock.** Reports are never presented as confirmed or live stock.
+- **Index.** `{ institutionId: 1, reportedAt: -1 }`.
 
 ## 5. `request_responses`
 ```ts
@@ -133,6 +163,20 @@ Indexes: `location: "2dsphere"`, `{ type: 1, verificationStatus: 1 }`.
 }
 ```
 Indexes: `{ requestId: 1, createdAt: -1 }`, unique compound key to prevent duplicate responses where appropriate.
+
+*As implemented (Phase 5), for donor responses:*
+`{ requestId, donorUserId, notificationId?, response: "interested" | "unavailable", contactSharingConsentAt?, contactSharingDeclinedAt?, coordinationStatus?: "interested" | "coordinator_contacted" | "hospital_coordination" | "donation_confirmed" | "not_proceeding", coordinationHistory: [{ status, at, actor: "donor" | "admin" | "institution", actorUserId?, actorContactId?, note? }], respondedAt }`
+- **Indexes.** Unique `{ requestId: 1, donorUserId: 1 }`, plus `{ donorUserId: 1, createdAt: -1 }`.
+- **States kept separate.**
+  - "Notification sent" lives on `notification_events`.
+  - The donor's reply is `response`.
+  - What happened next is `coordinationStatus`.
+- **Institutions.** Institution acknowledgements are on the request, and stock reports are in `institution_availability_reports`.
+
+### `matching_runs` (Phase 5)
+`{ requestId, radiusKm, policyVersion, policyReviewStatus, basis: "distance" | "city", eligibleGroups, candidates: [{ donorUserId, rank, distanceKm?, basis, reasons[] }], excluded: { <reason>: count }, scanned, createdBy, createdAt }`
+- **One explainable donor search.** Candidates hold user IDs only, never contact details.
+- **Index.** `{ requestId: 1, createdAt: -1 }`.
 
 ## 6. `notification_events`
 ```ts
@@ -166,6 +210,16 @@ Indexes: `{ requestId: 1, createdAt: -1 }`, unique compound key to prevent dupli
 Indexes: unique `idempotencyKey`, `{ providerMessageId: 1 }` (sparse), `{ status: 1, nextAttemptAt: 1, createdAt: 1 }`, `{ sentAt: -1 }`, `{ recipientLookup: 1, status: 1 }`.
 This collection is also the outbox the WhatsApp worker drains.
 
+*Phase 5:*
+- **New kind.** `kind` adds `"request_confirmation"` (Phase 4) and `"coordinator_alert"`.
+- **New field.** `matchingRunId?` links an emergency alert to the search it came from.
+- **New indexes.** `{ requestId: 1, kind: 1, status: 1 }` and `{ recipientLookup: 1, kind: 1, createdAt: -1 }`, used by the daily cap.
+- **New suppression reasons:**
+  - `REQUEST_NOT_ALERTABLE`: not active, closed or expired;
+  - `REQUEST_CLOSED`: withdrawn when the request closed;
+  - `FREQUENCY_CAP`;
+  - `NOT_VERIFIED_INSTITUTION`.
+
 ## 7. `otp_challenges`
 ```ts
 {
@@ -188,6 +242,9 @@ Indexes: TTL on `expiresAt`, `{ phoneLookup: 1, createdAt: -1 }`.
 - `whatsapp_connection`: a single document (`_id: "primary"`) holding pilot connection state, masked linked account, last connect/disconnect, `leaseOwner`/`leaseExpiresAt` (single worker) and `heartbeatAt`. Never contains session credentials or QR codes.
 - `users`: the phone is stored as `phoneLookup` (keyed token, unique) plus `phoneEncrypted`, in place of a plaintext `phoneE164`.
 - `whatsapp_conversations`: `{ phoneLookup (unique), flow: "donor_onboarding" | "donor_update", status: "active" | "completed" | "cancelled", state, history: string[], dataEncrypted, userId?, startedVia: "whatsapp", lastInboundAt, completedAt?, cancelledAt?, expiresAt (TTL, 30 days after last activity), version }`. Saved bot progress. Answers are encrypted and erased once the conversation ends; `version` provides optimistic concurrency.
+- `whatsapp_conversations.flow` (Phase 5) also takes `"emergency_request"`, `"request_cancel"` and `"donor_response"`. There is still one conversation document per number: starting a flow replaces the previous one. Answers stay encrypted and are erased when a flow ends.
+- `system_settings` (Phase 5): a single document, `_id: "messaging"`, holding `{ botEnabled, alertsPaused, updatedBy }`. These are admin switches; STOP is never affected.
+- `bot_metrics` (Phase 5): `{ _id: "YYYY-MM-DD" (IST), counts: { inbound_processed, inbound_dropped_disabled, bot_errors, ai_calls, ai_errors, ai_rejected_output }, expiresAt (TTL 90 days) }`. Counts only, with no identifiers.
 - `whatsapp_inbound_messages`: `{ providerMessageId (unique), receivedAt, expiresAt (TTL 14 days) }`. Guarantees each inbound message is processed once. No content is stored.
 
 ## 8. `consent_records` and `audit_logs`

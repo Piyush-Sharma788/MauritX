@@ -18,7 +18,11 @@ Risks accepted for the pilot:
 
 Mandatory controls (implemented in `src/worker/whatsapp`, `src/server/messaging`):
 - **Consent only.** Messages go only to donors with recorded, unwithdrawn WhatsApp consent, or to numbers in `WHATSAPP_WEB_TEST_RECIPIENTS`. Consent and the suppression list are re-checked immediately before every send.
-- **No bulk or unsolicited messaging.** There is no broadcast or wave feature. Sends are paced (`WHATSAPP_WEB_MIN_SEND_INTERVAL_MS`, default 4 s) and capped (`WHATSAPP_WEB_MAX_MESSAGES_PER_HOUR`, default 30). The cap is a safety limit, not a target.
+- **No bulk or unsolicited messaging.** There is no broadcast feature.
+  - *Decision (Phase 5, 2026-11-04):* emergency alerts are sent only in small batches that an admin triggers by hand. The request must be verified and active, and alerts go only to donors who opted in to alerts. See §10.
+  - Batches are capped: `ALERT_BATCH_SIZE`, default 5; `ALERT_MAX_PER_REQUEST`, default 40; `ALERT_MAX_PER_DONOR_PER_DAY`, default 2.
+  - Nothing is ever sent automatically.
+  - All sends are also paced (`WHATSAPP_WEB_MIN_SEND_INTERVAL_MS`, default 4 s) and capped (`WHATSAPP_WEB_MAX_MESSAGES_PER_HOUR`, default 30). The cap is a safety limit, not a target.
 - **STOP and HELP.** STOP is honoured immediately: the number is suppressed, consent is withdrawn, queued messages are cancelled and one confirmation is sent. HELP gets a single reply per day. No other inbound text is acted on or stored.
 - **One session owner.** A single worker process owns the session, enforced by a MongoDB lease. A second worker refuses to start.
 - **Admin-only pairing.** The QR code is shown only to administrators and only travels over a loopback, secret-authenticated channel. It is never logged or stored.
@@ -66,9 +70,9 @@ The flows are state machines in `src/server/conversations/onboarding-machine.ts`
 - For alerts: YES turns them on (or resumes them) with a consent record; NO pauses them.
 - BACK returns to the menu and CANCEL makes no changes.
 
-**Commands** (outside a conversation):
+**Commands** (outside a conversation; patient and institution commands are in §10):
 - REGISTER (or JOIN, START)
-- STATUS
+- PROFILE (full details) and STATUS (availability and alerts). Before Phase 5, STATUS showed the full profile.
 - UPDATE
 - PAUSE / RESUME
 - HELP
@@ -80,18 +84,33 @@ STOP immediately adds the number to the suppression list, withdraws alert consen
 
 **Website.** The website has no registration form. Donors sign in with an OTP to the same number to view and edit their profile, set availability and manage alerts. A signed-in user without a profile is sent to the WhatsApp chat.
 
-## 4. Emergency alert template (illustrative)
-Template name: `pranex_donor_request_v1`
+## 4. Emergency alert template
+Template: `emergency_alert_v2` (Phase 5, `src/server/messaging/templates.ts`). Replies come back in the chat, so there is no link.
 
 ```text
-PRANEX blood request near {{1}}.
-Blood group: {{2}}
-Component: {{3}}
-Needed by: {{4}}
-Can you consider helping? Open the secure link: {{5}}
-Reply STOP to stop alerts.
+MARUTIX — EMERGENCY BLOOD ALERT
+
+A patient requires {{bloodGroup}} blood.
+
+Hospital: {{hospitalName}}
+Location: {{locality}}, {{city}}
+Component: {{component}}
+Units required: {{units}}
+Required by: {{requiredBy}} IST
+Ref: {{publicRequestId}}
+
+Can you help?
+
+Reply:
+1 — Interested
+2 — Unavailable
+3 — More information
+4 — Stop alerts
+
+Please coordinate with the hospital. Final donor eligibility and compatibility will be assessed by the blood centre.
 ```
-Keep patient name and detailed medical information out of the message. The secure link must expire and show only the minimum necessary details.
+- **Allowed content.** Every field is schema-constrained: a strict character set and length limits, and the reference must be a real request ID. Patient names, phone numbers and free text can't reach a broadcast.
+- **Institutional fields only.** The hospital name and locality are institutional, not personal. There is never a patient name, requester number or medical detail.
 
 ## 4a. Request confirmation (Phase 4)
 Template: `request_confirmation_v1`. It's sent only if the requester ticks "Send me a WhatsApp confirmation", WhatsApp is connected, and the number hasn't sent STOP. At most one is sent per request.
@@ -106,7 +125,8 @@ Reply STOP to stop messages from MarutiX.
 - **Replies.** If the requester replies, the bot answers about their request instead of offering donor registration.
 
 ## 5. Donor responses
-- `INTERESTED`: open a secure page to review details and choose whether to share contact information.
+(Implemented in Phase 5; see §10.3.)
+- `INTERESTED`: recorded, then the donor is asked separately whether their contact may be shared.
 - `UNAVAILABLE`: record response and do not repeatedly alert for that request.
 - `STOP`: immediately suppress future non-essential donor alerts and record opt-out.
 - `HELP`: explain available commands and privacy controls.
@@ -147,3 +167,143 @@ Support interactive buttons where approved by the platform; always provide text 
 
 ## 9. Important limitations
 A WhatsApp message saying “available” is not medical clearance. The donor must contact/attend a licensed blood centre, where identity, health, haemoglobin, screening and compatibility processes are handled by professionals.
+
+## 10. Phase 5: conversation engine (implemented 2026-11-04)
+
+One engine (`src/server/conversations/engine.ts`) handles every inbound message. It runs inside the existing worker, with no second WhatsApp client.
+
+The inbound pipeline is unchanged:
+1. Each provider message ID is processed once.
+2. Each number is limited to 40 messages an hour.
+3. STOP is handled first.
+4. Messages from one number are processed in order.
+
+Two admin switches apply on top of that:
+- **Bot off.** Only STOP is processed; other messages are counted and dropped unanswered.
+- **Alerts paused.** No emergency alert is queued or sent.
+
+### 10.1 Routing order
+1. **An active flow continues:**
+   - emergency request;
+   - cancellation;
+   - alert reply (contact-sharing question);
+   - donor registration or update.
+
+   REQUEST interrupts any other flow, because an emergency outranks everything.
+2. **Verified institution contacts:** REQUESTS, STATUS, ACK, AVAILABLE, FULFILLED, PARTIAL and HELP.
+3. **Patients and families:** REQUEST (also "NEED BLOOD" or "EMERGENCY"), TRACK [MX-ID] and CANCEL [MX-ID].
+4. **Alert replies:** 1–4, INTERESTED, AVAILABLE, UNAVAILABLE, MORE INFO. These count only when the number received an alert in the last 72 hours or names the request ID. Otherwise they fall through.
+5. **Donor commands:** REGISTER, PROFILE (full details), STATUS (availability and alert preference), UPDATE, PAUSE, RESUME, HELP.
+6. **Free text:** AI or keyword interpretation (§10.5). If nothing matches, the earlier donor-bot behaviour applies: the welcome question, now mentioning REQUEST, or the daily menu.
+
+### 10.2 Emergency request on WhatsApp (`request-machine.ts`, a pure state machine)
+**Fields**, in order:
+1. Patient name or initials, and optional age.
+2. Contact person and contact number. The number defaults to the sender's WhatsApp number (shown masked), so it isn't asked.
+3. Blood group, or "not sure".
+4. Component, and units (1–20).
+5. Required by, in IST. Accepts "now", "in 3 hours", "today 6pm", "tomorrow 10am", "kal shaam" and "05-11-2026 14:30".
+6. Urgency.
+7. Hospital, city, locality and address.
+8. An optional location pin.
+
+**Behaviour:**
+- Only unanswered fields are asked.
+- Answers already known (the sender's number, a registered user's name, details stated in the first message) are marked with `*` in the summary for checking.
+- Every answer is validated with the web form's schemas.
+- BACK, RESTART, CANCEL and HELP work at every step.
+- The summary is numbered: reply a number to change that field.
+- Only an explicit YES submits, and the required-by time is re-checked at that moment.
+
+**Saving:**
+- The request is created through the same service as the web form: validation, duplicate detection, encryption, and status `pending_verification`.
+- `createdVia: "whatsapp"` and `requesterPhoneLookup` record the sender.
+- There is no IP on WhatsApp, so the rate limits are 3 requests per sender per day, plus the existing 3 per contact number.
+- WhatsApp authenticates the sender, so the sender receives the private manage link. The idempotency key comes from the conversation, so a repeated YES can't create two requests.
+
+**TRACK and CANCEL:**
+- TRACK shows status only, never patient details, for requests this number created or is the contact for.
+- CANCEL works only for open requests created on WhatsApp from the same number. It asks for YES first and withdraws any queued alerts. Web-created requests are cancelled with their manage link, so a mistyped contact number can't cancel someone else's request.
+
+### 10.3 Alerts, responses and coordination
+**Sending alerts** (admin only):
+1. Find potential donors for an active request (`server/matching`, §10.4).
+2. Send a batch: the next `ALERT_BATCH_SIZE` candidates, in rank order.
+
+Each alert is deduplicated per (request, donor). These are re-checked when it is queued and again just before it is sent:
+- the request is still active and not expired;
+- the number isn't on the suppression list;
+- consent is present and alerts aren't paused;
+- the donor is available;
+- the donor is under the daily cap.
+
+Alerts expire after `ALERT_TTL_MINUTES`. Closing a request (fulfilled, cancelled or expired) withdraws its queued alerts at once.
+
+**Donor replies:**
+- **1 / INTERESTED.** Recorded once per (request, donor); a repeat is acknowledged, not counted. The donor is then asked separately whether their name and number may be shared with the coordinator and the hospital blood bank. YES or NO is recorded on the response. Verified coordinator contacts of a linked institution get a `coordinator_alert`; the donor's number is included only after YES.
+- **2 / UNAVAILABLE.** Recorded and replaces any earlier interest. Their coordination becomes "not proceeding", and they aren't asked about that request again.
+- **3 / MORE INFO.** Request status, hospital address, component, units and time. No patient data.
+- **4.** The same as STOP.
+
+**Coordination states** are kept separate from the reply:
+- `interested` → `coordinator_contacted` → `hospital_coordination` → `donation_confirmed`, or `not_proceeding`.
+- Only an admin or the institution moves a response forward. "Interested" is never shown as a donation.
+
+### 10.4 Matching (deterministic, `server/matching/engine.ts`)
+**Search area:**
+- The admin chooses a radius of 5, 10, 25 or 50 km.
+- Distance is measured from the linked institution's location, or from the requester's shared pin. Without either, the search falls back to the same city.
+- Donors are fetched with a `2dsphere` `$geoWithin` query, plus same-city donors without coordinates.
+
+**Exclusions**, each counted and shown to the admin:
+- duplicates, and the requester themselves;
+- inactive accounts, opted-out numbers, no alert consent, paused alerts, marked unavailable;
+- unknown donor blood group, or a group outside the policy;
+- a recent self-reported donation (`MATCH_MIN_DONATION_INTERVAL_DAYS`);
+- outside the radius, or a different city without a location;
+- already alerted or already replied.
+
+**Ranking:** straight-line distance first, then same-city donors, with the same locality first.
+
+**Blood group policy** (`policy.ts`):
+- Exact ABO and Rh match only, until qualified medical professionals approve wider rules.
+- The policy version and the review status `pending_clinical_review` are stored with every run and shown in the admin UI.
+- A request with blood group "not sure" matches no one. Missing information is never treated as eligibility. The result is people to contact, not medically approved donors.
+
+### 10.5 AI understanding (`src/server/ai`)
+**Provider:**
+- An abstraction (`AiProvider`). The implementation is `anthropic`, using Claude through the official SDK with schema-validated structured output and server-side refusal fallbacks.
+- It is off by default (`AI_PROVIDER=none`). A deterministic keyword classifier is the fallback.
+
+**Before a message is sent to the provider:**
+- phone numbers are removed;
+- the text is truncated to 500 characters;
+- each number is rate-limited (`AI_MAX_CALLS_PER_NUMBER_PER_HOUR`).
+
+**What the AI returns:** `intent`, `entities`, `confidence`, `missing_fields`, `requires_confirmation` and `suggested_response`. It is re-validated with a strict Zod schema; malformed or out-of-range output is rejected and counted. Calls, errors and rejections appear on the Operations page.
+
+**What the AI may trigger:**
+- Only read-only actions (TRACK, MORE INFO, HELP) and the start of a conversation (REQUEST, REGISTER, UPDATE, CANCEL), which still asks for confirmation.
+- Extracted request details are kept only if they pass the same parsers and schemas as typed answers. They prefill the request and are marked for checking.
+- Consent changes and responses are never made from an interpretation. "Please stop these" gets "Reply STOP to confirm".
+- The AI never writes to the database, never matches donors, never sends notifications, and never verifies, cancels or confirms anything.
+- An AI-written reply is forwarded only for unclear messages, only when it is short and makes no claim (no "submitted", "verified", "eligible", links or numbers), and always followed by the command list.
+
+### 10.6 Institutions on WhatsApp
+**Access:**
+- A number has institutional access only while its `institution_contacts` record is verified *and* the institution is verified. Both are admin actions.
+- Unverified numbers get a refusal for privileged commands, and the refusal is audit-logged. Revoking takes effect on the next message.
+- STATUS, AVAILABLE and HELP keep their donor meaning for everyone else.
+
+**Commands:**
+- `REQUESTS`: open requests linked to the institution.
+- `STATUS [MX-ID]`: response status for the institution or for one request.
+- `ACK MX-ID`: acknowledge a request (recorded once, attributable).
+- `AVAILABLE O+ PRBC 3`: a stock report. It is stored as a timestamped, attributed self-report, and shown only as such, never as confirmed stock.
+- `FULFILLED / PARTIAL MX-ID`: coordinator role only. The request history records the actor as "institution", and further alerts stop.
+
+### 10.7 Not implemented
+- An institutional web portal (planned for Phase 6).
+- Interactive WhatsApp buttons; replies are text.
+- Template messages. The pilot can't use the official Business Platform or its templates.
+- Automatic radius expansion or automatic waves.

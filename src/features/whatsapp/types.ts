@@ -17,6 +17,7 @@ export const MESSAGE_KINDS = [
   "help_reply",
   "bot_reply",
   "request_confirmation",
+  "coordinator_alert",
 ] as const;
 
 /** Replies inside a conversation the person started. Sent first, with their own cap. */

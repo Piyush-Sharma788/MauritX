@@ -29,6 +29,7 @@ import {
   phoneLookupToken,
 } from "@/lib/security/crypto";
 import { maskPhone } from "@/lib/validation/phone";
+import { withdrawQueuedAlerts } from "@/server/coordination/alerts";
 import { queueRequestConfirmation } from "@/server/requests/notifications";
 import { allowedTransitions, canTransition, computeExpiry } from "@/server/requests/status";
 import { EmergencyRequest, type EmergencyRequestDoc } from "@/server/models/emergency-request";
@@ -37,7 +38,7 @@ import { RequestShareLink, type RequestShareLinkDoc } from "@/server/models/requ
 import { recordAudit } from "@/server/services/audit";
 import { enforceRateLimit } from "@/server/services/rate-limit";
 
-type RequestRecord = EmergencyRequestDoc & { _id: Types.ObjectId; createdAt: Date; updatedAt: Date };
+export type RequestRecord = EmergencyRequestDoc & { _id: Types.ObjectId; createdAt: Date; updatedAt: Date };
 type LinkRecord = RequestShareLinkDoc & { _id: Types.ObjectId; createdAt: Date };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -47,7 +48,15 @@ const DUPLICATE_WINDOW_MS = DAY_MS;
 const RATE_LIMITS = {
   createPerIp: { scope: "request-create:ip", limit: 10, windowSeconds: 60 * 60 },
   createPerPhone: { scope: "request-create:phone", limit: 3, windowSeconds: 24 * 60 * 60 },
+  createPerWhatsAppSender: { scope: "request-create:wa-sender", limit: 3, windowSeconds: 24 * 60 * 60 },
 };
+
+export interface CreateRequestOptions {
+  /** "whatsapp": created by the bot for the sender of the conversation. */
+  channel?: "web" | "whatsapp";
+  /** The WhatsApp sender (E.164), authenticated by WhatsApp itself. */
+  requesterE164?: string;
+}
 
 const notFound = () => new AppError(404, "NOT_FOUND", "We couldn't find that request.");
 const iso = (d?: Date | null) => (d ? d.toISOString() : null);
@@ -85,7 +94,13 @@ export async function expireOverdueRequests(now = new Date()): Promise<number> {
  * - per-IP and per-phone rate limits.
  * The request starts as pending verification; only an admin can verify it.
  */
-export async function createRequest(input: CreateRequestInput, idempotencyKey: string, ctx: ApiContext, now = new Date()): Promise<CreateRequestResponse> {
+export async function createRequest(
+  input: CreateRequestInput,
+  idempotencyKey: string,
+  ctx: ApiContext,
+  now = new Date(),
+  options: CreateRequestOptions = {},
+): Promise<CreateRequestResponse> {
   await connectToDatabase();
   const scopedKey = `request:create:${idempotencyKey}`;
   const replay = await IdempotencyRecord.findOne({ key: scopedKey }).lean();
@@ -106,7 +121,14 @@ export async function createRequest(input: CreateRequestInput, idempotencyKey: s
     );
   }
   // After the duplicate check, so a family resubmitting is told to use their existing request.
-  await enforceRateLimit(RATE_LIMITS.createPerIp, ctx.ip, now);
+  const viaWhatsApp = options.channel === "whatsapp" && options.requesterE164;
+  const requesterLookup = viaWhatsApp ? phoneLookupToken(options.requesterE164!) : null;
+  if (requesterLookup) {
+    // WhatsApp messages have no client IP; the sender's own number is the limit key.
+    await enforceRateLimit(RATE_LIMITS.createPerWhatsAppSender, requesterLookup, now);
+  } else {
+    await enforceRateLimit(RATE_LIMITS.createPerIp, ctx.ip, now);
+  }
   await enforceRateLimit(RATE_LIMITS.createPerPhone, contactLookup, now);
 
   const expiresAt = computeExpiry(now, input.requiredBy);
@@ -135,9 +157,11 @@ export async function createRequest(input: CreateRequestInput, idempotencyKey: s
         }
       : {}),
     whatsappUpdates: input.whatsappUpdates,
+    createdVia: requesterLookup ? ("whatsapp" as const) : ("web" as const),
+    ...(requesterLookup ? { requesterPhoneLookup: requesterLookup } : {}),
     consent: { sharingAcceptedAt: now, privacyNoticeVersion: input.privacyNoticeVersion },
     dedupeKey,
-    history: [{ status: "pending_verification" as const, at: now, actor: "requester" as const }],
+    history: [{ status: "pending_verification" as const, at: now, actor: "requester" as const, ...(requesterLookup ? { note: "Created on WhatsApp" } : {}) }],
     expiresAt,
   };
 
@@ -168,7 +192,7 @@ export async function createRequest(input: CreateRequestInput, idempotencyKey: s
   }
 
   await recordAudit({
-    action: "request.created",
+    action: requesterLookup ? "request.created_via_whatsapp" : "request.created",
     outcome: "success",
     requestId: ctx.requestId,
     resourceType: "emergency_request",
@@ -267,20 +291,23 @@ async function requireManageLink(token: string, publicRequestId: string) {
   return { link, request };
 }
 
-async function applyTransition(
-  request: RequestRecord,
-  to: RequestStatus,
-  actor: { type: "requester" | "admin"; userId?: Types.ObjectId; note?: string },
-  ctx: ApiContext,
-  now = new Date(),
-) {
+export type TransitionActor = { type: "requester" | "admin" | "institution"; userId?: Types.ObjectId; contactId?: Types.ObjectId; note?: string };
+
+export async function applyTransition(request: RequestRecord, to: RequestStatus, actor: TransitionActor, ctx: Pick<ApiContext, "requestId">, now = new Date()) {
   if (!canTransition(actor.type, request.status, to)) {
     throw new AppError(409, "INVALID_TRANSITION", `A request that is ${request.status.replace(/_/g, " ")} can't be changed to ${to.replace(/_/g, " ")}.`);
   }
   const $set: Record<string, unknown> = { status: to };
   if (to === "verified") Object.assign($set, { verifiedAt: now, verifiedBy: actor.userId });
   if (!isOpenStatus(to)) $set.closedAt = now;
-  const entry = { status: to, at: now, actor: actor.type, ...(actor.userId ? { actorUserId: actor.userId } : {}), ...(actor.note ? { note: actor.note } : {}) };
+  const entry = {
+    status: to,
+    at: now,
+    actor: actor.type,
+    ...(actor.userId ? { actorUserId: actor.userId } : {}),
+    ...(actor.contactId ? { actorContactId: actor.contactId } : {}),
+    ...(actor.note ? { note: actor.note } : {}),
+  };
 
   // Conditional on the current status, so two concurrent updates can't both apply.
   const result = await EmergencyRequest.updateOne({ _id: request._id, status: request.status }, { $set, $push: { history: entry } });
@@ -295,6 +322,8 @@ async function applyTransition(
     resourceType: "emergency_request",
     resourceId: `${request.publicRequestId}:${request.status}->${to}`,
   });
+  // A closed request must not reach anyone else.
+  if (!isOpenStatus(to)) await withdrawQueuedAlerts(request._id, now);
 }
 
 /** The requester (manage link) cancels or reports their own outcome. */

@@ -42,7 +42,9 @@ Next.js Route Handlers / Node.js application layer
 - **Maps adapter:** geocoding, distance matrix and route estimate.
 
 ## 4. Emergency request sequence
-*Phase 4 implements request creation, human verification, tracking and the optional requester confirmation. The matching and alert steps below (worker, matching and donor/institution WhatsApp alerts) are not built yet.*
+*Phase 4 implemented request creation, human verification, tracking and the optional requester confirmation. Phase 5 adds matching and alerts, with two deliberate differences from the sequence below:*
+- *Matching is synchronous and triggered by an admin, never queued automatically on creation.*
+- *Alerts go through the existing outbox, drained by the WhatsApp worker.*
 
 ```text
 Requester -> Web: submit request + consent
@@ -140,3 +142,36 @@ Domain code -> queue functions (consent checks) -> notification_events
 - **Expiry.** Applied on every read path with a single `updateMany` that writes a `system` history entry. No cron is needed for correctness.
 - **Notifications** (`notifications.ts`): only the requester's own confirmation, queued through the existing outbox as `request_confirmation`, and only if they ask for it and WhatsApp is connected at that moment. The message carries a view-only link. There is no donor matching or broadcasting.
 - **Bot awareness.** A number with an open request that messages the bot gets a request-aware reply rather than the donor sign-up.
+
+## 13. Phase 5: conversational coordination
+```text
+WhatsApp worker (single client, lease) --inbound--> messaging/inbound.ts
+   dedupe -> per-number limit -> STOP -> [bot enabled?] -> conversations/engine.ts
+      ├─ active flow ─> request-machine | cancel | donor_response | donor bot (onboarding-machine)
+      ├─ institutions/whatsapp.ts   (verified contact AND verified institution)
+      ├─ requests/whatsapp.ts       (REQUEST / TRACK / CANCEL -> requests/service.ts)
+      ├─ coordination/responses.ts  (alert replies, contact-sharing consent, coordinator alerts)
+      └─ ai/interpret.ts            (optional; proposal only) -> same deterministic handlers
+Admin UI -> /api/v1/admin/requests/:id/{matching,alerts,institution,responses}
+   matching/service.ts -> matching/engine.ts (pure) -> matching_runs
+   coordination/alerts.ts -> messaging/queue.ts -> notification_events (outbox) -> worker dispatcher
+```
+
+**Module boundaries:**
+- **WhatsApp-free business logic.** Business logic never touches WhatsApp: everything goes through the request, donor, matching and coordination services and the provider-neutral outbox. A Cloud API provider replaces only the worker's `MessagingProvider`.
+- **Pure, unit-tested state machines.** `request-machine.ts`, `onboarding-machine.ts`, `matching/engine.ts` and `coordination/status.ts` don't touch the database.
+- **Consent, re-checked at send time.** `messaging/eligibility.ts` is the single answer to "may we message this number?". It covers the request state, consent and pause, availability, the per-donor daily cap, the suppression list and institution verification. It runs at enqueue and again at dispatch.
+
+**Concurrency and idempotency:**
+- Each inbound message ID is processed once.
+- Messages from one number are serialised in the worker, and conversations use optimistic version locks with one retry.
+- `request_responses` is unique on (request, donor), and changes are conditional on the previous answer.
+- Response counters are updated with `$inc`, and request status changes are conditional on the current status.
+- Alerts are deduplicated per (request, donor). A request created on WhatsApp gets its idempotency key from the conversation.
+
+**Operational controls:**
+- `system_settings` holds two switches. With the bot off, only STOP is processed. With alerts paused, the worker re-reads the setting every 5 s and fails closed, so alerts are held.
+- `bot_metrics` keeps daily counters: inbound processed or dropped, bot errors, AI calls, errors and rejections.
+- The Operations page reads only live database counts.
+
+**Restarts:** conversations, the outbox and the lease are all in MongoDB, so a restarted worker carries on where it stopped. A send interrupted mid-way is marked `UNKNOWN_DELIVERY_STATE`, never resent.

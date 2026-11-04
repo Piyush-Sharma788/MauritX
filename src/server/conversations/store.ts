@@ -2,7 +2,15 @@ import "server-only";
 import type { Types } from "mongoose";
 import { decryptPii, encryptPii } from "@/lib/security/crypto";
 import { ONBOARDING_STATES, type OnboardingState, type Snapshot } from "@/server/conversations/onboarding-machine";
-import { WhatsAppConversation, type WhatsAppConversationDoc } from "@/server/models/whatsapp-conversation";
+import { WhatsAppConversation, type ConversationFlowName, type WhatsAppConversationDoc } from "@/server/models/whatsapp-conversation";
+
+/** Any flow's persisted position: which flow, which step, the steps behind it and the answers so far. */
+export interface FlowSnapshot<S extends string = string, D extends object = object> {
+  flow: ConversationFlowName;
+  state: S;
+  history: S[];
+  data: D;
+}
 
 /** Progress is kept this long after the last message, so registration can resume. */
 export const CONVERSATION_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
@@ -22,8 +30,12 @@ export async function loadConversation(phoneLookup: string): Promise<Conversatio
   return (await WhatsAppConversation.findOne({ phoneLookup }).lean()) as ConversationRecord | null;
 }
 
+export const isDonorFlow = (flow: string): flow is Snapshot["flow"] => flow === "donor_onboarding" || flow === "donor_update";
+
+/** The donor registration/update snapshot. Only call for donor flows. */
 export function toSnapshot(record: ConversationRecord): Snapshot {
   const state = isState(record.state) ? record.state : "name";
+  if (!isDonorFlow(record.flow)) throw new Error(`Not a donor flow: ${record.flow}`);
   return {
     flow: record.flow,
     state,
@@ -32,10 +44,20 @@ export function toSnapshot(record: ConversationRecord): Snapshot {
   };
 }
 
+/** Any flow's snapshot. The flow's own machine validates the state it gets back. */
+export function toFlowSnapshot<S extends string, D extends object>(record: ConversationRecord): FlowSnapshot<S, D> {
+  return {
+    flow: record.flow,
+    state: record.state as S,
+    history: record.history as S[],
+    data: JSON.parse(decryptPii(record.dataEncrypted)) as D,
+  };
+}
+
 /** Starts (or restarts) a bot conversation for a number. */
 export async function beginConversation(input: {
   phoneLookup: string;
-  snapshot: Snapshot;
+  snapshot: FlowSnapshot;
   userId?: Types.ObjectId;
   now: Date;
 }): Promise<void> {
@@ -63,7 +85,7 @@ export async function beginConversation(input: {
 /** Saves progress only if nobody else changed the conversation since it was read. */
 export async function saveConversation(
   record: ConversationRecord,
-  update: { snapshot?: Snapshot; status: "active" | "completed" | "cancelled"; userId?: Types.ObjectId; now: Date },
+  update: { snapshot?: FlowSnapshot; status: "active" | "completed" | "cancelled"; userId?: Types.ObjectId; now: Date },
 ): Promise<void> {
   const $set: Record<string, unknown> = {
     status: update.status,

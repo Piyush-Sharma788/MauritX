@@ -14,7 +14,9 @@ import { DonorProfile } from "@/server/models/donor-profile";
 import { MessagingOptOut } from "@/server/models/messaging-opt-out";
 import { NotificationEvent } from "@/server/models/notification-event";
 import { User } from "@/server/models/user";
+import { EmergencyRequest } from "@/server/models/emergency-request";
 import { WhatsAppConnection } from "@/server/models/whatsapp-connection";
+import { alertSummaryFor, createActiveRequest } from "./helpers/fixtures";
 import { acquireLease, LEASE_TTL_MS, releaseLease, renewLease } from "@/server/whatsapp/connection-store";
 
 /**
@@ -69,14 +71,11 @@ async function createDonor(opts: { consent?: boolean; available?: boolean } = {}
   return { phone, userId: user._id };
 }
 
-const summary = (overrides: Record<string, unknown> = {}) => ({
-  area: "Civil Lines, Prayagraj",
-  bloodGroup: "B+" as const,
-  component: "packed_red_cells" as const,
-  neededBy: new Date("2026-11-05T06:30:00Z"),
-  secureLink: "http://localhost:3000/r/abc123",
-  ...overrides,
-});
+/** An active request and its alert summary, so alerts pass the "request is alertable" rule. */
+async function activeAlert(overrides: Record<string, unknown> = {}) {
+  const request = await createActiveRequest();
+  return { requestId: request._id.toString(), summary: { ...alertSummaryFor(request), ...overrides } };
+}
 
 async function expectAppError(promise: Promise<unknown>, code: string) {
   const error = await promise.then(() => null, (e: unknown) => e);
@@ -88,7 +87,7 @@ describe.skipIf(!enabled)("Messaging foundation (MongoDB, fake provider)", () =>
   beforeAll(async () => {
     await connectToDatabase();
     await mongoose.connection.dropDatabase();
-    await Promise.all([NotificationEvent.syncIndexes(), User.syncIndexes(), MessagingOptOut.syncIndexes(), DonorProfile.syncIndexes()]);
+    await Promise.all([NotificationEvent.syncIndexes(), User.syncIndexes(), MessagingOptOut.syncIndexes(), DonorProfile.syncIndexes(), EmergencyRequest.syncIndexes()]);
   });
   afterAll(async () => {
     await mongoose.disconnect();
@@ -133,9 +132,9 @@ describe.skipIf(!enabled)("Messaging foundation (MongoDB, fake provider)", () =>
 
     it("notifies a consented, available donor once per request", async () => {
       const { userId } = await createDonor();
-      const requestId = randomUUID();
-      const first = await queueEmergencyRequestNotification({ requestId, donorUserId: userId, summary: summary() });
-      const second = await queueEmergencyRequestNotification({ requestId, donorUserId: userId, summary: summary() });
+      const { requestId, summary } = await activeAlert();
+      const first = await queueEmergencyRequestNotification({ requestId, donorUserId: userId, summary });
+      const second = await queueEmergencyRequestNotification({ requestId, donorUserId: userId, summary });
       expect(first.outcome).toBe("queued");
       expect(second).toMatchObject({ outcome: "duplicate", messageId: first.messageId });
       expect(await NotificationEvent.countDocuments({ requestId })).toBe(1);
@@ -144,21 +143,29 @@ describe.skipIf(!enabled)("Messaging foundation (MongoDB, fake provider)", () =>
     it("records a suppressed event for donors without consent or availability", async () => {
       const noConsent = await createDonor({ consent: false });
       const unavailable = await createDonor({ available: false });
-      const a = await queueEmergencyRequestNotification({ requestId: randomUUID(), donorUserId: noConsent.userId, summary: summary() });
-      const b = await queueEmergencyRequestNotification({ requestId: randomUUID(), donorUserId: unavailable.userId, summary: summary() });
+      const a = await queueEmergencyRequestNotification({ ...(await activeAlert()), donorUserId: noConsent.userId });
+      const b = await queueEmergencyRequestNotification({ ...(await activeAlert()), donorUserId: unavailable.userId });
       expect(a).toMatchObject({ outcome: "suppressed", reason: "NO_CONSENT" });
       expect(b).toMatchObject({ outcome: "suppressed", reason: "NOT_AVAILABLE" });
       expect(await NotificationEvent.countDocuments({ status: "suppressed", bodyEncrypted: { $exists: true } })).toBe(0);
     });
 
-    it("rejects emergency links outside the app and free text in the area", async () => {
+    it("rejects free text that could leak into an alert", async () => {
       const { userId } = await createDonor();
-      await expect(
-        queueEmergencyRequestNotification({ requestId: randomUUID(), donorUserId: userId, summary: summary({ secureLink: "https://evil.example/x" }) }),
-      ).rejects.toThrow();
-      await expect(
-        queueEmergencyRequestNotification({ requestId: randomUUID(), donorUserId: userId, summary: summary({ area: "Patient: Ravi <script>" }) }),
-      ).rejects.toThrow();
+      await expect(queueEmergencyRequestNotification({ ...(await activeAlert({ hospitalName: "Patient: Ravi <script>" })), donorUserId: userId })).rejects.toThrow();
+      await expect(queueEmergencyRequestNotification({ ...(await activeAlert({ locality: "Call 9876543210 :)" })), donorUserId: userId })).rejects.toThrow();
+    });
+
+    it("never alerts about a request that isn't verified and active", async () => {
+      const { userId } = await createDonor();
+      const pending = await createActiveRequest({ status: "pending_verification", verifiedAt: undefined });
+      const closed = await createActiveRequest({ status: "fulfilled" });
+      for (const r of [pending, closed]) {
+        const result = await queueEmergencyRequestNotification({ requestId: r._id.toString(), donorUserId: userId, summary: alertSummaryFor(r) });
+        expect(result).toMatchObject({ outcome: "suppressed", reason: "REQUEST_NOT_ALERTABLE" });
+      }
+      const missing = await queueEmergencyRequestNotification({ requestId: randomUUID(), donorUserId: userId, summary: alertSummaryFor(pending) });
+      expect(missing).toMatchObject({ outcome: "suppressed", reason: "REQUEST_NOT_ALERTABLE" });
     });
   });
 
@@ -182,7 +189,7 @@ describe.skipIf(!enabled)("Messaging foundation (MongoDB, fake provider)", () =>
 
     it("re-checks consent right before sending", async () => {
       const donor = await createDonor();
-      const { messageId } = await queueEmergencyRequestNotification({ requestId: randomUUID(), donorUserId: donor.userId, summary: summary() }) as { messageId: string };
+      const { messageId } = await queueEmergencyRequestNotification({ ...(await activeAlert()), donorUserId: donor.userId }) as { messageId: string };
       await DonorProfile.updateOne({ userId: donor.userId }, { $set: { notificationConsentWithdrawnAt: new Date() } });
 
       const { provider, sent } = fakeProvider();
@@ -267,7 +274,7 @@ describe.skipIf(!enabled)("Messaging foundation (MongoDB, fake provider)", () =>
   describe("inbound keywords", () => {
     it("STOP opts out, withdraws consent, suppresses queued messages and confirms once", async () => {
       const donor = await createDonor();
-      await queueEmergencyRequestNotification({ requestId: randomUUID(), donorUserId: donor.userId, summary: summary() });
+      await queueEmergencyRequestNotification({ ...(await activeAlert()), donorUserId: donor.userId });
 
       expect(await inbound(donor.phone, "  stop ")).toBe("opt_out");
       expect(await inbound(donor.phone, "STOP")).toBe("opt_out");

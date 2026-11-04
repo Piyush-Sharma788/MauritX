@@ -19,6 +19,7 @@ import { NotificationEvent } from "@/server/models/notification-event";
 import { User } from "@/server/models/user";
 import { WhatsAppConversation } from "@/server/models/whatsapp-conversation";
 import { WhatsAppInboundMessage } from "@/server/models/whatsapp-inbound-message";
+import { alertSummaryFor, createActiveRequest } from "./helpers/fixtures";
 
 /**
  * Donor registration, preferences and the WhatsApp onboarding bot, end to end
@@ -318,11 +319,8 @@ describe.skipIf(!enabled)("Donor module (MongoDB)", () => {
 
       const view = (await getDonorOverview(userId)).profile!;
       expect(view.notifications.status).toBe("opted_out");
-      const alert = await queueEmergencyRequestNotification({
-        requestId: randomUUID(),
-        donorUserId: userId,
-        summary: { area: "Hazratganj", bloodGroup: "B+", component: "whole_blood", neededBy: new Date(), secureLink: "http://localhost:3000/r/x" },
-      });
+      const request = await createActiveRequest();
+      const alert = await queueEmergencyRequestNotification({ requestId: request._id.toString(), donorUserId: userId, summary: alertSummaryFor(request) });
       expect(alert).toMatchObject({ outcome: "suppressed", reason: "OPTED_OUT" });
     });
 

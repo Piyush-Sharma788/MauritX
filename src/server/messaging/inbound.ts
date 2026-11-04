@@ -3,7 +3,10 @@ import { AppError } from "@/lib/api/errors";
 import { connectToDatabase } from "@/lib/db/mongoose";
 import { logger } from "@/lib/logger";
 import { phoneLookupToken } from "@/lib/security/crypto";
-import { processBotMessage, type InboundMessage } from "@/server/conversations/bot";
+import type { InboundMessage } from "@/server/conversations/bot";
+import { processConversation } from "@/server/conversations/engine";
+import { incrementMetric } from "@/server/metrics/bot-metrics";
+import { getMessagingSettings } from "@/server/settings/service";
 import { recordOptOut } from "@/server/messaging/opt-out";
 import { queueSystemReply } from "@/server/messaging/queue";
 import { WhatsAppInboundMessage } from "@/server/models/whatsapp-inbound-message";
@@ -15,7 +18,7 @@ const STOP_WORDS = new Set(["STOP", "UNSUBSCRIBE", "STOP ALERTS", "STOPALL", "ST
 const PROCESSED_ID_RETENTION_MS = 14 * 24 * 60 * 60 * 1000;
 const INBOUND_LIMIT = { scope: "wa-inbound:phone", limit: 40, windowSeconds: 60 * 60 };
 
-export type InboundOutcome = "duplicate" | "rate_limited" | "opt_out" | "handled";
+export type InboundOutcome = "duplicate" | "rate_limited" | "opt_out" | "bot_disabled" | "handled";
 
 const isDuplicateKeyError = (error: unknown) => (error as { code?: number })?.code === 11000;
 
@@ -37,7 +40,7 @@ function serialised<T>(key: string, fn: () => Promise<T>): Promise<T> {
  * - each provider message ID is processed at most once;
  * - each number is rate-limited;
  * - STOP always wins and takes effect immediately;
- * - everything else goes to the donor bot.
+ * - with the bot switched on, everything else goes to the conversation engine.
  */
 export async function handleInboundMessage(msg: InboundMessage, now = new Date()): Promise<InboundOutcome> {
   await connectToDatabase();
@@ -70,7 +73,18 @@ export async function handleInboundMessage(msg: InboundMessage, now = new Date()
       await queueSystemReply("opt_out_confirmation", msg.fromE164, now);
       return "opt_out" as const;
     }
-    await processBotMessage(msg, now);
+    // Admins can switch the bot off; STOP above is honoured regardless.
+    if (!(await getMessagingSettings()).botEnabled) {
+      await incrementMetric("inbound_dropped_disabled", now);
+      return "bot_disabled" as const;
+    }
+    try {
+      await processConversation(msg, now);
+    } catch (error) {
+      await incrementMetric("bot_errors", now);
+      throw error;
+    }
+    await incrementMetric("inbound_processed", now);
     return "handled" as const;
   });
 }

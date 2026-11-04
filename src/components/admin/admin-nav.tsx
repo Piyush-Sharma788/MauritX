@@ -5,13 +5,16 @@ import { usePathname } from "next/navigation";
 import { Suspense } from "react";
 
 const LINKS = [
+  { href: "/admin/operations", label: "Operations" },
   { href: "/admin/requests", label: "Requests" },
+  { href: "/admin/institutions", label: "Institutions" },
   { href: "/admin/whatsapp", label: "WhatsApp" },
+  { href: "/admin/audit", label: "Audit" },
 ];
 
 function NavLinks({ pathname }: { pathname: string | null }) {
   return (
-    <nav aria-label="Admin" className="flex gap-1">
+    <nav aria-label="Admin" className="flex gap-1 overflow-x-auto">
       {LINKS.map((link) => {
         const active = pathname?.startsWith(link.href) ?? false;
         return (
@@ -19,7 +22,7 @@ function NavLinks({ pathname }: { pathname: string | null }) {
             key={link.href}
             href={link.href}
             aria-current={active ? "page" : undefined}
-            className={`rounded-full px-3 py-1.5 text-sm font-medium transition ${active ? "bg-ink text-white" : "text-ink-soft hover:bg-ink/5 hover:text-ink"}`}
+            className={`shrink-0 rounded-full px-3 py-1.5 text-sm font-medium transition ${active ? "bg-ink text-white" : "text-ink-soft hover:bg-ink/5 hover:text-ink"}`}
           >
             {link.label}
           </Link>

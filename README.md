@@ -67,6 +67,18 @@ REDIS_URL=
 PII_ENCRYPTION_KEY=
 OTP_PROVIDER=
 WHATSAPP_OTP_TEMPLATE_NAME=
+# Phase 5: alerts, matching and optional AI (all have defaults; see .env.example)
+ALERT_BATCH_SIZE=
+ALERT_MAX_PER_REQUEST=
+ALERT_MAX_PER_DONOR_PER_DAY=
+ALERT_TTL_MINUTES=
+MATCH_MIN_DONATION_INTERVAL_DAYS=
+MATCH_MAX_CANDIDATES=
+AI_PROVIDER=
+ANTHROPIC_API_KEY=
+AI_MODEL=
+AI_TIMEOUT_MS=
+AI_MAX_CALLS_PER_NUMBER_PER_HOUR=
 # WhatsApp Web pilot (whatsapp-web.js), see WHATSAPP_BOT.md §2a
 WHATSAPP_WEB_WORKER_URL=
 WHATSAPP_WEB_WORKER_SECRET=
@@ -137,4 +149,12 @@ docs/
 India's e-RaktKosh already provides blood-centre discovery and blood availability information. Treat it as a potential partner/integration, not as an API you can assume is publicly available. Obtain written permission and documented API access before integrating; do not scrape it.
 
 ## Status
-Planning / MVP specification. This repository is not production-ready until clinical, legal, privacy, security and operational reviews are completed.
+- **Phases 1–5 are implemented as a pilot:**
+  - web emergency requests;
+  - WhatsApp-first donor registration;
+  - WhatsApp coordination for patients, donors and verified institutions;
+  - deterministic matching with admin-controlled alerts;
+  - an optional AI layer and an admin control centre.
+
+  See SETUP.md for what is verified and what isn't.
+- **Not production-ready.** This repository is not production-ready until clinical, legal, privacy, security and operational reviews are completed.

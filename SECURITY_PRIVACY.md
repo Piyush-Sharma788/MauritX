@@ -41,6 +41,17 @@ Collect the minimum data necessary. Avoid patient names, diagnoses, government I
   - no-referrer and noindex headers on `/track/*`.)
 - Set retention and deletion schedules, including backups, with qualified legal advice.
 
+### Phase 5 privacy decisions
+- **Contact sharing is its own consent.** A donor's "interested" reply doesn't share their contact. They are asked separately for this request. Only after YES do coordinators and verified institution contacts see their name and number. The answer is stored on the response.
+- **Alerts carry no personal data.** They contain only the blood group, component, units, time, hospital, locality and request ID. Every field is schema-constrained.
+- **Requesters see aggregate counts only.** TRACK shows the number of interested donors, never who they are.
+- **AI processing is a separate, optional data flow** (`AI_PROVIDER=anthropic`).
+  - What is sent: only free-text messages the bot couldn't match to a command, with phone numbers removed and truncated to 500 characters.
+  - What is never sent: structured answers within a flow.
+  - The AI's output is a proposal, validated deterministically. It can't change consent, data or request state.
+  - Before enabling it in production, get legal review of sending user text to a third-party processor (DPDP Act), and sign a data-processing agreement.
+- **Conversation logs** in the admin UI show flow and step metadata only. Message text is never stored.
+
 ## 5. Application security
 - Validate every request with a strict schema and size limits.
 - Use parameterised/typed database operations; never accept raw MongoDB operators from clients.
@@ -81,7 +92,9 @@ Collect the minimum data necessary. Avoid patient names, diagnoses, government I
 - Donor interval filtering is only a conservative coordination aid, not medical clearance.
 - India national blood-centre standards describe whole-blood intervals of 90 days for males and 120 days for females; final acceptance remains with the blood centre.
 - Do not automatically determine blood compatibility from ABO/Rh alone. Crossmatching and clinical decisions belong to the licensed blood centre.
-- Do not claim a blood unit is available unless the source is authorised, current and timestamped.
+- Do not claim a blood unit is available unless the source is authorised, current and timestamped. *(Phase 5: institution stock reports are stored and shown as timestamped, attributed self-reports, never as confirmed stock.)*
+- *(Phase 5)* The matching policy is exact ABO and Rh match, labelled `pending_clinical_review` (`src/server/matching/policy.ts`). Wider compatibility rules must be approved by qualified medical professionals before they're added. They must never be inferred by code or AI.
+- *(Phase 5)* Institutional access requires a verified contact *and* a verified institution, both admin actions. A WhatsApp number alone grants nothing. Only coordinators can report fulfilment, and refusals are audit-logged.
 - Provide an emergency disclaimer and direct users to their hospital/blood centre immediately.
 
 ## 10. India compliance workstream
@@ -103,3 +116,5 @@ Collect the minimum data necessary. Avoid patient names, diagnoses, government I
 - [ ] Backup restore and incident response tested.
 - [ ] Independent penetration test and legal/clinical review completed.
 - [ ] whatsapp-web.js pilot retired or replaced by the official Cloud API before public launch (WHATSAPP_BOT.md §2a).
+- [ ] Clinical review and approval of the donor matching policy (`policy.ts`).
+- [ ] Legal review and DPA before enabling the AI provider with real users.

@@ -286,6 +286,61 @@ Final states can't be changed.
 
 ---
 
+## Phase 5: WhatsApp coordination, matching and alerts
+
+The full design is in WHATSAPP_BOT.md §10.
+
+### What's included
+- **One conversation engine for everyone**, inside the existing worker (no second WhatsApp client):
+  - patients: REQUEST, TRACK, CANCEL;
+  - donors: REGISTER, PROFILE, STATUS, UPDATE, PAUSE, RESUME, STOP, and replies 1–4 to alerts;
+  - verified institutions: REQUESTS, STATUS, ACK, AVAILABLE, FULFILLED, PARTIAL.
+- **Deterministic donor matching** (5, 10, 25 or 50 km). It is explainable, and every exclusion is counted.
+- **Emergency alerts in small batches that an admin sends by hand.** They are deduplicated, capped per donor per day, re-checked for consent before each send, and withdrawn when a request closes.
+- **Donor responses** with a separate contact-sharing consent, and coordination states from "interested" to "donation confirmed".
+- **Optional AI understanding** (Claude), off by default. It only proposes; the deterministic backend decides.
+- **Admin control centre:**
+  - `/admin/operations`: WhatsApp state, the bot on/off and alerts-paused switches, live counts, failed messages with safe retry, and conversation metadata;
+  - `/admin/institutions`: verification, contacts and availability reports;
+  - `/admin/audit`: the audit history;
+  - a coordination panel on each `/admin/requests/<id>` page.
+
+### Configuration
+- **No new required variables.** Everything has a safe default; see `.env.example` (Phase 5 sections).
+- **AI.** To enable it, set `AI_PROVIDER=anthropic` and `ANTHROPIC_API_KEY` in the environment of the **worker**, which is where inbound messages are processed.
+  - The default model is `claude-opus-5-5` (`AI_MODEL`), called with low effort and server-side refusal fallbacks.
+  - Get legal review before sending real users' text to an AI provider (SECURITY_PRIVACY.md §4).
+
+### Admin workflow for one emergency
+1. **Verify the request** with the hospital (*Mark verified*), then *Mark active*.
+2. **Optionally link a verified institution** under *Donor coordination*. Its verified contacts can then see and acknowledge the request on WhatsApp. If the institution has a location, it is used as the search centre.
+3. **Run the donor search.** Choose a radius and press **Search**, then read the reasons and exclusions.
+4. **Send alerts.** **Send alerts to the next N** queues one batch. Watch replies arrive and send another batch only if needed.
+5. **Move each interested donor forward** (coordinator contacted, then hospital coordination, then donation confirmed) as it actually happens.
+6. **Close the request.** Mark it fulfilled (or the institution's coordinator sends `FULFILLED MX-…`). Queued alerts are withdrawn automatically.
+
+### Testing locally (controlled, no real broadcasts)
+- **Automated tests**, with a fake WhatsApp provider: `npm run test:integration`.
+  - `tests/phase5-units.test.ts` covers the parsers, request machine, matching engine, coordination rules and AI safety.
+  - `tests/phase5-workflows.integration.test.ts` covers the brief's workflows A–E against MongoDB.
+- **With real phones.** Use only your own test numbers.
+  1. Pair a spare WhatsApp account on `/admin/whatsapp` (see Phase 2).
+  2. From a second phone, send `REQUEST` to the paired number and complete the flow. The request appears on `/admin/requests` as *Pending verification*.
+  3. From a third phone, send `REGISTER` and register with alerts on, in the same city and blood group as the request.
+  4. As admin, verify and activate the request, search, and send one batch. Only the consenting test donor is alerted.
+  5. Reply `1`, then `YES`, from the donor phone. The response appears on the request page.
+  6. For institutional commands, add an institution on `/admin/institutions`, add your test number as a contact, verify both, and link the request. Then try `REQUESTS`, `ACK MX-…` and `AVAILABLE O+ PRBC 3`.
+- **Never use real patient data or real donor lists in development.**
+
+### Limitations (Phase 5)
+- **Unofficial pilot.** whatsapp-web.js remains an unofficial client: delivery isn't guaranteed and the number can be banned. "Delivered" and "read" counts are only what WhatsApp acknowledged.
+- **Matching policy.** It is exact ABO and Rh match, pending clinical review. A request with blood group "not sure" matches no donors.
+- **Matching inputs.** Matching uses donors' self-reported group and last donation date. Distances are straight-line, never routes or travel times.
+- **Pre-Phase 5 inbound counts.** Inbound messages from before Phase 5 aren't in the daily counters.
+- **Unregistered numbers.** Conversation logs show them as "Not registered": numbers are stored only as keyed hashes.
+- **Not built yet:** the institutional web portal (Phase 6), interactive WhatsApp buttons, automatic radius expansion and a requester-facing list of responders.
+- **Not tested against real services.** AI calls were tested with fake providers only; no live Claude call was made during development. Real WhatsApp delivery of Phase 5 flows hasn't been tested with phones.
+
 ## CI
 
 `.github/workflows/ci.yml` runs on every pull request, every push to `main`, and on demand. It runs one job:

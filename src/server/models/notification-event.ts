@@ -14,6 +14,8 @@ const notificationEventSchema = new Schema(
     kind: { type: String, enum: MESSAGE_KINDS, required: true },
     templateName: { type: String, required: true },
     requestId: { type: String },
+    // The donor search an emergency alert came from.
+    matchingRunId: { type: Types.ObjectId, ref: "MatchingRun" },
     recipientUserId: { type: Types.ObjectId, ref: "User" },
     recipientLookup: { type: String, required: true },
     recipientPhoneEncrypted: { type: String, required: true },
@@ -44,6 +46,8 @@ notificationEventSchema.index({ recipientUserId: 1, kind: 1, createdAt: -1 });
 notificationEventSchema.index({ sentAt: -1 });
 notificationEventSchema.index({ createdAt: -1 });
 notificationEventSchema.index({ recipientLookup: 1, status: 1 });
+notificationEventSchema.index({ requestId: 1, kind: 1, status: 1 }, { sparse: true });
+notificationEventSchema.index({ recipientLookup: 1, kind: 1, createdAt: -1 });
 
 export type NotificationEventDoc = InferSchemaType<typeof notificationEventSchema>;
 

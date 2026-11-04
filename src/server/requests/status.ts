@@ -27,11 +27,27 @@ const REQUESTER_TRANSITIONS: Record<RequestStatus, RequestStatus[]> = {
   expired: [],
 };
 
-export function allowedTransitions(actor: "admin" | "requester", from: RequestStatus): RequestStatus[] {
-  return (actor === "admin" ? ADMIN_TRANSITIONS : REQUESTER_TRANSITIONS)[from];
+/**
+ * A verified institution coordinating the request (coordinator contacts only)
+ * can report its outcome, but can't verify, activate or cancel it.
+ */
+const INSTITUTION_TRANSITIONS: Record<RequestStatus, RequestStatus[]> = {
+  pending_verification: [],
+  verified: ["partially_fulfilled", "fulfilled"],
+  active: ["partially_fulfilled", "fulfilled"],
+  partially_fulfilled: ["fulfilled"],
+  fulfilled: [],
+  cancelled: [],
+  expired: [],
+};
+
+export type TransitionActorType = "admin" | "requester" | "institution";
+
+export function allowedTransitions(actor: TransitionActorType, from: RequestStatus): RequestStatus[] {
+  return (actor === "admin" ? ADMIN_TRANSITIONS : actor === "institution" ? INSTITUTION_TRANSITIONS : REQUESTER_TRANSITIONS)[from];
 }
 
-export function canTransition(actor: "admin" | "requester", from: RequestStatus, to: RequestStatus): boolean {
+export function canTransition(actor: TransitionActorType, from: RequestStatus, to: RequestStatus): boolean {
   return allowedTransitions(actor, from).includes(to);
 }
 

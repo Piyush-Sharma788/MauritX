@@ -21,7 +21,7 @@ export function StatusBadge({ status, className = "" }: { status: RequestStatus;
   );
 }
 
-const ACTOR_LABELS: Record<HistoryActor, string> = { requester: "Requester", admin: "MarutiX team", system: "Automatically" };
+const ACTOR_LABELS: Record<HistoryActor, string> = { requester: "Requester", admin: "MarutiX team", institution: "Hospital / blood bank", system: "Automatically" };
 
 const dateTime = new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" });
 export const formatIST = (iso: string) => `${dateTime.format(new Date(iso))} IST`;

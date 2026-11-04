@@ -5,7 +5,6 @@ import { PRIVACY_NOTICE_VERSION } from "@/features/legal";
 import { BLOOD_GROUP_LABELS, donorRegistrationSchema } from "@/features/donors/schemas";
 import { AppError } from "@/lib/api/errors";
 import { connectToDatabase } from "@/lib/db/mongoose";
-import { logger } from "@/lib/logger";
 import { phoneLookupToken } from "@/lib/security/crypto";
 import { maskPhone } from "@/lib/validation/phone";
 import {
@@ -17,7 +16,7 @@ import {
   type CompletedOnboarding,
   type OnboardingData,
 } from "@/server/conversations/onboarding-machine";
-import { beginConversation, ConversationConflictError, loadConversation, saveConversation, toSnapshot } from "@/server/conversations/store";
+import { beginConversation, isDonorFlow, loadConversation, saveConversation, toSnapshot } from "@/server/conversations/store";
 import { changeNotifications, getDonorOverview, registerDonor, setAvailability, updateDonorProfile } from "@/server/donors/service";
 import { isOptedOut } from "@/server/messaging/eligibility";
 import { liftOptOut } from "@/server/messaging/opt-out";
@@ -53,7 +52,7 @@ const keywordOf = (input: BotInput) => (input.type === "text" ? input.text.trim(
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const WELCOME_BACK = "Welcome back! Let's continue where you left off.";
-const NOT_REGISTERED = "You're not registered as a donor yet. Reply REGISTER to register. It takes about 2 minutes.";
+const NOT_REGISTERED = "You're not registered as a donor yet. Reply REGISTER to register. It takes about 2 minutes.\nNeed blood for a patient? Reply REQUEST.";
 
 function registrationIntro(phoneE164: string) {
   return `Welcome to MarutiX 🩸 Let's register you as a voluntary blood donor. It takes about 2 minutes.\nWe'll use this WhatsApp number (${maskPhone(phoneE164)}), so you don't need to type it.`;
@@ -65,7 +64,7 @@ function completionText(data: CompletedOnboarding): string {
     data.notificationConsent
       ? "We'll message you only about emergency blood requests near you. Reply PAUSE to pause alerts, or STOP to stop all messages."
       : "You chose not to receive alerts. You can turn them on any time: reply UPDATE.",
-    "Reply STATUS to see your details or UPDATE to change them. To manage your profile on the website, sign in at MarutiX with this number.",
+    "Reply PROFILE to see your details or UPDATE to change them. To manage your profile on the website, sign in at MarutiX with this number.",
     "Registering isn't a medical eligibility check. A licensed blood centre always makes that decision.",
   ].join("\n");
 }
@@ -79,6 +78,24 @@ async function menuSentRecently(phoneLookup: string, now: Date) {
   return (await NotificationEvent.exists({ recipientLookup: phoneLookup, templateName: "bot_menu", createdAt: { $gte: new Date(now.getTime() - DAY_MS) } })) !== null;
 }
 
+/** STATUS: availability and alert preference at a glance. */
+async function availabilityText(userId: Types.ObjectId): Promise<string> {
+  const p = (await getDonorOverview(userId)).profile;
+  if (!p) return NOT_REGISTERED;
+  const alerts = { active: "On", paused: "Paused", opted_out: "Off", not_enabled: "Off" }[p.notifications.status];
+  return [
+    `Available to donate: ${p.availableForRequests ? "Yes" : "Not right now"}`,
+    `Emergency alerts: ${alerts}`,
+    p.notifications.status === "active"
+      ? "Reply PAUSE to pause alerts."
+      : p.notifications.status === "paused"
+        ? "Reply RESUME to turn alerts back on."
+        : "Reply UPDATE and choose 7 to turn alerts on.",
+    "Reply PROFILE for all your details.",
+  ].join("\n");
+}
+
+/** PROFILE: the donor's full details. */
 async function statusText(userId: Types.ObjectId): Promise<string> {
   const overview = await getDonorOverview(userId);
   const p = overview.profile;
@@ -115,7 +132,7 @@ async function completeRegistration(msg: InboundMessage, data: CompletedOnboardi
     await registerDonor(user._id, input, { requestId: randomUUID() });
   } catch (error) {
     if (error instanceof AppError && error.code === "DONOR_ALREADY_REGISTERED") {
-      return { replies: ["You're already registered as a MarutiX donor, so nothing was changed. Reply STATUS to see your details."], userId: user._id };
+      return { replies: ["You're already registered as a MarutiX donor, so nothing was changed. Reply PROFILE to see your details."], userId: user._id };
     }
     throw error;
   }
@@ -154,8 +171,8 @@ export async function handleBotMessage(msg: InboundMessage, now = new Date()): P
   const keyword = keywordOf(msg.input);
   const conversation = await loadConversation(phoneLookup);
 
-  // 1. A conversation is in progress: the state machine handles it.
-  if (conversation?.status === "active") {
+  // 1. A donor conversation is in progress: the state machine handles it.
+  if (conversation?.status === "active" && isDonorFlow(conversation.flow)) {
     const snapshot = toSnapshot(conversation);
     if (snapshot.flow === "donor_onboarding" && REGISTER_WORDS.has(keyword)) {
       await reply(msg, ["You're already registering. Let's continue.", promptFor(snapshot)]);
@@ -220,6 +237,10 @@ export async function handleBotMessage(msg: InboundMessage, now = new Date()): P
     return "command";
   }
   if (keyword === "STATUS") {
+    await reply(msg, [user ? await availabilityText(user._id) : NOT_REGISTERED], user?._id);
+    return "command";
+  }
+  if (keyword === "PROFILE" || keyword === "MY PROFILE") {
     await reply(msg, [user ? await statusText(user._id) : NOT_REGISTERED], user?._id);
     return "command";
   }
@@ -264,7 +285,7 @@ export async function handleBotMessage(msg: InboundMessage, now = new Date()): P
     await reply(
       msg,
       [
-        "MarutiX: we've received your blood request. Use the tracking link from your confirmation to see its status. Our team is verifying it with the hospital.\nKeep working with the hospital's blood bank, and call 112 if life is at risk.\nReply REGISTER if you'd like to become a donor, or STOP to stop messages.",
+        "MarutiX: we've received your blood request. Reply TRACK to see its status. Our team verifies every request with the hospital.\nKeep working with the hospital's blood bank, and call 112 if life is at risk.\nReply REGISTER if you'd like to become a donor, or STOP to stop messages.",
       ],
       undefined,
       "bot_menu",
@@ -280,15 +301,4 @@ export async function handleBotMessage(msg: InboundMessage, now = new Date()): P
   await beginConversation({ phoneLookup, snapshot, userId: user?._id, now });
   await reply(msg, [promptFor(snapshot)]);
   return "welcome";
-}
-
-/** Processes a message, retrying once if another message for the same number raced it. */
-export async function processBotMessage(msg: InboundMessage, now = new Date()): Promise<BotAction> {
-  try {
-    return await handleBotMessage(msg, now);
-  } catch (error) {
-    if (!(error instanceof ConversationConflictError)) throw error;
-    logger.warn("bot.conversation_conflict_retry");
-    return handleBotMessage(msg, now);
-  }
 }

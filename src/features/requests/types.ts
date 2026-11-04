@@ -3,7 +3,7 @@ import type { Component, Priority, RequestStatus } from "@/features/requests/sch
 
 /** API views for emergency requests. Browser-safe. */
 
-export type HistoryActor = "requester" | "admin" | "system";
+export type HistoryActor = "requester" | "admin" | "institution" | "system";
 
 export interface PublicHistoryEntry {
   status: RequestStatus;

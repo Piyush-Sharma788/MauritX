@@ -103,13 +103,42 @@ These require the `admin` role.
 | POST | `/admin/requests/:publicRequestId/status` | `{ "status", "note"? }`. Allowed transitions only (`409 INVALID_TRANSITION` otherwise) |
 | DELETE | `/admin/requests/:publicRequestId/share-links/:linkId` | Turn off any tracking link |
 
+### Admin: coordination (Phase 5)
+All require the `admin` role, mutations must be same-origin, and every change is audit-logged.
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| GET | `/admin/requests/:id/coordination` | Alert counts by status, latest donor search, responses |
+| POST | `/admin/requests/:id/matching` | `{ "radiusKm": 5 \| 10 \| 25 \| 50 }`. Runs a deterministic donor search and saves it. `201`. `409 INVALID_TRANSITION` unless the request is active or partially fulfilled |
+| POST | `/admin/requests/:id/alerts` | `{ "matchingRunId" }`. Queues the next `ALERT_BATCH_SIZE` alerts in rank order (`202`). Errors: `409 ALERTS_PAUSED`, `ALERT_LIMIT_REACHED`, `MATCHING_REQUIRED` |
+| POST | `/admin/requests/:id/institution` | `{ "institutionId": "<id>" \| null }`. Links a verified institution. `409 INSTITUTION_NOT_VERIFIED` otherwise |
+| POST | `/admin/requests/:id/responses/:responseId/status` | `{ "status", "note"? }`. Moves a donor response forward one step. `409 INVALID_TRANSITION` |
+| GET | `/admin/institutions` | List institutions |
+| POST | `/admin/institutions` | `{ type, legalName, displayName, address, city, locality, publicPhone?, licenceReference? }`. Created as `pending`. `201` |
+| GET | `/admin/institutions/:id` | Details, masked contacts, availability reports and linked open requests |
+| POST | `/admin/institutions/:id/status` | `{ "verificationStatus": "pending" \| "verified" \| "rejected" \| "suspended", "note"? }` |
+| POST | `/admin/institutions/:id/contacts` | `{ name, phone, role: "coordinator" \| "staff" }`. Added as `pending`. `409 PHONE_IN_USE` if the number already belongs to an institution |
+| POST | `/admin/institutions/:id/contacts/:contactId` | `{ "status": "pending" \| "verified" \| "revoked" }` |
+| GET | `/admin/operations` | Live counts: WhatsApp state, bot and AI counters, queue, coordination, institutions |
+| PATCH | `/admin/operations/settings` | `{ "botEnabled"?, "alertsPaused"? }`. With the bot off, only STOP is processed |
+| GET | `/admin/operations/failed-messages` | Recent failures (masked), each marked retryable or not |
+| POST | `/admin/messages/:messageId/retry` | Re-queue a failed emergency alert that certainly wasn't delivered (`EXPIRED`, `NOT_CONNECTED`, `SEND_FAILED`, `PROVIDER_ACK_ERROR`) while its request is active. `409 NOT_RETRYABLE` otherwise |
+| GET | `/admin/conversations?cursor=` | Conversation metadata: flow, step, status, masked number. No message content is stored. Each view is audit-logged |
+| GET | `/admin/audit?action=&cursor=&limit=` | Audit events, newest first, cursor-paginated |
+
+Donor phone numbers appear in responses only after that donor agreed to share them for that request.
+
 ## Responses
+*Planned for the website. In Phase 5 donors respond on WhatsApp (WHATSAPP_BOT.md §10.3), and responses are managed through the admin endpoints above.*
+
 | Method | Endpoint | Purpose |
 |---|---|---|
 | POST | `/requests/:id/responses` | Donor/institution response |
 | POST | `/responses/:id/contact-consent` | Consent to share contact details |
 
 ## Institutions
+*Planned for an institutional portal (Phase 6). In Phase 5 verified institutions use WhatsApp commands (WHATSAPP_BOT.md §10.6) and admins manage them through `/admin/institutions`.*
+
 | Method | Endpoint | Purpose |
 |---|---|---|
 | POST | `/institutions/applications` | Apply for verification |

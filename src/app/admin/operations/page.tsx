@@ -1,0 +1,163 @@
+import type { Metadata } from "next";
+import { randomUUID } from "node:crypto";
+import { Types } from "mongoose";
+import Link from "next/link";
+import { notFound, redirect } from "next/navigation";
+import { Suspense } from "react";
+import { BotSwitches, RetryMessageButton } from "@/components/admin/admin-actions";
+import { Card, EmptyState, PageHeader, Pill, Stat } from "@/components/admin/kit";
+import { formatIST } from "@/components/requests/status";
+import { Spinner } from "@/components/ui/button";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { getOperationsOverview, listConversations, listFailedMessages } from "@/server/admin/operations";
+
+export const metadata: Metadata = { title: "Operations · Admin", robots: { index: false } };
+
+export default function OperationsPage() {
+  return (
+    <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-12">
+      <PageHeader eyebrow="Control centre" title="Operations" />
+      <Suspense fallback={<div className="flex min-h-64 items-center justify-center text-ink-muted" role="status"><Spinner className="size-6" /><span className="sr-only">Loading</span></div>}>
+        <OperationsContent />
+      </Suspense>
+    </div>
+  );
+}
+
+const STATE_LABEL = { connected: "Connected", connecting: "Connecting", qr_required: "Waiting for QR scan", disconnected: "Disconnected", auth_failed: "Session rejected" } as const;
+const FLOW_LABEL: Record<string, string> = {
+  donor_onboarding: "Donor registration",
+  donor_update: "Donor update",
+  emergency_request: "Blood request",
+  request_cancel: "Cancellation",
+  donor_response: "Alert reply",
+};
+
+async function OperationsContent() {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  if (user.role !== "admin") notFound();
+
+  const [o, failed, { conversations }] = await Promise.all([
+    getOperationsOverview(),
+    listFailedMessages(15),
+    listConversations(new Types.ObjectId(user.id), randomUUID(), undefined, 15),
+  ]);
+  const wa = o.whatsapp;
+  const waTone = wa.workerOnline && wa.state === "connected" ? "good" : wa.state === "qr_required" ? "warn" : "bad";
+
+  return (
+    <div className="mt-8 space-y-6">
+      <div className="grid gap-5 lg:grid-cols-[1.1fr_1fr]">
+        <Card
+          title="WhatsApp connection"
+          id="wa"
+          note="Pilot via whatsapp-web.js. Delivery is never guaranteed; only acknowledged deliveries are counted."
+          actions={<Link href="/admin/whatsapp" className="rounded-full px-3 py-1.5 text-sm font-semibold text-brand-600 hover:bg-brand-50">QR, reconnect & logout →</Link>}
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <Pill tone={waTone}>{wa.workerOnline ? STATE_LABEL[wa.state] : "Worker offline"}</Pill>
+            {wa.account && <span className="text-sm text-ink-soft">{wa.account.maskedNumber}{wa.account.pushName ? ` · ${wa.account.pushName}` : ""}</span>}
+          </div>
+          <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
+            <div><dt className="text-xs text-ink-muted">Last connected</dt><dd className="font-medium text-ink">{wa.lastReadyAt ? formatIST(wa.lastReadyAt) : "Never"}</dd></div>
+            <div><dt className="text-xs text-ink-muted">Last disconnect</dt><dd className="font-medium text-ink">{wa.lastDisconnectedAt ? `${formatIST(wa.lastDisconnectedAt)}${wa.lastDisconnectReason ? ` (${wa.lastDisconnectReason})` : ""}` : "None"}</dd></div>
+          </dl>
+          {wa.lastError && <p className="mt-3 rounded-xl bg-danger-50 px-3 py-2 text-xs text-danger-600">{wa.lastError}</p>}
+        </Card>
+
+        <Card title="Bot controls" id="controls" note="STOP is always honoured, even with the bot switched off. Changes are audit-logged.">
+          <BotSwitches botEnabled={o.settings.botEnabled} alertsPaused={o.settings.alertsPaused} />
+          <p className="mt-4 text-xs text-ink-muted">
+            AI understanding: {o.ai.provider === "none" ? "off (commands and keywords only)" : `${o.ai.provider} · ${o.ai.model}`}. AI only proposes; the bot validates and acts.
+          </p>
+        </Card>
+      </div>
+
+      <Card title="Bot activity" id="bot" note="Counted from stored records. Inbound counts start from when this version was deployed.">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
+          <Stat label="Active conversations" value={o.bot.activeConversations} />
+          <Stat label="Messages today" value={o.bot.inboundToday} />
+          <Stat label="Messages, 7 days" value={o.bot.inbound7Days} />
+          <Stat label="Dropped (bot off)" value={o.bot.droppedWhileDisabled7Days} hint="7 days" tone={o.bot.droppedWhileDisabled7Days ? "warn" : "neutral"} />
+          <Stat label="Bot errors" value={o.bot.botErrors7Days} hint="7 days" tone={o.bot.botErrors7Days ? "bad" : "neutral"} />
+          <Stat label="AI calls" value={o.bot.aiCalls7Days} hint="7 days" />
+          <Stat label="AI errors" value={o.bot.aiErrors7Days} hint="7 days" tone={o.bot.aiErrors7Days ? "bad" : "neutral"} />
+          <Stat label="AI output rejected" value={o.bot.aiRejected7Days} hint="7 days" tone={o.bot.aiRejected7Days ? "warn" : "neutral"} />
+        </div>
+      </Card>
+
+      <div className="grid gap-5 lg:grid-cols-2">
+        <Card title="Notification queue" id="queue">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Stat label="Queued" value={o.queue.queued} />
+            <Stat label="Sending" value={o.queue.sending} />
+            <Stat label="Failed, 24 h" value={o.queue.failed24h} tone={o.queue.failed24h ? "bad" : "neutral"} />
+            <Stat label="Suppressed, 24 h" value={o.queue.suppressed24h} hint="consent / limits" />
+          </div>
+        </Card>
+        <Card title="Institutions" id="inst" actions={<Link href="/admin/institutions" className="rounded-full px-3 py-1.5 text-sm font-semibold text-brand-600 hover:bg-brand-50">Manage →</Link>}>
+          <div className="grid grid-cols-2 gap-3">
+            <Stat label="Verified" value={o.institutions.verified} tone="good" />
+            <Stat label="Awaiting verification" value={o.institutions.pending} tone={o.institutions.pending ? "warn" : "neutral"} />
+          </div>
+        </Card>
+      </div>
+
+      <Card title="Emergency coordination" id="coord" note="Interest is not a donation. Donations count only when a coordinator confirms them. Alert figures cover the last 7 days.">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          <Stat label="Pending verification" value={o.coordination.pendingVerification} tone={o.coordination.pendingVerification ? "warn" : "neutral"} />
+          <Stat label="Verified, not active" value={o.coordination.verifiedRequests} />
+          <Stat label="Active" value={o.coordination.activeRequests} />
+          <Stat label="Alerts attempted" value={o.coordination.alertsAttempted7Days} />
+          <Stat label="Alerts delivered" value={o.coordination.alertsDelivered7Days} hint="acknowledged by WhatsApp" />
+          <Stat label="Donors interested" value={o.coordination.interested7Days} />
+          <Stat label="Unavailable replies" value={o.coordination.unavailable7Days} />
+          <Stat label="Donations confirmed" value={o.coordination.donationsConfirmed7Days} tone="good" />
+          <Stat label="Requests fulfilled" value={o.coordination.fulfilled7Days} tone="good" />
+        </div>
+      </Card>
+
+      <div className="grid gap-5 lg:grid-cols-2">
+        <Card title="Failed messages" id="failed" note="Only emergency alerts that certainly weren't delivered can be retried, and only while the request is active.">
+          {failed.length === 0 ? (
+            <EmptyState>No failed messages.</EmptyState>
+          ) : (
+            <ul className="divide-y divide-line text-sm">
+              {failed.map((m) => (
+                <li key={m.id} className="flex flex-wrap items-center justify-between gap-3 py-2.5">
+                  <span>
+                    <span className="font-medium text-ink">{m.kind.replace(/_/g, " ")}</span>
+                    <span className="block text-xs text-ink-muted">
+                      {m.recipient} · {m.failureCode ?? "unknown"} · {m.attempts} attempt{m.attempts === 1 ? "" : "s"}{m.failedAt ? ` · ${formatIST(m.failedAt)}` : ""}{m.requestPublicId ? ` · ${m.requestPublicId}` : ""}
+                    </span>
+                  </span>
+                  {m.retryable && <RetryMessageButton messageId={m.id} />}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+
+        <Card title="Conversations" id="convos" note="Flow and step only. Message text is never stored. Viewing this list is audit-logged.">
+          {conversations.length === 0 ? (
+            <EmptyState>No conversations yet.</EmptyState>
+          ) : (
+            <ul className="divide-y divide-line text-sm">
+              {conversations.map((c) => (
+                <li key={c.id} className="flex items-center justify-between gap-3 py-2.5">
+                  <span>
+                    <span className="font-medium text-ink">{FLOW_LABEL[c.flow] ?? c.flow}</span>
+                    <span className="block text-xs text-ink-muted">{c.maskedPhone} · step “{c.state.replace(/_/g, " ")}” · {formatIST(c.updatedAt)}</span>
+                  </span>
+                  <Pill tone={c.status === "active" ? "brand" : c.status === "completed" ? "good" : "neutral"}>{c.status}</Pill>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="mt-3 text-xs"><Link href="/admin/audit" className="font-semibold text-brand-600 hover:text-brand-700">Audit history →</Link></p>
+        </Card>
+      </div>
+    </div>
+  );
+}

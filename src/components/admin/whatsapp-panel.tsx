@@ -413,6 +413,7 @@ const KIND_LABELS: Record<MessageLogEntry["kind"], string> = {
   help_reply: "HELP reply",
   bot_reply: "Bot reply",
   request_confirmation: "Request confirmation",
+  coordinator_alert: "Coordinator alert",
 };
 
 function MessageLog({ messages, onRefresh }: { messages: MessageLogEntry[]; onRefresh: () => Promise<void> }) {

@@ -33,6 +33,9 @@ export interface EnqueueInput {
   recipientUserId?: Types.ObjectId;
   requestedBy?: Types.ObjectId;
   requestId?: string;
+  matchingRunId?: Types.ObjectId;
+  /** Overrides WHATSAPP_WEB_MESSAGE_TTL_MINUTES for this message. */
+  ttlMs?: number;
   /** Record a `suppressed` event when ineligible (donor-facing kinds), instead of nothing. */
   recordSuppressed: boolean;
 }
@@ -62,6 +65,8 @@ export async function enqueueMessage(input: EnqueueInput, now = new Date()): Pro
     phoneLookup,
     recipientUserId: input.recipientUserId,
     testRecipients: config.testRecipients,
+    requestId: input.requestId,
+    stage: "enqueue",
   });
 
   const base = {
@@ -70,6 +75,7 @@ export async function enqueueMessage(input: EnqueueInput, now = new Date()): Pro
     kind: input.kind,
     templateName: input.templateName,
     requestId: input.requestId,
+    ...(input.matchingRunId ? { matchingRunId: input.matchingRunId } : {}),
     recipientUserId: eligibility.ok ? (eligibility.recipientUserId ?? input.recipientUserId) : input.recipientUserId,
     recipientLookup: phoneLookup,
     recipientPhoneEncrypted: encryptPii(input.phoneE164),
@@ -77,7 +83,7 @@ export async function enqueueMessage(input: EnqueueInput, now = new Date()): Pro
     requestedBy: input.requestedBy,
     priority: CONVERSATIONAL_KINDS.includes(input.kind) ? 0 : 1,
     nextAttemptAt: now,
-    expiresAt: new Date(now.getTime() + config.messageTtlMs),
+    expiresAt: new Date(now.getTime() + (input.ttlMs ?? config.messageTtlMs)),
   };
 
   try {
@@ -167,25 +173,43 @@ export async function queueDonorTextMessage(input: {
 }
 
 /**
- * One emergency alert to one consented, available donor. Deduplicated per
- * (request, donor), so retries or repeated matching runs never re-alert.
- * Broadcast/wave orchestration is a later phase and is deliberately absent.
+ * One emergency alert to one consented, available donor, for a request an
+ * admin verified and activated. Deduplicated per (request, donor), so retried
+ * batches or repeated matching runs never re-alert. Batches are created only
+ * by an admin (server/coordination/alerts.ts).
  */
 export async function queueEmergencyRequestNotification(input: {
   requestId: string;
   donorUserId: Types.ObjectId;
   summary: EmergencyRequestSummary;
+  matchingRunId?: Types.ObjectId;
+  ttlMs?: number;
 }): Promise<EnqueueResult> {
   const body = emergencyRequestText(input.summary);
   const phone = await donorPhone(input.donorUserId);
   if (!phone) return { outcome: "suppressed", messageId: null, status: "suppressed", reason: "NO_ACCOUNT" };
   return enqueueMessage({
     kind: "emergency_request",
-    templateName: "donor_request_v1",
+    templateName: "emergency_alert_v2",
     phoneE164: phone,
     body,
     idempotencyKey: `emergency_request:${input.requestId}:${input.donorUserId.toString()}`,
     recipientUserId: input.donorUserId,
+    requestId: input.requestId,
+    matchingRunId: input.matchingRunId,
+    ttlMs: input.ttlMs,
+    recordSuppressed: true,
+  });
+}
+
+/** A message to a verified institution contact about a request they coordinate. */
+export async function queueCoordinatorAlert(input: { requestId: string; phoneE164: string; body: string; idempotencyKey: string }): Promise<EnqueueResult> {
+  return enqueueMessage({
+    kind: "coordinator_alert",
+    templateName: "coordinator_alert_v1",
+    phoneE164: input.phoneE164,
+    body: input.body,
+    idempotencyKey: `coordinator_alert:${input.idempotencyKey}`,
     requestId: input.requestId,
     recordSuppressed: true,
   });

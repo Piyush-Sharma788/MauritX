@@ -16,6 +16,7 @@
     "admin:revoke": "tsx --conditions=react-server --env-file=.env.local scripts/admin-role.ts revoke"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.4.0",
     "mongoose": "^9.11.4",
     "next": "16.4.5",
     "qrcode": "^1.5.4",

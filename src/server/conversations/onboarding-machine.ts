@@ -108,7 +108,7 @@ function summary(d: OnboardingData): string {
 const STEPS: { [S in OnboardingState]: Step<never> } = {
   await_start: {
     prompt: () =>
-      "Welcome to MarutiX 🩸\nWould you like to register as a voluntary blood donor? It takes about 2 minutes.\nReply YES or NO.",
+      "Welcome to MarutiX 🩸\nWould you like to register as a voluntary blood donor? It takes about 2 minutes.\nReply YES or NO.\n\nNeed blood for a patient? Reply REQUEST instead.",
     parse: textStep((t) => {
       const v = parseYesNo(t);
       return v === null ? fail("Please reply YES or NO.") : ok(v);

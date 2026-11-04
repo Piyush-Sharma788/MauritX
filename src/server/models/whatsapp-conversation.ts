@@ -1,16 +1,19 @@
 import { Schema, Types, model, models, type InferSchemaType, type Model } from "mongoose";
 
 export const CONVERSATION_STATUSES = ["active", "completed", "cancelled"] as const;
+export const CONVERSATION_FLOWS = ["donor_onboarding", "donor_update", "emergency_request", "request_cancel", "donor_response"] as const;
+export type ConversationFlowName = (typeof CONVERSATION_FLOWS)[number];
 
 /**
- * `whatsapp_conversations`: saved progress of the WhatsApp donor bot
- * (registration or UPDATE), one per phone number. Answers are stored encrypted (`dataEncrypted`).
+ * `whatsapp_conversations`: saved progress of a WhatsApp bot flow (donor
+ * registration or UPDATE, an emergency request, a cancellation, or a donor's
+ * reply to an alert), one active flow per phone number. Answers are stored encrypted (`dataEncrypted`).
  * `version` provides optimistic concurrency so two messages can't race.
  */
 const whatsAppConversationSchema = new Schema(
   {
     phoneLookup: { type: String, required: true },
-    flow: { type: String, enum: ["donor_onboarding", "donor_update"], required: true },
+    flow: { type: String, enum: CONVERSATION_FLOWS, required: true },
     status: { type: String, enum: CONVERSATION_STATUSES, required: true },
     state: { type: String, required: true },
     history: { type: [String], default: [] },

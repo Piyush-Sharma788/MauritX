@@ -1,8 +1,15 @@
 import "server-only";
 import type { Types } from "mongoose";
-import type { MessageKind } from "@/features/whatsapp/types";
+import { Types as MongooseTypes } from "mongoose";
+import { ALERTABLE_STATUSES } from "@/features/coordination/schemas";
+import type { MessageKind, MessageStatus } from "@/features/whatsapp/types";
+import { getCoordinationConfig } from "@/lib/coordination/config";
 import { DonorProfile } from "@/server/models/donor-profile";
+import { EmergencyRequest } from "@/server/models/emergency-request";
+import { Institution } from "@/server/models/institution";
+import { InstitutionContact } from "@/server/models/institution-contact";
 import { MessagingOptOut } from "@/server/models/messaging-opt-out";
+import { NotificationEvent } from "@/server/models/notification-event";
 import { User } from "@/server/models/user";
 
 export type IneligibleReason =
@@ -12,7 +19,10 @@ export type IneligibleReason =
   | "NO_CONSENT"
   | "PAUSED"
   | "NOT_AVAILABLE"
-  | "NOT_TEST_RECIPIENT";
+  | "NOT_TEST_RECIPIENT"
+  | "REQUEST_NOT_ALERTABLE"
+  | "FREQUENCY_CAP"
+  | "NOT_VERIFIED_INSTITUTION";
 
 export type Eligibility = { ok: true; recipientUserId?: Types.ObjectId } | { ok: false; reason: IneligibleReason };
 
@@ -22,6 +32,37 @@ interface EligibilityInput {
   phoneLookup: string;
   recipientUserId?: Types.ObjectId;
   testRecipients: Set<string>;
+  /** The emergency request an alert is about (emergency_request, coordinator_alert). */
+  requestId?: string | null;
+  /** "enqueue" counts queued alerts towards the daily cap; "dispatch" counts only sent ones. */
+  stage?: "enqueue" | "dispatch";
+}
+
+/** Alerts only for a request that still exists, is verified and active, and hasn't expired. */
+async function requestAlertable(requestId: string | null | undefined, now = new Date()): Promise<boolean> {
+  if (!requestId || !MongooseTypes.ObjectId.isValid(requestId)) return false;
+  const request = await EmergencyRequest.findById(requestId, { status: 1, expiresAt: 1 }).lean();
+  return Boolean(request && (ALERTABLE_STATUSES as readonly string[]).includes(request.status) && request.expiresAt > now);
+}
+
+/** No donor gets more than ALERT_MAX_PER_DONOR_PER_DAY emergency alerts in 24 hours. */
+async function underDailyCap(phoneLookup: string, stage: "enqueue" | "dispatch", now = new Date()): Promise<boolean> {
+  const statuses: MessageStatus[] = stage === "enqueue" ? ["queued", "sending", "sent", "delivered", "read"] : ["sent", "delivered", "read"];
+  const count = await NotificationEvent.countDocuments({
+    recipientLookup: phoneLookup,
+    kind: "emergency_request",
+    status: { $in: statuses },
+    createdAt: { $gte: new Date(now.getTime() - 24 * 60 * 60 * 1000) },
+  });
+  return count < getCoordinationConfig().alertMaxPerDonorPerDay;
+}
+
+/** A verified contact of a verified institution. A number alone never qualifies. */
+export async function verifiedInstitutionContact(phoneLookup: string) {
+  const contact = await InstitutionContact.findOne({ phoneLookup, status: "verified" }).lean();
+  if (!contact) return null;
+  const institution = await Institution.findOne({ _id: contact.institutionId, verificationStatus: "verified" }).lean();
+  return institution ? { contact, institution } : null;
 }
 
 export async function isOptedOut(phoneLookup: string): Promise<boolean> {
@@ -77,8 +118,15 @@ export async function checkEligibility(input: EligibilityInput): Promise<Eligibi
         : { ok: false, reason: "NOT_TEST_RECIPIENT" };
     case "donor_text":
       return donorConsent(input.phoneLookup, input.recipientUserId, { requireAvailability: false, allowPaused: false });
-    case "emergency_request":
-      return donorConsent(input.phoneLookup, input.recipientUserId, { requireAvailability: true, allowPaused: false });
+    case "emergency_request": {
+      if (!(await requestAlertable(input.requestId))) return { ok: false, reason: "REQUEST_NOT_ALERTABLE" };
+      const consent = await donorConsent(input.phoneLookup, input.recipientUserId, { requireAvailability: true, allowPaused: false });
+      if (!consent.ok) return consent;
+      if (!(await underDailyCap(input.phoneLookup, input.stage ?? "enqueue"))) return { ok: false, reason: "FREQUENCY_CAP" };
+      return consent;
+    }
+    case "coordinator_alert":
+      return (await verifiedInstitutionContact(input.phoneLookup)) ? { ok: true } : { ok: false, reason: "NOT_VERIFIED_INSTITUTION" };
     default: {
       const unhandled: never = input.kind;
       throw new Error(`Unhandled message kind: ${String(unhandled)}`);

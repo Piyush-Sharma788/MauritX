@@ -4,6 +4,7 @@ import { Types } from "mongoose";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Suspense, type ReactNode } from "react";
+import { CoordinationPanel } from "@/components/admin/coordination-panel";
 import { RequestStatusActions, RevokeLinkButton } from "@/components/admin/request-actions";
 import { StatusBadge, StatusTimeline, formatIST } from "@/components/requests/status";
 import { Spinner } from "@/components/ui/button";
@@ -13,6 +14,9 @@ import { COMPONENT_LABELS, PRIORITY_LABELS, publicRequestIdSchema } from "@/feat
 import { AppError } from "@/lib/api/errors";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { maskPhone } from "@/lib/validation/phone";
+import { getCoordinationConfig } from "@/lib/coordination/config";
+import { getRequestCoordination } from "@/server/coordination/admin";
+import { listInstitutions } from "@/server/institutions/service";
 import { getAdminRequestDetail } from "@/server/requests/service";
 
 export const metadata: Metadata = { title: "Request · Admin", robots: { index: false } };
@@ -68,6 +72,8 @@ async function DetailContent({ params }: Pick<PageProps<"/admin/requests/[public
     throw error;
   }
 
+  const [coordination, institutions] = await Promise.all([getRequestCoordination(r.publicRequestId), listInstitutions({ status: "verified" })]);
+
   return (
     <div className="mt-4 space-y-5">
       <header className="flex flex-col gap-4 rounded-[var(--radius-card)] border border-line bg-surface p-6 shadow-soft sm:flex-row sm:items-start sm:justify-between sm:p-8">
@@ -91,6 +97,17 @@ async function DetailContent({ params }: Pick<PageProps<"/admin/requests/[public
 
       <Card title="Update status" note="Verify only after confirming with the hospital or blood bank. Changes are recorded in the history and audit log.">
         <RequestStatusActions publicRequestId={r.publicRequestId} allowed={r.allowedStatuses} />
+      </Card>
+
+      <Card title="Donor coordination" note="Alerts go only to consenting donors, in small batches you send yourself, and only while the request is active.">
+        <CoordinationPanel
+          publicRequestId={r.publicRequestId}
+          summary={coordination.summary}
+          latestRun={coordination.latestRun}
+          responses={coordination.responses}
+          institutions={institutions.map((i) => ({ id: i.id, displayName: i.displayName, city: i.city }))}
+          batchSize={getCoordinationConfig().alertBatchSize}
+        />
       </Card>
 
       <div className="grid gap-5 lg:grid-cols-2">
