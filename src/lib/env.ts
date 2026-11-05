@@ -1,4 +1,5 @@
 import "server-only";
+import { definedEnv } from "@/lib/config/env-source";
 import { z } from "zod";
 
 const secret = (name: string) =>
@@ -63,7 +64,7 @@ let cached: ServerEnv | undefined;
 /** Validated server environment. Throws a descriptive error on misconfiguration. */
 export function getEnv(): ServerEnv {
   if (cached) return cached;
-  const parsed = envSchema.safeParse(process.env);
+  const parsed = envSchema.safeParse(definedEnv());
   if (!parsed.success) {
     const issues = parsed.error.issues.map((i) => `  - ${i.path.join(".") || "env"}: ${i.message}`);
     throw new Error(`Invalid server environment configuration:\n${issues.join("\n")}`);

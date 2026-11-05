@@ -8,6 +8,7 @@ import { connectToDatabase } from "@/lib/db/mongoose";
 import { encryptPii } from "@/lib/security/crypto";
 import { loadRun, RETRYABLE_FAILURES } from "@/server/matching/service";
 import { queueEmergencyRequestNotification } from "@/server/messaging/queue";
+import { emergencyAlertParams } from "@/server/messaging/cloud-templates";
 import { emergencyRequestText, type EmergencyRequestSummary } from "@/server/messaging/templates";
 import { EmergencyRequest, type EmergencyRequestDoc } from "@/server/models/emergency-request";
 import { NotificationEvent } from "@/server/models/notification-event";
@@ -122,6 +123,7 @@ export async function requeueUndeliveredAlert(
       $set: {
         status: "queued",
         bodyEncrypted: encryptPii(emergencyRequestText({ ...alertSummary(request), distanceKm })),
+        templateParamsEncrypted: encryptPii(JSON.stringify(emergencyAlertParams({ ...alertSummary(request), distanceKm }))),
         attempts: 0,
         nextAttemptAt: now,
         expiresAt: new Date(now.getTime() + getCoordinationConfig().alertTtlMs),

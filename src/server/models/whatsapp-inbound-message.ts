@@ -7,6 +7,8 @@ import { Schema, model, models, type InferSchemaType, type Model } from "mongoos
 const whatsAppInboundMessageSchema = new Schema(
   {
     providerMessageId: { type: String, required: true },
+    // Keyed hash of the sender: their latest message opens the Cloud API's 24-hour reply window.
+    phoneLookup: { type: String },
     receivedAt: { type: Date, required: true },
     expiresAt: { type: Date, required: true },
   },
@@ -15,6 +17,7 @@ const whatsAppInboundMessageSchema = new Schema(
 
 whatsAppInboundMessageSchema.index({ providerMessageId: 1 }, { unique: true });
 whatsAppInboundMessageSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+whatsAppInboundMessageSchema.index({ phoneLookup: 1, receivedAt: -1 }, { sparse: true });
 
 export type WhatsAppInboundMessageDoc = InferSchemaType<typeof whatsAppInboundMessageSchema>;
 

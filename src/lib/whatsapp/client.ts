@@ -22,7 +22,24 @@ export class WhatsAppApiError extends Error {
   }
 }
 
-type TemplateComponent =
+/**
+ * Graph API error codes that matter for delivery decisions.
+ * https://developers.facebook.com/docs/whatsapp/cloud-api/support/error-codes
+ */
+export const CLOUD_ERROR = {
+  OUTSIDE_SERVICE_WINDOW: 131047, // free-form message more than 24 h after the user's last message
+  UNDELIVERABLE: 131026, // not on WhatsApp, old app, or not accepted terms
+  RATE_LIMIT: 130429, // throughput limit
+  PAIR_RATE_LIMIT: 131056, // too many messages to one number
+  SPAM_RATE_LIMIT: 131048,
+  TEMPLATE_NOT_FOUND: 132001,
+  TEMPLATE_PARAMS: 132000,
+  ACCESS_TOKEN: 190,
+} as const;
+
+const RETRYABLE_CODES = new Set<number>([CLOUD_ERROR.RATE_LIMIT, CLOUD_ERROR.PAIR_RATE_LIMIT, CLOUD_ERROR.SPAM_RATE_LIMIT, 131000, 131016]);
+
+export type TemplateComponent =
   | { type: "body"; parameters: { type: "text"; text: string }[] }
   | { type: "button"; sub_type: "url"; index: string; parameters: { type: "text"; text: string }[] };
 
@@ -48,8 +65,10 @@ async function postMessage(config: WhatsAppConfig, payload: unknown): Promise<{ 
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       cache: "no-store",
     });
-  } catch {
-    throw new WhatsAppApiError(null, null, true);
+  } catch (error) {
+    // A timeout may still have reached Meta, so it is never retried (no duplicate messages or codes).
+    const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+    throw new WhatsAppApiError(null, null, !timedOut);
   }
 
   const body = (await response.json().catch(() => null)) as
@@ -57,10 +76,34 @@ async function postMessage(config: WhatsAppConfig, payload: unknown): Promise<{ 
     | null;
 
   if (!response.ok) {
-    const retryable = response.status >= 500 || response.status === 429;
-    throw new WhatsAppApiError(response.status, body?.error?.code ?? null, retryable);
+    const code = body?.error?.code ?? null;
+    const retryable = response.status >= 500 || response.status === 429 || (code !== null && RETRYABLE_CODES.has(code));
+    throw new WhatsAppApiError(response.status, code, retryable);
   }
   return { messageId: body?.messages?.[0]?.id };
+}
+
+/** A free-form text message. Allowed only within 24 hours of the person's last message to us. */
+export async function sendTextMessage(config: WhatsAppConfig, input: { to: string; body: string }) {
+  // Single attempt: the outbox dispatcher owns retries, so a timeout never becomes a duplicate.
+  return postMessage(config, {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to: input.to.replace(/^\+/, ""),
+    type: "text",
+    text: { preview_url: false, body: input.body },
+  });
+}
+
+/** One template send without the built-in retry (the outbox dispatcher retries). */
+export async function sendTemplateOnce(config: WhatsAppConfig, input: SendTemplateInput) {
+  return postMessage(config, {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to: input.to.replace(/^\+/, ""),
+    type: "template",
+    template: { name: input.templateName, language: { code: input.languageCode }, components: input.components },
+  });
 }
 
 export async function sendTemplateMessage(config: WhatsAppConfig, input: SendTemplateInput) {

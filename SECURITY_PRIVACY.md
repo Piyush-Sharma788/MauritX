@@ -68,6 +68,18 @@ Collect the minimum data necessary. Avoid patient names, diagnoses, government I
 - **Third-party services.** OpenStreetMap (Overpass, Nominatim) receives the search area and the hospital address for geocoding. That address is institutional, but get legal review before production. The SMTP provider receives the outreach emails.
 - **Legal review needed before production:** institutional email outreach (unsolicited-communication rules) and the OpenStreetMap usage policy (identification, rate) or a self-hosted instance.
 
+### Production hardening (2026-11-05)
+- **Startup validation.** The web server (`src/instrumentation.ts`) and both workers refuse to start on invalid or unsafe configuration.
+  - Production requires: HTTPS for `APP_BASE_URL`; secrets that aren't placeholders or low-diversity; distinct secrets; a random encryption key; and complete Cloud API settings, including the App Secret, when that provider is selected.
+  - Empty `KEY=` lines count as unset.
+- **Client IP for rate limits.** It's the `X-Forwarded-For` entry added by our own outermost proxy (`TRUSTED_PROXY_HOPS`, counted from the right), not the client-controlled left side.
+- **Sessions:**
+  - idle timeout: 72 h by default, 2 h for admins;
+  - admin sessions end 12 h after sign-in;
+  - every session ends on a role change, and on a phone change (except the session making the change);
+  - revocations record a reason.
+- **WhatsApp webhooks** are accepted only with a valid HMAC-SHA256 signature over the raw body.
+
 ## 5. Application security
 - Validate every request with a strict schema and size limits.
 - Use parameterised/typed database operations; never accept raw MongoDB operators from clients.
@@ -131,7 +143,7 @@ Collect the minimum data necessary. Avoid patient names, diagnoses, government I
 - [ ] Logs redact personal data and secrets.
 - [ ] Backup restore and incident response tested.
 - [ ] Independent penetration test and legal/clinical review completed.
-- [ ] whatsapp-web.js pilot retired or replaced by the official Cloud API before public launch (WHATSAPP_BOT.md §2a).
+- [ ] whatsapp-web.js pilot retired; Cloud API provider (WHATSAPP_BOT.md §12) tested with the real number, templates approved and `MESSAGING_PROVIDER=whatsapp_cloud`.
 - [ ] Clinical review and approval of the donor matching policy (`policy.ts`).
 - [ ] Legal review and DPA before enabling the AI provider with real users.
 - [ ] Legal review of automated institutional email outreach; SMTP provider DPA; a real operator contact for OpenStreetMap services (or a self-hosted Overpass/Nominatim).

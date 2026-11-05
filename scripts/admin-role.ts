@@ -13,6 +13,7 @@ import { phoneLookupToken } from "@/lib/security/crypto";
 import { maskPhone, normalizeIndianMobile } from "@/lib/validation/phone";
 import { User } from "@/server/models/user";
 import { recordAudit } from "@/server/services/audit";
+import { revokeAllSessions } from "@/server/services/session";
 
 async function main() {
   const [mode, rawPhone] = process.argv.slice(2);
@@ -45,7 +46,9 @@ async function main() {
       resourceType: "user",
       resourceId: user._id.toString(),
     });
-    console.log(`${maskPhone(phone)} is now role "${user.role}". Existing sessions pick this up on their next request.`);
+    // Privilege changes always start from a fresh sign-in.
+    const ended = await revokeAllSessions(user._id, "role_changed");
+    console.log(`${maskPhone(phone)} is now role "${user.role}". Signed out of ${ended} session(s); they must sign in again.`);
   }
   await mongoose.disconnect();
 }

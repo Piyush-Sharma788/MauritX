@@ -1,4 +1,5 @@
 import "server-only";
+import { definedEnv } from "@/lib/config/env-source";
 import { z } from "zod";
 
 /** Institutional outreach email. "none" means no email is sent and outreach says so. */
@@ -38,7 +39,7 @@ let cached: EmailConfig | undefined;
 
 export function getEmailConfig(): EmailConfig {
   if (cached) return cached;
-  const parsed = schema.safeParse(process.env);
+  const parsed = schema.safeParse(definedEnv());
   if (!parsed.success) {
     throw new Error(`Invalid email configuration:\n${parsed.error.issues.map((i) => `  - ${i.path.join(".")}: ${i.message}`).join("\n")}`);
   }

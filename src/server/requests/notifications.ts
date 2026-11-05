@@ -2,6 +2,8 @@ import "server-only";
 import type { Types } from "mongoose";
 import { logger } from "@/lib/logger";
 import { getWhatsAppWebConfig } from "@/lib/whatsapp-web/config";
+import { getMessagingProviderName, getWhatsAppCloudConfig } from "@/lib/whatsapp/cloud-config";
+import { requestConfirmationParams } from "@/server/messaging/cloud-templates";
 import { enqueueMessage } from "@/server/messaging/queue";
 import { readConnectionStatus } from "@/server/whatsapp/connection-store";
 
@@ -32,8 +34,13 @@ export async function queueRequestConfirmation(input: {
   trackUrl: string;
 }): Promise<"queued" | "unavailable" | "suppressed"> {
   try {
-    const status = await readConnectionStatus(getWhatsAppWebConfig());
-    if (!status.workerOnline || status.state !== "connected") return "unavailable";
+    if (getMessagingProviderName() === "whatsapp_cloud") {
+      // The official API has no session to be offline; it only needs its configuration.
+      if (!getWhatsAppCloudConfig()) return "unavailable";
+    } else {
+      const status = await readConnectionStatus(getWhatsAppWebConfig());
+      if (!status.workerOnline || status.state !== "connected") return "unavailable";
+    }
     const result = await enqueueMessage({
       kind: "request_confirmation",
       templateName: "request_confirmation_v1",
@@ -41,6 +48,7 @@ export async function queueRequestConfirmation(input: {
       body: requestConfirmationText(input.publicRequestId, input.trackUrl),
       idempotencyKey: `request_confirmation:${input.requestId.toString()}`,
       requestId: input.requestId.toString(),
+      templateParams: requestConfirmationParams(input.publicRequestId, input.trackUrl),
       recordSuppressed: true,
     });
     return result.outcome === "suppressed" ? "suppressed" : "queued";

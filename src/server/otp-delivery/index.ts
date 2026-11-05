@@ -20,20 +20,33 @@ export interface OtpDeliveryProvider {
  * Sends the code with an approved WhatsApp *authentication* template that has
  * a copy-code button. The code must be passed to both the body and the button.
  */
-function whatsAppProvider(): OtpDeliveryProvider {
+export interface WhatsAppOtpConfig {
+  accessToken: string;
+  phoneNumberId: string;
+  graphApiVersion: string;
+  templateName: string;
+  languageCode: string;
+}
+
+function otpConfigFromEnv(): WhatsAppOtpConfig {
   const env = getEnv();
-  const config = {
+  return {
     accessToken: env.WHATSAPP_ACCESS_TOKEN!,
     phoneNumberId: env.WHATSAPP_PHONE_NUMBER_ID!,
     graphApiVersion: env.WHATSAPP_GRAPH_API_VERSION,
+    templateName: env.WHATSAPP_OTP_TEMPLATE_NAME!,
+    languageCode: env.WHATSAPP_OTP_TEMPLATE_LANGUAGE,
   };
+}
+
+export function whatsAppOtpProvider(config: WhatsAppOtpConfig = otpConfigFromEnv()): OtpDeliveryProvider {
   return {
     channel: "whatsapp",
     async send({ phoneE164, code }) {
       const result = await sendTemplateMessage(config, {
         to: phoneE164,
-        templateName: env.WHATSAPP_OTP_TEMPLATE_NAME!,
-        languageCode: env.WHATSAPP_OTP_TEMPLATE_LANGUAGE,
+        templateName: config.templateName,
+        languageCode: config.languageCode,
         components: [
           { type: "body", parameters: [{ type: "text", text: code }] },
           { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: code }] },
@@ -75,5 +88,5 @@ function developmentProvider(): OtpDeliveryProvider {
 }
 
 export function getOtpDeliveryProvider(): OtpDeliveryProvider {
-  return getEnv().otpProvider === "whatsapp" ? whatsAppProvider() : developmentProvider();
+  return getEnv().otpProvider === "whatsapp" ? whatsAppOtpProvider() : developmentProvider();
 }

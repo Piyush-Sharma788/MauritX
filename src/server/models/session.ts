@@ -10,6 +10,9 @@ const sessionSchema = new Schema(
     userId: { type: Types.ObjectId, ref: "User", required: true },
     expiresAt: { type: Date, required: true },
     revokedAt: { type: Date, default: null },
+    // Last authenticated use, for the idle timeout (updated at most every few minutes).
+    lastSeenAt: { type: Date },
+    revokedReason: { type: String, enum: ["logout", "rotated", "idle", "max_age", "role_changed", "phone_changed"] },
   },
   { collection: "sessions", timestamps: { createdAt: true, updatedAt: false }, strict: "throw" },
 );

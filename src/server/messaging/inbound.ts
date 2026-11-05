@@ -44,9 +44,11 @@ function serialised<T>(key: string, fn: () => Promise<T>): Promise<T> {
  */
 export async function handleInboundMessage(msg: InboundMessage, now = new Date()): Promise<InboundOutcome> {
   await connectToDatabase();
+  const phoneLookup = phoneLookupToken(msg.fromE164);
   try {
     await WhatsAppInboundMessage.create({
       providerMessageId: msg.providerMessageId,
+      phoneLookup,
       receivedAt: now,
       expiresAt: new Date(now.getTime() + PROCESSED_ID_RETENTION_MS),
     });
@@ -55,7 +57,6 @@ export async function handleInboundMessage(msg: InboundMessage, now = new Date()
     throw error;
   }
 
-  const phoneLookup = phoneLookupToken(msg.fromE164);
   try {
     await enforceRateLimit(INBOUND_LIMIT, phoneLookup, now);
   } catch (error) {

@@ -366,3 +366,52 @@ After a donor replies 1 and then YES to sharing:
 - **Inbound email parsing.** Institutions answer through the secure link instead.
 - **AI categorisation of free-text institution notes.** Notes are stored and shown to admins as written.
 - **Other sources.** e-RaktKosh and other official directories need written permission and API access (README); scraping is avoided.
+
+## 12. Official WhatsApp Business Platform (Cloud API) provider (implemented 2026-11-05)
+
+The Cloud API implements the existing `MessagingProvider` interface (`src/server/messaging/cloud-provider.ts`). The queue, consent re-checks, caps, retries and conversation engine are unchanged. `MESSAGING_PROVIDER` selects which provider new messages are queued for. It stays `whatsapp_web` until the Cloud API has been tested with the real number.
+
+**Outbound:**
+- **Who sends.** The jobs worker drains the outbox when `MESSAGING_PROVIDER=whatsapp_cloud`; no browser session is needed. Messages already queued for the other provider stay with it.
+- **What is sent.** Within 24 hours of the person's last message to MarutiX, a free-form text. Outside it, an approved template, and only for the kinds that have one:
+  - emergency alerts;
+  - request confirmations.
+
+  Every other kind outside the window fails as `OUTSIDE_SERVICE_WINDOW` and is never forced through.
+- **Retries:**
+  - Graph 5xx and rate-limit errors are retried with backoff.
+  - Timeouts are never retried, to avoid duplicates.
+  - 131047 (window closed) and 131026 (undeliverable) are final.
+- **Template values** are stored encrypted with the body and erased after sending.
+
+**Inbound** (`POST /api/v1/webhooks/whatsapp`):
+1. **Signature.** Every POST must carry `X-Hub-Signature-256`: HMAC-SHA256 of the raw body with `WHATSAPP_APP_SECRET`, compared in constant time. Anything else gets 401.
+2. **Scope.** Only events for `WHATSAPP_PHONE_NUMBER_ID` are used.
+3. **Pipeline.** Text, quick-reply buttons, interactive replies and locations go into the existing inbound pipeline: dedupe by message ID (Meta redeliveries are harmless), rate limit, STOP, then the engine.
+4. **Delivery statuses** (`sent`, `delivered`, `read`, `failed`) update the outbox; status only moves forward, and failures keep Meta's code (`CLOUD_<code>`). They also update sign-in codes (`otp_challenges.deliveryStatus`).
+5. **Responses.** 200 once handled; 500 on infrastructure errors so Meta redelivers.
+
+The handshake (`GET`) echoes `hub.challenge` only for `WHATSAPP_WEBHOOK_VERIFY_TOKEN`.
+
+**Templates to submit in WhatsApp Manager** (category UTILITY, language `en`; parameter order matters):
+
+`marutix_emergency_alert`:
+```text
+MarutiX urgent blood request. Blood group: {{1}}. Component: {{2}}. Units required: {{3}}. Hospital: {{4}}, {{5}} ({{6}}). Required by: {{7}}. Ref: {{8}}.
+Can you help? Reply 1 if you're interested, 2 if you're not available, 3 to be contacted later, 4 for more information, or STOP to stop alerts.
+The blood centre decides donor eligibility and compatibility.
+```
+`marutix_request_confirmation`:
+```text
+MarutiX has received your blood request {{1}}. Status: pending verification with the hospital. Track it here: {{2}}
+MarutiX doesn't guarantee blood availability. In a life-threatening emergency, call 112. Reply STOP to stop messages.
+```
+
+**Sign-in codes** use an AUTHENTICATION template with a copy-code button (`WHATSAPP_OTP_TEMPLATE_NAME`). The code goes in the body and the button parameter, as Meta requires.
+
+**Migration steps:**
+1. Get the templates approved.
+2. Set the Cloud variables and the webhook URL (HTTPS, public) in the Meta App Dashboard, and subscribe to `messages`.
+3. Send test messages to your own numbers with `MESSAGING_PROVIDER=whatsapp_web` still set: inbound already works through the webhook.
+4. Switch `MESSAGING_PROVIDER=whatsapp_cloud`, restart the web app and the jobs worker, and watch `/admin/whatsapp` messages and Operations.
+5. Retire the whatsapp-web.js worker.

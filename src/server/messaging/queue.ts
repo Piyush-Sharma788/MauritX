@@ -7,6 +7,8 @@ import { decryptPii, encryptPii, phoneLookupToken } from "@/lib/security/crypto"
 import { getWhatsAppWebConfig } from "@/lib/whatsapp-web/config";
 import { checkEligibility, type IneligibleReason } from "@/server/messaging/eligibility";
 import type { ProviderName } from "@/server/messaging/provider";
+import { getMessagingProviderName } from "@/lib/whatsapp/cloud-config";
+import { emergencyAlertParams } from "@/server/messaging/cloud-templates";
 import {
   emergencyRequestText,
   HELP_TEXT,
@@ -17,8 +19,8 @@ import { NotificationEvent } from "@/server/models/notification-event";
 import { User } from "@/server/models/user";
 import { recordAudit } from "@/server/services/audit";
 
-/** The active outbound provider. Switch to "whatsapp_cloud" when migrating. */
-export const ACTIVE_PROVIDER: ProviderName = "whatsapp_web";
+/** The outbound provider new messages are queued for (MESSAGING_PROVIDER; default whatsapp_web). */
+export const activeProvider = (): ProviderName => getMessagingProviderName();
 
 export type EnqueueResult =
   | { outcome: "queued" | "duplicate"; messageId: string; status: MessageStatus }
@@ -36,6 +38,8 @@ export interface EnqueueInput {
   matchingRunId?: Types.ObjectId;
   /** Overrides WHATSAPP_WEB_MESSAGE_TTL_MINUTES for this message. */
   ttlMs?: number;
+  /** Values for this kind's approved Cloud API template (used outside the 24-hour window). */
+  templateParams?: string[];
   /** Record a `suppressed` event when ineligible (donor-facing kinds), instead of nothing. */
   recordSuppressed: boolean;
 }
@@ -71,7 +75,7 @@ export async function enqueueMessage(input: EnqueueInput, now = new Date()): Pro
 
   const base = {
     channel: "whatsapp" as const,
-    provider: ACTIVE_PROVIDER,
+    provider: activeProvider(),
     kind: input.kind,
     templateName: input.templateName,
     requestId: input.requestId,
@@ -92,7 +96,12 @@ export async function enqueueMessage(input: EnqueueInput, now = new Date()): Pro
       const doc = await NotificationEvent.create({ ...base, status: "suppressed", failureCode: eligibility.reason, failedAt: now });
       return { outcome: "suppressed", messageId: doc._id.toString(), status: "suppressed", reason: eligibility.reason };
     }
-    const doc = await NotificationEvent.create({ ...base, status: "queued", bodyEncrypted: encryptPii(input.body) });
+    const doc = await NotificationEvent.create({
+      ...base,
+      status: "queued",
+      bodyEncrypted: encryptPii(input.body),
+      ...(input.templateParams?.length ? { templateParamsEncrypted: encryptPii(JSON.stringify(input.templateParams)) } : {}),
+    });
     return { outcome: "queued", messageId: doc._id.toString(), status: "queued" };
   } catch (error) {
     if (!isDuplicateKeyError(error)) throw error;
@@ -198,6 +207,7 @@ export async function queueEmergencyRequestNotification(input: {
     requestId: input.requestId,
     matchingRunId: input.matchingRunId,
     ttlMs: input.ttlMs,
+    templateParams: emergencyAlertParams(input.summary),
     recordSuppressed: true,
   });
 }

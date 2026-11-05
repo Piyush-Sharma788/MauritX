@@ -195,10 +195,17 @@ All require a signed-in user with role `admin` (401 if signed out, 403 otherwise
 
 503 `WHATSAPP_WORKER_UNAVAILABLE` means the worker process isn't running.
 
-## WhatsApp webhooks
-- `GET /webhooks/whatsapp`: provider webhook verification handshake.
-- `POST /webhooks/whatsapp`: verify provider signature, validate event and process idempotently.
-- Never trust a webhook solely because it contains a valid-looking JSON body.
+## WhatsApp webhooks (Cloud API, implemented)
+| Method | Endpoint | Purpose |
+|---|---|---|
+| GET | `/webhooks/whatsapp` | Meta handshake: returns `hub.challenge` as text when `hub.mode=subscribe` and `hub.verify_token` matches `WHATSAPP_WEBHOOK_VERIFY_TOKEN`; `403` otherwise; `404` when not configured |
+| POST | `/webhooks/whatsapp` | Inbound messages and delivery statuses. Plain-text responses, not the JSON envelope (Meta reads only the status) |
+
+POST response codes:
+- `401` without a valid `X-Hub-Signature-256` (HMAC-SHA256 of the raw body with `WHATSAPP_APP_SECRET`);
+- `413` above 1 MB;
+- `200` when handled, or when signed but not a payload shape MarutiX handles;
+- `500` on infrastructure errors, so Meta redelivers. Processing is idempotent by message ID.
 
 ## Status codes
 - `200` success

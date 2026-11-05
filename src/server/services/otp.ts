@@ -67,12 +67,16 @@ export async function requestOtp(
   });
 
   try {
-    await provider.send({
+    const sent = await provider.send({
       phoneE164: input.phoneE164,
       code,
       expiresInMinutes: OTP_TTL_SECONDS / 60,
       requestId: ctx.requestId,
     });
+    if (sent.providerMessageId) {
+      // Webhook statuses update this, so support can see whether the code reached the phone.
+      await OtpChallenge.updateOne({ _id: challengeId }, { $set: { providerMessageId: sent.providerMessageId, deliveryStatus: "accepted", deliveryUpdatedAt: new Date() } });
+    }
   } catch (error) {
     await OtpChallenge.deleteOne({ _id: challengeId });
     logger.warn("otp.delivery_failed", {

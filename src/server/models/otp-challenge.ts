@@ -11,6 +11,11 @@ const otpChallengeSchema = new Schema(
     attempts: { type: Number, required: true, default: 0, min: 0 },
     expiresAt: { type: Date, required: true },
     consumedAt: { type: Date, default: null },
+    // Delivery tracking for codes sent through the WhatsApp Cloud API (from webhook statuses).
+    providerMessageId: { type: String },
+    deliveryStatus: { type: String, enum: ["accepted", "sent", "delivered", "read", "failed", "deleted", "warning"] },
+    deliveryUpdatedAt: { type: Date },
+    deliveryFailureCode: { type: String, maxlength: 40 },
   },
   { collection: "otp_challenges", timestamps: { createdAt: true, updatedAt: false }, strict: "throw" },
 );
@@ -18,6 +23,7 @@ const otpChallengeSchema = new Schema(
 // MongoDB removes expired challenges automatically.
 otpChallengeSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 otpChallengeSchema.index({ phoneLookup: 1, createdAt: -1 });
+otpChallengeSchema.index({ providerMessageId: 1 }, { sparse: true });
 
 export type OtpChallengeDoc = InferSchemaType<typeof otpChallengeSchema>;
 

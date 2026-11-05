@@ -210,3 +210,15 @@ Every handler also re-checks the request's state when it runs.
 **Discovery provider** (`DiscoveryProvider`). OpenStreetMap is implemented. Overpass is queried by bounding box, then filtered by exact distance; public instances can take 30 s or more, so discovery has a 60 s timeout and retries up to 3 times. Meanwhile, institutions already known are still contacted and donor waves still start.
 
 **Outbound fetches** use `discovery/safe-fetch.ts`: public addresses only, default ports, redirects re-checked hop by hop, size and time limits.
+
+## 15. Messaging providers and production hardening (2026-11-05)
+```text
+                       ┌─ whatsapp_web:   WhatsApp worker (whatsapp-web.js) drains outbox, receives inbound
+outbox (provider tag) ─┤
+                       └─ whatsapp_cloud: jobs worker drains outbox via Graph API (text ≤24 h, else template)
+Meta ── POST /api/v1/webhooks/whatsapp (HMAC verified) ──> inbound pipeline (dedupe, limit, STOP, engine)
+                                                       └─> delivery statuses → outbox + otp_challenges
+```
+- `MESSAGING_PROVIDER` decides which provider new messages are queued for. Both can run during migration.
+- Every process validates its configuration at startup (`lib/security/config-check.ts`); in production it exits on problems.
+- CI (`.github/workflows/ci.yml`) runs three parallel jobs: lint and typecheck, all tests against a MongoDB 8.0 service container (pinned by digest), and the production build.

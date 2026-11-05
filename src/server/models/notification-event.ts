@@ -20,6 +20,8 @@ const notificationEventSchema = new Schema(
     recipientLookup: { type: String, required: true },
     recipientPhoneEncrypted: { type: String, required: true },
     bodyEncrypted: { type: String },
+    // Cloud API template values, encrypted and erased with the body.
+    templateParamsEncrypted: { type: String },
     status: { type: String, enum: MESSAGE_STATUSES, required: true, default: "queued" },
     failureCode: { type: String },
     providerMessageId: { type: String },

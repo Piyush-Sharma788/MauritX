@@ -13,7 +13,7 @@ export const POST = apiRoute(async (request, ctx) => {
 
   // Session rotation: any session carried by this browser is replaced.
   const previousToken = request.cookies.get(sessionCookieName())?.value;
-  if (previousToken) await revokeSession(previousToken);
+  if (previousToken) await revokeSession(previousToken, "rotated");
   const session = await createSession(user._id);
 
   if (created) {

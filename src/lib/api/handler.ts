@@ -5,6 +5,7 @@ import type { z } from "zod";
 import { AppError, type ApiErrorBody } from "@/lib/api/errors";
 import { getEnv } from "@/lib/env";
 import { logger } from "@/lib/logger";
+import { trustedProxyHops } from "@/lib/security/config-check";
 
 const MAX_JSON_BODY_BYTES = 2_048;
 
@@ -46,13 +47,20 @@ function fail(ctx: ApiContext, error: AppError) {
 }
 
 /**
- * Client IP for rate limiting. Assumes deployment behind a proxy that
- * overwrites X-Forwarded-For / X-Real-IP (e.g. Vercel). Phone-scoped limits
- * still apply if this value is spoofed.
+ * Client IP for rate limiting. X-Forwarded-For is "client, proxy1, proxy2…":
+ * entries on the left are whatever the client sent, so only the entry added
+ * by our own outermost proxy can be trusted. With TRUSTED_PROXY_HOPS proxies
+ * (default 1) that is the Nth entry from the right.
  */
+export function clientIpFrom(headers: Headers, hops: number): string {
+  const entries = (headers.get("x-forwarded-for") ?? "").split(",").map((v) => v.trim()).filter(Boolean);
+  if (hops > 0 && entries.length) return entries[Math.max(0, entries.length - hops)];
+  if (hops > 0) return headers.get("x-real-ip")?.trim() || "unknown";
+  return "unknown";
+}
+
 function clientIp(request: NextRequest): string {
-  const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  return forwarded || request.headers.get("x-real-ip")?.trim() || "unknown";
+  return clientIpFrom(request.headers, trustedProxyHops());
 }
 
 /**

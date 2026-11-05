@@ -14,6 +14,7 @@ import mongoose from "mongoose";
 import { connectToDatabase } from "@/lib/db/mongoose";
 import { logger } from "@/lib/logger";
 import { getAiConfig } from "@/lib/ai/config";
+import { validateServerConfiguration } from "@/lib/security/config-check";
 import { getCoordinationConfig } from "@/lib/coordination/config";
 import { getWhatsAppWebConfig } from "@/lib/whatsapp-web/config";
 import { dispatchNext, recordDeliveryAck } from "@/server/messaging/dispatcher";
@@ -38,6 +39,7 @@ const errorName = (error: unknown) => (error instanceof Error ? error.name : "Un
 
 async function main() {
   // Fail fast on misconfiguration rather than on the first message.
+  validateServerConfiguration("whatsapp-worker");
   const ai = getAiConfig();
   getCoordinationConfig();
   const baseConfig = getWhatsAppWebConfig();

@@ -12,13 +12,20 @@ import { connectToDatabase } from "@/lib/db/mongoose";
 import { getDiscoveryConfig } from "@/lib/discovery/config";
 import { getEmailConfig } from "@/lib/email/config";
 import { logger } from "@/lib/logger";
+import { getWhatsAppWebConfig } from "@/lib/whatsapp-web/config";
+import { getMessagingProviderName, getWhatsAppCloudConfig } from "@/lib/whatsapp/cloud-config";
+import { validateServerConfiguration } from "@/lib/security/config-check";
 import { runOneJob } from "@/server/jobs/runner";
+import { CloudApiMessagingProvider } from "@/server/messaging/cloud-provider";
+import { dispatchNext } from "@/server/messaging/dispatcher";
+import { getMessagingSettings } from "@/server/settings/service";
 
 const IDLE_POLL_MS = 3_000;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function main() {
   // Fail fast on misconfiguration.
+  validateServerConfiguration("jobs-worker");
   const coordination = getCoordinationConfig();
   const discovery = getDiscoveryConfig();
   const email = getEmailConfig();
@@ -33,6 +40,10 @@ async function main() {
   process.on("SIGINT", stop);
   process.on("SIGTERM", stop);
 
+  // With the official Cloud API there is no browser session, so this worker drains the outbox too.
+  const cloud = getMessagingProviderName() === "whatsapp_cloud" ? getWhatsAppCloudConfig() : null;
+  const dispatching = cloud ? dispatchLoop(new CloudApiMessagingProvider(cloud), cloud.pacing, () => running) : Promise.resolve();
+
   while (running) {
     try {
       if (!(await runOneJob(workerId))) await sleep(IDLE_POLL_MS);
@@ -41,8 +52,37 @@ async function main() {
       await sleep(5_000);
     }
   }
+  await dispatching;
   logger.info("jobs.worker.stopping");
   await mongoose.disconnect();
+}
+
+/** Outbox dispatcher for the Cloud API: same consent re-checks, caps, retries and TTL as the pilot. */
+async function dispatchLoop(provider: CloudApiMessagingProvider, pacing: { maxMessagesPerHour: number; maxRepliesPerHour: number; minSendIntervalMs: number }, isRunning: () => boolean) {
+  logger.info("whatsapp_cloud.dispatcher_started");
+  while (isRunning()) {
+    let wait = IDLE_POLL_MS;
+    try {
+      const { alertsPaused } = await getMessagingSettings();
+      const outcome = await dispatchNext(provider, { maxMessagesPerHour: pacing.maxMessagesPerHour, maxRepliesPerHour: pacing.maxRepliesPerHour, testRecipients: testRecipients(), alertsPaused });
+      if (outcome === "rate_limited") wait = 30_000;
+      else if (outcome === "suppressed") wait = 0;
+      else if (outcome !== "idle") wait = pacing.minSendIntervalMs;
+    } catch (error) {
+      logger.error("whatsapp_cloud.dispatch_error", { errorName: error instanceof Error ? error.name : "UnknownError" });
+      wait = 5_000;
+    }
+    await sleep(wait);
+  }
+}
+
+/** Admin test recipients, if the pilot's list is configured. */
+function testRecipients(): Set<string> {
+  try {
+    return getWhatsAppWebConfig().testRecipients;
+  } catch {
+    return new Set();
+  }
 }
 
 main().catch(async (error: unknown) => {

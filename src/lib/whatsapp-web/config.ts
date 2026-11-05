@@ -1,4 +1,5 @@
 import "server-only";
+import { definedEnv } from "@/lib/config/env-source";
 import { z } from "zod";
 import { normalizeIndianMobile } from "@/lib/validation/phone";
 
@@ -41,7 +42,7 @@ let cached: WhatsAppWebConfig | undefined;
 
 export function getWhatsAppWebConfig(): WhatsAppWebConfig {
   if (cached) return cached;
-  const parsed = schema.safeParse(process.env);
+  const parsed = schema.safeParse(definedEnv());
   if (!parsed.success) {
     const issues = parsed.error.issues.map((i) => `  - ${i.path.join(".")}: ${i.message}`);
     throw new Error(`Invalid WhatsApp Web configuration:\n${issues.join("\n")}`);

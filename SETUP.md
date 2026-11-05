@@ -388,14 +388,35 @@ The design is in WHATSAPP_BOT.md §11 and SYSTEM_DESIGN.md §14.
 
 ## CI
 
-`.github/workflows/ci.yml` runs on every pull request, every push to `main`, and on demand. It runs one job:
-1. `npm ci`
-2. `npm run typecheck` (Next route types + `tsc --noEmit`)
-3. `npm run build`
+`.github/workflows/ci.yml` runs on every pull request and push to `main`, in three parallel jobs:
 
-Actions are pinned to full commit SHAs, and the workflow has read-only permissions. Make **CI / Typecheck & build** a required status check in branch protection for `main`.
+| Job | Steps |
+|---|---|
+| Lint & typecheck | `npm ci`, `npm run lint`, `npm run typecheck` |
+| Unit & integration tests | A MongoDB 8.0.32 service container (pinned by digest), then `npm run test:integration` (every test file, including the MongoDB workflows) |
+| Production build | `npm ci`, `npm run build` |
 
-Lint, tests, audits, image publishing and deployments are not run in CI. Run them locally (`npm run lint`, `npm run test:integration`) before merging.
+Tests generate throwaway secrets (`tests/setup.ts`) and use fake providers; CI never contacts WhatsApp, Meta, email or AI services. Actions are pinned to full commit SHAs; update them (and dependencies) by hand.
+
+## Switching to the official WhatsApp Cloud API
+
+See WHATSAPP_BOT.md §12. In short:
+1. In the Meta App Dashboard:
+   - create a system-user access token;
+   - note the phone number ID and the App Secret;
+   - set the webhook URL to `https://<your domain>/api/v1/webhooks/whatsapp` with your `WHATSAPP_WEBHOOK_VERIFY_TOKEN`;
+   - subscribe to `messages`.
+2. Submit the two UTILITY templates and the AUTHENTICATION (copy-code) sign-in template; wait for approval.
+3. Set `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_APP_SECRET`, `WHATSAPP_WEBHOOK_VERIFY_TOKEN`, `WHATSAPP_OTP_TEMPLATE_NAME` and the `WHATSAPP_TEMPLATE_*` names. `OTP_PROVIDER=whatsapp` sends sign-in codes through Meta.
+4. Test with your own numbers, then set `MESSAGING_PROVIDER=whatsapp_cloud` and restart the web app and the jobs worker.
+
+### Production configuration checks
+The web app and both workers validate their configuration at startup. In production they exit on:
+- an `http://` `APP_BASE_URL`;
+- placeholder, low-diversity or reused secrets, or a non-random `PII_ENCRYPTION_KEY`;
+- incomplete Cloud API settings when that provider is selected.
+
+Behind a reverse proxy, set `TRUSTED_PROXY_HOPS` to the number of proxies (usually 1).
 
 ## Manual deployment with Docker
 

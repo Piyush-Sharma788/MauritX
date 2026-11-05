@@ -4,6 +4,7 @@ import { logger } from "@/lib/logger";
 import { checkEligibility } from "@/server/messaging/eligibility";
 import { MessagingError, type DeliveryAck, type MessagingProvider } from "@/server/messaging/provider";
 import { NotificationEvent } from "@/server/models/notification-event";
+import { WhatsAppInboundMessage } from "@/server/models/whatsapp-inbound-message";
 
 export const MAX_SEND_ATTEMPTS = 3;
 const SEND_LOCK_MS = 90_000;
@@ -21,7 +22,7 @@ export interface DispatchOptions {
 
 export type DispatchOutcome = "idle" | "rate_limited" | "sent" | "retry" | "failed" | "suppressed";
 
-const FINAL = { $unset: { bodyEncrypted: 1, lockedUntil: 1 } } as const;
+const FINAL = { $unset: { bodyEncrypted: 1, templateParamsEncrypted: 1, lockedUntil: 1 } } as const;
 
 /** Housekeeping that must happen before claiming work. */
 async function sweep(now: Date) {
@@ -109,7 +110,14 @@ export async function dispatchNext(
   }
 
   try {
-    const { providerMessageId } = await provider.sendText(phoneE164, decryptPii(message.bodyEncrypted));
+    // The person's last message to us opens a 24-hour window for free-form replies (Cloud API rule).
+    const lastInbound = await WhatsAppInboundMessage.findOne({ phoneLookup: message.recipientLookup }, { receivedAt: 1 }).sort({ receivedAt: -1 }).lean();
+    const { providerMessageId } = await provider.sendText(phoneE164, decryptPii(message.bodyEncrypted), {
+      kind: message.kind,
+      templateParams: message.templateParamsEncrypted ? (JSON.parse(decryptPii(message.templateParamsEncrypted)) as string[]) : null,
+      lastInboundAt: lastInbound?.receivedAt ?? null,
+      now,
+    });
     await NotificationEvent.updateOne(
       { _id: message._id, status: "sending" },
       { $set: { status: "sent", providerMessageId, sentAt: new Date() }, ...FINAL },
@@ -144,7 +152,7 @@ export async function dispatchNext(
 }
 
 /** Applies a delivery receipt. Status only ever moves forward. */
-export async function recordDeliveryAck(providerMessageId: string, ack: DeliveryAck, now = new Date()): Promise<void> {
+export async function recordDeliveryAck(providerMessageId: string, ack: DeliveryAck, now = new Date(), failureCode = "PROVIDER_ACK_ERROR"): Promise<void> {
   if (ack === "server") return; // Already "sent".
   if (ack === "device") {
     await NotificationEvent.updateOne({ providerMessageId, status: "sent" }, { $set: { status: "delivered", deliveredAt: now } });
@@ -156,7 +164,7 @@ export async function recordDeliveryAck(providerMessageId: string, ack: Delivery
   } else {
     await NotificationEvent.updateOne(
       { providerMessageId, status: "sent" },
-      { $set: { status: "failed", failureCode: "PROVIDER_ACK_ERROR", failedAt: now } },
+      { $set: { status: "failed", failureCode, failedAt: now } },
     );
   }
 }

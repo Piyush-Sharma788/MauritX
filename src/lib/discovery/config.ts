@@ -1,4 +1,5 @@
 import "server-only";
+import { definedEnv } from "@/lib/config/env-source";
 import { z } from "zod";
 
 /**
@@ -37,7 +38,7 @@ let cached: DiscoveryConfig | undefined;
 
 export function getDiscoveryConfig(): DiscoveryConfig {
   if (cached) return cached;
-  const parsed = schema.safeParse(process.env);
+  const parsed = schema.safeParse(definedEnv());
   if (!parsed.success) {
     throw new Error(`Invalid discovery configuration:\n${parsed.error.issues.map((i) => `  - ${i.path.join(".")}: ${i.message}`).join("\n")}`);
   }
