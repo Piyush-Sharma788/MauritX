@@ -57,9 +57,9 @@
 
 ---
 
-## 1. Project Overview
+## 1. Project Overview {#1-project-overview}
 
-### 1.1 What is MarutiX?
+### 1.1 What is MarutiX? {#11-what-is-marutix}
 
 MarutiX is a **real-time emergency blood donation coordination platform** built for India. It connects people who urgently need blood with verified registered donors, and coordinates with nearby hospitals and blood banks through WhatsApp and email.
 
@@ -73,7 +73,7 @@ MarutiX is a **real-time emergency blood donation coordination platform** built 
 | **Admins** | Verify requests, trigger matching, manage outreach, monitor operations |
 | **Institutions** | Blood banks / hospitals receive outreach emails and report availability |
 
-### 1.2 Key Features
+### 1.2 Key Features {#12-key-features}
 
 - **WhatsApp bot** — Donors register and receive alerts via conversational WhatsApp flows (official Cloud API or unofficial Web pilot)
 - **Emergency request intake** — Web form and WhatsApp bot, PII encrypted at rest
@@ -87,7 +87,7 @@ MarutiX is a **real-time emergency blood donation coordination platform** built 
 - **Consent management** — DPDP Act–aligned consent records, opt-out preserved forever
 - **Production Docker** — Multi-stage Dockerfile, Compose with security hardening
 
-### 1.3 Tech Stack
+### 1.3 Tech Stack {#13-tech-stack}
 
 | Layer | Technology | Version |
 |---|---|---|
@@ -110,7 +110,7 @@ MarutiX is a **real-time emergency blood donation coordination platform** built 
 | **CI/CD** | GitHub Actions | — |
 | **Registry** | GitHub Container Registry (GHCR) | — |
 
-### 1.4 System Architecture
+### 1.4 System Architecture {#14-system-architecture}
 
 ```
                         ┌──────────────────────────────────────────┐
@@ -156,7 +156,7 @@ MarutiX is a **real-time emergency blood donation coordination platform** built 
 - Phone numbers are additionally stored as **HMAC-SHA256 keyed hashes** (`phoneLookup`) for indexed lookups without decrypting
 - The admin dashboard talks to the WhatsApp worker via a **loopback-only control HTTP server** (port 3100); never directly exposed
 
-### 1.5 Folder Structure
+### 1.5 Folder Structure {#15-folder-structure}
 
 ```
 MauritX/
@@ -248,7 +248,7 @@ MauritX/
 
 ---
 
-## 2. Prerequisites
+## 2. Prerequisites {#2-prerequisites}
 
 Before you start, install the following on your machine:
 
@@ -294,13 +294,13 @@ docker --version  # Optional, any recent version
 
 ---
 
-## 3. Environment Setup
+## 3. Environment Setup {#3-environment-setup}
 
 MarutiX is configured entirely through environment variables. In development, they go in `.env.local` (never commit this file). In production, they go in `/opt/marutix/.env.production` on the server (chmod 600).
 
 > **Important:** Every startup call to `validateServerConfiguration()` will throw a detailed error listing every missing or malformed variable before the app accepts any traffic.
 
-### 3.1 Complete Environment Variable Reference
+### 3.1 Complete Environment Variable Reference {#31-complete-environment-variable-reference}
 
 #### Core (always required)
 
@@ -442,9 +442,9 @@ MarutiX is configured entirely through environment variables. In development, th
 
 ---
 
-## 4. Local Development Setup
+## 4. Local Development Setup {#4-local-development-setup}
 
-### 4.1 Clone & Install
+### 4.1 Clone & Install {#41-clone--install}
 
 ```bash
 # Clone the repository
@@ -460,7 +460,7 @@ npm install
 > PUPPETEER_SKIP_DOWNLOAD=true npm install
 > ```
 
-### 4.2 MongoDB Setup
+### 4.2 MongoDB Setup {#42-mongodb-setup}
 
 **Option A — Local MongoDB (easiest for development)**
 
@@ -489,7 +489,7 @@ Your `MONGODB_URI` will be: `mongodb://127.0.0.1:27017/marutix`
 Your `MONGODB_URI` will look like:
 `mongodb+srv://myuser:mypassword@cluster0.abc123.mongodb.net/marutix?retryWrites=true&w=majority`
 
-### 4.3 Generate Secrets
+### 4.3 Generate Secrets {#43-generate-secrets}
 
 Run these commands to generate cryptographically secure secrets:
 
@@ -509,7 +509,7 @@ openssl rand -hex 32
 
 > **Warning:** Never reuse the same value for different secrets. If any two secrets are identical, startup validation will reject the configuration.
 
-### 4.4 Minimum `.env.local`
+### 4.4 Minimum `.env.local` {#44-minimum-envlocal}
 
 Create `.env.local` in the project root (never commit this file — it's already in `.gitignore`):
 
@@ -539,7 +539,7 @@ This minimal configuration:
 - ❌ No SMS OTP
 - ❌ No AI-enhanced bot
 
-### 4.5 Run the App
+### 4.5 Run the App {#45-run-the-app}
 
 **Terminal 1 — Web app (Next.js dev server)**
 
@@ -566,7 +566,7 @@ Runs institution discovery, outreach emails, and donor wave scheduling:
 npm run jobs:worker
 ```
 
-### 4.6 Grant Admin Access
+### 4.6 Grant Admin Access {#46-grant-admin-access}
 
 After signing in with your phone number:
 
@@ -588,9 +588,9 @@ Admin dashboard: http://localhost:3000/admin
 
 ---
 
-## 5. Docker
+## 5. Docker {#5-docker}
 
-### 5.1 Images
+### 5.1 Images {#51-images}
 
 MarutiX uses two Docker images, both based on `node:24-bookworm-slim`:
 
@@ -626,7 +626,7 @@ Runs as the unprivileged `node` user. Session data on `/app/.data` volume.
 docker build -t marutix-worker:latest -f Dockerfile.worker .
 ```
 
-### 5.2 Docker Compose (Production)
+### 5.2 Docker Compose (Production) {#52-docker-compose-production}
 
 The production stack is defined in [`deploy/docker-compose.prod.yml`](file:///Users/piyushsharma/Desktop/MauritX/deploy/docker-compose.prod.yml).
 
@@ -647,7 +647,7 @@ It runs **three services**:
 
 The worker shares the web container's **network namespace** (`network_mode: "service:web"`) so its control HTTP server on port 3100 is only accessible via loopback, never on the container network.
 
-### 5.3 Commands Reference
+### 5.3 Commands Reference {#53-commands-reference}
 
 ```bash
 # --- Build both images ---
@@ -681,7 +681,7 @@ docker compose -f deploy/docker-compose.prod.yml exec web sh
 docker inspect --format='{{json .State.Health}}' marutix-web-1 | python3 -m json.tool
 ```
 
-### 5.4 Troubleshooting
+### 5.4 Troubleshooting {#54-troubleshooting}
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
@@ -694,9 +694,9 @@ docker inspect --format='{{json .State.Health}}' marutix-web-1 | python3 -m json
 
 ---
 
-## 6. Database
+## 6. Database {#6-database}
 
-### 6.1 Collections Reference
+### 6.1 Collections Reference {#61-collections-reference}
 
 MarutiX uses **28 MongoDB collections**:
 
@@ -731,7 +731,7 @@ MarutiX uses **28 MongoDB collections**:
 | `error_events` | `ErrorEvent` | Server-side error log (TTL indexed) |
 | `availability_reports` | `AvailabilityReport` | Institution stock self-reports |
 
-### 6.2 Indexes
+### 6.2 Indexes {#62-indexes}
 
 Key indexes for performance:
 
@@ -756,7 +756,7 @@ consent_records:    userId+purpose, createdAt
 - Processed inbound message IDs
 - Old bot metric days
 
-### 6.3 Encryption
+### 6.3 Encryption {#63-encryption}
 
 All PII uses **two-layer protection**:
 
@@ -767,7 +767,7 @@ All PII uses **two-layer protection**:
 
 Admin TOTP secrets are also encrypted. Recovery code hashes are keyed hashes (not reversible).
 
-### 6.4 Backup & Restore
+### 6.4 Backup & Restore {#64-backup--restore}
 
 #### Create a backup
 
@@ -822,9 +822,9 @@ openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 \
 
 ---
 
-## 7. Integrations
+## 7. Integrations {#7-integrations}
 
-### 7.1 WhatsApp (Two Modes)
+### 7.1 WhatsApp (Two Modes) {#71-whatsapp-two-modes}
 
 MarutiX supports two WhatsApp integration modes controlled by `MESSAGING_PROVIDER`:
 
@@ -884,7 +884,7 @@ The WhatsApp bot handles these conversation flows:
 
 With `AI_PROVIDER=anthropic`, the bot uses Claude to understand natural-language messages that don't match fixed commands, and routes them to the correct flow.
 
-### 7.2 OTP / Sign-In
+### 7.2 OTP / Sign-In {#72-otp--sign-in}
 
 MarutiX uses **phone-based OTP authentication** (no passwords):
 
@@ -898,7 +898,7 @@ MarutiX uses **phone-based OTP authentication** (no passwords):
 
 **MFA (admins only):** After OTP login, admin users with MFA enabled must verify a TOTP code from Google Authenticator. MFA enrollment at `/admin/mfa`.
 
-### 7.3 Email (SMTP)
+### 7.3 Email (SMTP) {#73-email-smtp}
 
 Email is used **only for institution outreach** (not for OTP or user notifications).
 
@@ -921,7 +921,7 @@ SMTP_PASSWORD=re_xxxxxxxxxxxx
 EMAIL_FROM=noreply@yourdomain.com
 ```
 
-### 7.4 SMS (Twilio)
+### 7.4 SMS (Twilio) {#74-sms-twilio}
 
 Optional fallback for OTP delivery when WhatsApp is unavailable.
 
@@ -936,7 +936,7 @@ TWILIO_MESSAGING_SERVICE_SID=MGxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 SMS_OTP_BODY_TEMPLATE=Your MarutiX sign-in code is {code}. Valid for {minutes} minutes.
 ```
 
-### 7.5 AI (Anthropic)
+### 7.5 AI (Anthropic) {#75-ai-anthropic}
 
 When enabled, the WhatsApp bot passes ambiguous messages to Claude for interpretation:
 
@@ -950,7 +950,7 @@ AI_MAX_CALLS_PER_NUMBER_PER_HOUR=20
 
 The AI responds with structured JSON indicating the detected intent (`flow` and `state`). The bot verifies the output against an allowed schema before trusting it. Invalid AI responses fall back to the default "unrecognized message" reply.
 
-### 7.6 Maps & Discovery (OpenStreetMap)
+### 7.6 Maps & Discovery (OpenStreetMap) {#76-maps--discovery-openstreetmap}
 
 Finds nearby blood banks and hospitals for institution outreach:
 
@@ -970,7 +970,7 @@ The discovery job:
 4. Creates `Institution` records with GeoJSON locations
 5. Triggers outreach email to discovered institutions
 
-### 7.7 Webhooks
+### 7.7 Webhooks {#77-webhooks}
 
 **WhatsApp Cloud API Webhook:**
 - URL: `https://yourdomain.com/api/v1/webhooks/whatsapp`
@@ -987,9 +987,9 @@ The discovery job:
 
 ---
 
-## 8. Development Guide
+## 8. Development Guide {#8-development-guide}
 
-### 8.1 Architecture & Data Flow
+### 8.1 Architecture & Data Flow {#81-architecture--data-flow}
 
 #### Emergency Request Lifecycle
 
@@ -1036,7 +1036,7 @@ Request fulfilled / cancelled → status: "fulfilled" / "cancelled"
   → After REQUEST_RETENTION_DAYS, PII is anonymized
 ```
 
-### 8.2 API Reference
+### 8.2 API Reference {#82-api-reference}
 
 All API routes are under `/api/v1/`. All responses are JSON.
 
@@ -1133,7 +1133,7 @@ All API routes are under `/api/v1/`. All responses are JSON.
 |---|---|---|
 | `GET` | `/api/health` | Liveness + DB readiness. Returns `{"status":"ok","db":"up"}` or 503 |
 
-### 8.3 Authentication
+### 8.3 Authentication {#83-authentication}
 
 **Session flow:**
 1. OTP request → OTP hashed and stored → delivered via WhatsApp/SMS/console
@@ -1153,7 +1153,7 @@ All API routes are under `/api/v1/`. All responses are JSON.
 
 Admin routes use `requireAdmin()` middleware. User routes use `requireUser()`.
 
-### 8.4 Background Workers
+### 8.4 Background Workers {#84-background-workers}
 
 #### WhatsApp Worker (`npm run whatsapp:worker`)
 
@@ -1182,7 +1182,7 @@ Admin routes use `requireAdmin()` middleware. User routes use `requireUser()`.
 - Runs data retention anonymization once per hour
 - With `MESSAGING_PROVIDER=whatsapp_cloud`: also drains the notification outbox (WhatsApp worker not needed)
 
-### 8.5 Security Headers
+### 8.5 Security Headers {#85-security-headers}
 
 Configured in [`next.config.ts`](file:///Users/piyushsharma/Desktop/MauritX/next.config.ts) for all routes:
 
@@ -1202,7 +1202,7 @@ Tracking and respond URLs (`/track/`, `/respond/`) additionally set:
 
 ---
 
-## 9. Testing
+## 9. Testing {#9-testing}
 
 ### Run tests
 
@@ -1264,7 +1264,7 @@ node scripts/audit-gate.mjs
 
 ---
 
-## 10. CI/CD & Deployment
+## 10. CI/CD & Deployment {#10-cicd--deployment}
 
 ### Three-stage GitHub Actions pipeline
 
@@ -1376,9 +1376,9 @@ docker compose -f docker-compose.yml up -d
 
 ---
 
-## 11. Maintenance & Operations
+## 11. Maintenance & Operations {#11-maintenance--operations}
 
-### 11.1 Logging
+### 11.1 Logging {#111-logging}
 
 All processes use structured JSON logging. Each log line is a JSON object with:
 
@@ -1420,7 +1420,7 @@ Configure an error webhook for automatic error alerting:
 ERROR_ALERT_WEBHOOK_URL=https://hooks.slack.com/services/xxx/yyy/zzz
 ```
 
-### 11.2 Health Checks
+### 11.2 Health Checks {#112-health-checks}
 
 **Application health:**
 ```bash
@@ -1442,7 +1442,7 @@ docker inspect --format='{{.State.Health.Status}}' marutix-web-1
 **Admin operations dashboard:**
 - `/admin/operations` shows: bot enabled/disabled, alerts paused/active, failed messages count
 
-### 11.3 Backups
+### 11.3 Backups {#113-backups}
 
 **Automated backup (cron job):**
 
@@ -1479,7 +1479,7 @@ aws s3 sync /var/backups/marutix s3://your-bucket/marutix-backups/ \
   --exclude "*" --include "*.enc" --include "*.sha256" --include "*.manifest.json"
 ```
 
-### 11.4 Admin Operations
+### 11.4 Admin Operations {#114-admin-operations}
 
 **Grant/revoke admin role:**
 ```bash
@@ -1508,7 +1508,7 @@ docker compose exec worker \
 - Admin → Operations → Failed Messages → Retry
 - Or API: `POST /api/v1/admin/messages/:messageId/retry`
 
-### 11.5 Common Errors
+### 11.5 Common Errors {#115-common-errors}
 
 | Error message | Cause | Fix |
 |---|---|---|
