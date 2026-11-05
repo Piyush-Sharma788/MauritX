@@ -5,7 +5,7 @@
  * site(s) (robots.txt + up to 2 pages), no website reachability GETs, so a
  * run makes about 4 external HTTP requests (plus DNS lookups for emails).
  *
- *   npx tsx --conditions=react-server --env-file=.env.local scripts/discovery-check.ts <lat> <lng> <radiusKm>
+ *   npx tsx --conditions=react-server --env-file=.env scripts/discovery-check.ts <lat> <lng> <radiusKm>
  *
  * Env overrides for this process only: DISCOVERY_PROVIDER=openstreetmap;
  * DISCOVERY_CONTACT_URL = this project's git remote (an identifying,

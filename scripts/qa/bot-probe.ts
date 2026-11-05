@@ -8,7 +8,7 @@
  *
  *   QA_BASE=http://localhost:3000 MONGODB_URI=mongodb://127.0.0.1:27017/marutix_qa_xxx \
  *   WHATSAPP_APP_SECRET=... WHATSAPP_PHONE_NUMBER_ID=... \
- *   npx tsx --conditions=react-server --env-file=.env.local scripts/qa/bot-probe.ts
+ *   npx tsx --conditions=react-server --env-file=.env scripts/qa/bot-probe.ts
  *
  * Refuses to run unless MONGODB_URI names a marutix_qa_* database.
  */

@@ -273,7 +273,7 @@ async function main() {
   const ap = await actx.newPage();
   attach(ap, "admin");
   await signIn(ap, adminPhone, "admin-pre");
-  const grant = execFileSync(join(process.cwd(), "node_modules/.bin/tsx"), ["--conditions=react-server", "--env-file=.env.local", "scripts/admin-role.ts", "grant", "super_admin", adminPhone], { encoding: "utf8", env: process.env });
+  const grant = execFileSync(join(process.cwd(), "node_modules/.bin/tsx"), ["--conditions=react-server", "--env-file=.env", "scripts/admin-role.ts", "grant", "super_admin", adminPhone], { encoding: "utf8", env: process.env });
   console.log(`  grant: ${grant.trim().split("\n").at(-1)}`);
   // resend cooldown
   await sleep(31_000);

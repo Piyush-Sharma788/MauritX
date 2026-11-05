@@ -26,11 +26,13 @@ import { fileURLToPath } from "node:url";
 import { parseEnv } from "node:util";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const ENV_FILE = join(ROOT, ".env.local");
+// All settings live in .env (git-ignored). Older setups used .env.local: it is renamed once.
+const ENV_FILE = join(ROOT, ".env");
+const LEGACY_ENV_FILE = join(ROOT, ".env.local");
 const BIN = join(ROOT, "node_modules", ".bin");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const expandHome = (p) => (p === "~" ? homedir() : p.startsWith("~/") ? join(homedir(), p.slice(2)) : p);
-let DATA_DIR = resolve(ROOT, expandHome(process.env.MARUTIX_DATA_DIR || "~/.marutix")); // final value read with .env.local in main()
+let DATA_DIR = resolve(ROOT, expandHome(process.env.MARUTIX_DATA_DIR || "~/.marutix")); // final value read with .env in main()
 const insideProject = (p) => p === ROOT || p.startsWith(ROOT + sep);
 
 // ---------------------------------------------------------------- output
@@ -46,9 +48,17 @@ const fail = (lines) => {
 };
 
 // ---------------------------------------------------------------- environment
-/** First run: create .env.local from .env.example with freshly generated secrets. */
+/** First run: create .env from .env.example with freshly generated secrets (or adopt an old .env.local). */
 function ensureEnvFile() {
-  if (existsSync(ENV_FILE)) return false;
+  if (existsSync(ENV_FILE)) {
+    if (existsSync(LEGACY_ENV_FILE)) fail(["Both .env and .env.local exist. MarutiX reads only .env: move anything you still need from .env.local into .env, then delete .env.local."]);
+    return false;
+  }
+  if (existsSync(LEGACY_ENV_FILE)) {
+    renameSync(LEGACY_ENV_FILE, ENV_FILE);
+    info(c.yellow("Renamed .env.local to .env: all MarutiX settings now live in .env."));
+    return false;
+  }
   const example = readFileSync(join(ROOT, ".env.example"), "utf8");
   const b64 = () => randomBytes(32).toString("base64");
   const generated = {
@@ -70,7 +80,7 @@ function ensureEnvFile() {
   return true;
 }
 
-/** .env.local with real environment variables taking precedence (the same rule Next.js and Node apply). */
+/** .env with real environment variables taking precedence (the same rule Next.js and Node apply). */
 function loadEnv() {
   const fromFile = parseEnv(readFileSync(ENV_FILE, "utf8"));
   const merged = { ...fromFile };
@@ -257,7 +267,7 @@ function relocateRuntimeData(env) {
   }
   if (insideProject(sessionDir)) {
     info(c.yellow(`WHATSAPP_WEB_SESSION_DIR (${relative(ROOT, sessionDir)}) is inside the project folder. Chromium writes there constantly,`));
-    info(c.yellow("so open pages will keep rebuilding and reloading. Set WHATSAPP_WEB_SESSION_DIR=~/.marutix/whatsapp-session in .env.local."));
+    info(c.yellow("so open pages will keep rebuilding and reloading. Set WHATSAPP_WEB_SESSION_DIR=~/.marutix/whatsapp-session in .env."));
   }
 }
 
@@ -272,7 +282,7 @@ async function main() {
     fail("Dependencies are not installed. Run: npm install");
     process.exit(1);
   }
-  if (ensureEnvFile()) info(c.yellow("Created .env.local from .env.example with newly generated secrets (development sign-in codes, no WhatsApp credentials)."));
+  if (ensureEnvFile()) info(c.yellow("Created .env from .env.example with newly generated secrets (development sign-in codes, no WhatsApp credentials)."));
   const env = loadEnv();
   DATA_DIR = resolve(ROOT, expandHome(env.get("MARUTIX_DATA_DIR", "~/.marutix")));
   relocateRuntimeData(env);
@@ -282,7 +292,7 @@ async function main() {
   try {
     baseUrl = new URL(env.get("APP_BASE_URL", "http://localhost:3000"));
   } catch {
-    fail("APP_BASE_URL in .env.local is not a valid URL (expected e.g. http://localhost:3000).");
+    fail("APP_BASE_URL in .env is not a valid URL (expected e.g. http://localhost:3000).");
     process.exit(1);
   }
   const webPort = Number(process.env.PORT || baseUrl.port || (baseUrl.protocol === "https:" ? 443 : 80));
@@ -319,7 +329,7 @@ async function main() {
   // --- MongoDB
   const mongoUri = env.get("MONGODB_URI");
   if (!mongoUri) {
-    fail("MONGODB_URI is not set in .env.local.");
+    fail("MONGODB_URI is not set in .env.");
     process.exit(1);
   }
   const local = localMongoTarget(mongoUri);

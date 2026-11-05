@@ -31,7 +31,7 @@ npm run dev
 
 That one command starts **everything**: MongoDB (if `MONGODB_URI` points at this machine and it isn't already running; data in `~/.marutix/mongodb`), the Next.js app, the jobs worker and the WhatsApp worker, with each line of output labelled `[web]`, `[jobs]`, `[whatsapp]`. When all of them are up it prints a summary, including any external credentials that are still missing. Ctrl+C stops all of them.
 
-On the first run, if there's no `.env.local`, it's created from `.env.example` with freshly generated secrets (`AUTH_JWT_SECRET`, `OTP_HASH_SECRET`, `PII_ENCRYPTION_KEY`, `WHATSAPP_WEB_WORKER_SECRET`). To create it by hand instead, copy `.env.example` and generate each secret with `openssl rand -base64 32`.
+On the first run, if there's no `.env`, it's created from `.env.example` with freshly generated secrets (`AUTH_JWT_SECRET`, `OTP_HASH_SECRET`, `PII_ENCRYPTION_KEY`, `WHATSAPP_WEB_WORKER_SECRET`). To create it by hand instead, copy `.env.example` and generate each secret with `openssl rand -base64 32`.
 
 The web port comes from `APP_BASE_URL`. If that port (or the worker's 3100) is taken, `npm run dev` stops and names the process holding it rather than silently moving to another port, which would break sign-in.
 
@@ -164,7 +164,7 @@ tests/               unit + MongoDB integration tests
 
 ### Run it locally
 
-1. **Configure.** In `.env.local`, set `WHATSAPP_WEB_WORKER_SECRET` (`openssl rand -base64 32`). Optionally set `WHATSAPP_WEB_TEST_RECIPIENTS=98XXXXXXXX` to a phone you control, so you can send test messages.
+1. **Configure.** In `.env`, set `WHATSAPP_WEB_WORKER_SECRET` (`openssl rand -base64 32`). Optionally set `WHATSAPP_WEB_TEST_RECIPIENTS=98XXXXXXXX` to a phone you control, so you can send test messages.
 2. **Check Chromium.** Puppeteer's Chrome is used from `~/.cache/puppeteer`. npm 11+ doesn't run install scripts by default, so if it's missing run `npx puppeteer browsers install chrome`. Alternatively, set `PUPPETEER_EXECUTABLE_PATH` to a local Chrome or Chromium.
 3. **Start everything:** `npm run dev` (starts the WhatsApp worker along with the app).
 4. **Make yourself an admin.** Sign in once at `/login`, then run (in a second terminal):

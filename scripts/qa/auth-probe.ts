@@ -108,7 +108,7 @@ async function main() {
   await sleep(1500);
   let v = await s.call("POST", "/api/v1/auth/otp/verify", { phone: staff, code: codeFor(staff, since2) });
   console.log(`  first sign-in → ${v.status}`);
-  const out = execFileSync(join(process.cwd(), "node_modules/.bin/tsx"), ["--conditions=react-server", "--env-file=.env.local", "scripts/admin-role.ts", "grant", "super_admin", staff], { encoding: "utf8", env: process.env });
+  const out = execFileSync(join(process.cwd(), "node_modules/.bin/tsx"), ["--conditions=react-server", "--env-file=.env", "scripts/admin-role.ts", "grant", "super_admin", staff], { encoding: "utf8", env: process.env });
   console.log(`  grant: ${out.trim().split("\n").at(-1)}`);
   const old = await s.call("GET", "/api/v1/admin/requests");
   console.log(`  pre-grant session after grant → GET /api/v1/admin/requests ${old.status} (expect 401: sessions revoked)`);

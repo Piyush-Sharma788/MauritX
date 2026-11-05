@@ -46,7 +46,7 @@ npm install
 npm run dev
 ```
 
-`npm run dev` creates `.env.local` with generated secrets on the first run, starts MongoDB if needed, then the web app, the jobs worker and the WhatsApp worker. It prints what is running and which external credentials (Meta WhatsApp, Anthropic, email) are still missing. See `docs/WHATSAPP_BOT_GUIDE.md` to connect WhatsApp.
+`npm run dev` creates `.env` with generated secrets on the first run, starts MongoDB if needed, then the web app, the jobs worker and the WhatsApp worker. It prints what is running and which external credentials (Meta WhatsApp, Anthropic, email) are still missing. See `docs/WHATSAPP_BOT_GUIDE.md` to connect WhatsApp.
 
 ## Environment variables (names only)
 ```env

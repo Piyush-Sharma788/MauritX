@@ -19,7 +19,7 @@
    - 4.1 Clone & Install
    - 4.2 MongoDB Setup
    - 4.3 Generate Secrets
-   - 4.4 Minimum `.env.local`
+   - 4.4 Minimum `.env`
    - 4.5 Run the App
    - 4.6 Grant Admin Access
 5. [Docker](#5-docker)
@@ -296,7 +296,7 @@ docker --version  # Optional, any recent version
 
 ## 3. Environment Setup {#3-environment-setup}
 
-MarutiX is configured entirely through environment variables. In development, they go in `.env.local` (never commit this file). In production, they go in `/opt/marutix/.env.production` on the server (chmod 600).
+MarutiX is configured entirely through environment variables. In development, they go in `.env` (never commit this file). In production, they go in `/opt/marutix/.env.production` on the server (chmod 600).
 
 > **Important:** Every startup call to `validateServerConfiguration()` will throw a detailed error listing every missing or malformed variable before the app accepts any traffic.
 
@@ -509,12 +509,12 @@ openssl rand -hex 32
 
 > **Warning:** Never reuse the same value for different secrets. If any two secrets are identical, startup validation will reject the configuration.
 
-### 4.4 Minimum `.env.local` {#44-minimum-envlocal}
+### 4.4 Minimum `.env` {#44-minimum-envlocal}
 
-Create `.env.local` in the project root (never commit this file — it's already in `.gitignore`):
+Create `.env` in the project root (never commit this file — it's already in `.gitignore`):
 
 ```bash
-# .env.local — Development configuration
+# .env — Development configuration
 # Replace all placeholder values with your actual generated secrets
 
 # --- Core ---
@@ -1496,7 +1496,7 @@ docker compose exec worker \
 
 | Error message | Cause | Fix |
 |---|---|---|
-| `MarutiX web refused to start. Fix these settings: - core: MONGODB_URI is required` | Missing required env variable | Add the named variable to `.env.local` or `.env.production` |
+| `MarutiX web refused to start. Fix these settings: - core: MONGODB_URI is required` | Missing required env variable | Add the named variable to `.env` or `.env.production` |
 | `PII_ENCRYPTION_KEY must be 32 bytes encoded as base64` | Wrong format for encryption key | Generate: `openssl rand -base64 32` — the result must be ~44 chars |
 | `AUTH_JWT_SECRET has too few distinct characters to be random` | Using a placeholder like "changeme" | Generate: `openssl rand -hex 64` |
 | `AUTH_JWT_SECRET and OTP_HASH_SECRET must be different secrets` | Reused the same value | Generate separate values for each |

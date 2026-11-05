@@ -102,7 +102,7 @@ npm run dev
 
 That single command:
 
-1. creates `.env.local` with freshly generated secrets, if it doesn't exist yet;
+1. creates `.env` with freshly generated secrets, if it doesn't exist yet;
 2. checks that the ports are free (3000 for the web app, 3100 for the WhatsApp worker) and tells you which program is using them if not;
 3. starts MongoDB if `MONGODB_URI` points at this machine and it isn't already running (data in `~/.marutix/mongodb`, log in `~/.marutix/mongod.log`; change the folder with `MARUTIX_DATA_DIR`);
 4. starts the **web app** (`[web]`), the **jobs worker** (`[jobs]`) and the **WhatsApp worker** (`[whatsapp]`, only in pilot mode);
@@ -137,7 +137,7 @@ Sign in again. You'll be asked to set up an authenticator app (Google Authentica
 
 ## 4. Choose how to connect WhatsApp
 
-MarutiX can talk to WhatsApp in two ways. Set `MESSAGING_PROVIDER` in `.env.local` to choose.
+MarutiX can talk to WhatsApp in two ways. Set `MESSAGING_PROVIDER` in `.env` to choose.
 
 | | **A. WhatsApp Web pilot** (`whatsapp_web`, default) | **B. Official Cloud API** (`whatsapp_cloud`) |
 |---|---|---|
@@ -155,7 +155,7 @@ MarutiX can talk to WhatsApp in two ways. Set `MESSAGING_PROVIDER` in `.env.loca
 
 ## 5. Environment variables
 
-They live in `.env.local` for development and in your secret manager or `.env.production` for production. `.env.example` lists every variable with comments. **Never commit real values** (`.env*` is git-ignored) and never put secrets in `NEXT_PUBLIC_*` variables.
+They live in `.env` for development and in your secret manager or `.env.production` for production. `.env.example` lists every variable with comments. **Never commit real values** (`.env*` is git-ignored) and never put secrets in `NEXT_PUBLIC_*` variables.
 
 Generate a random secret with `openssl rand -base64 32`, or a token with `openssl rand -hex 16`.
 
@@ -238,7 +238,7 @@ Generate a random secret with `openssl rand -base64 32`, or a token with `openss
 
 Use a spare phone and number, not your personal WhatsApp: the number can be banned.
 
-1. In `.env.local`, set:
+1. In `.env`, set:
    ```env
    MESSAGING_PROVIDER=whatsapp_web
    WHATSAPP_WEB_PUBLIC_NUMBER=+919XXXXXXXXX     # the phone you'll link
@@ -725,7 +725,7 @@ MarutiX finds hospitals and blood banks automatically; nobody types them in.
 
 To check discovery against real data without touching your database:
 ```bash
-npx tsx --conditions=react-server --env-file=.env.local scripts/discovery-check.ts 25.4358 81.8463 5
+npx tsx --conditions=react-server --env-file=.env scripts/discovery-check.ts 25.4358 81.8463 5
 ```
 (It writes to the throwaway database `marutix_discovery_check`. On networks with broken IPv6, prefix `NODE_OPTIONS=--dns-result-order=ipv4first`.)
 

@@ -309,7 +309,7 @@ async function signIn(browser: Browser, e164: string) {
 
 function runTsx(args: string[]): Promise<{ code: number; out: string }> {
   return new Promise((resolve) => {
-    const child = spawn(join(ROOT, "node_modules/.bin/tsx"), ["--conditions=react-server", "--env-file=.env.local", ...args], { cwd: ROOT, env: { ...process.env, ...isolated } });
+    const child = spawn(join(ROOT, "node_modules/.bin/tsx"), ["--conditions=react-server", "--env-file=.env", ...args], { cwd: ROOT, env: { ...process.env, ...isolated } });
     let out = "";
     child.stdout.on("data", (d) => (out += d));
     child.stderr.on("data", (d) => (out += d));
