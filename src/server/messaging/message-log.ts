@@ -22,7 +22,7 @@ export async function listRecentMessages({ limit, cursor }: { limit: number; cur
     messages: page.map((doc) => ({
       id: doc._id.toString(),
       kind: doc.kind,
-      recipient: maskPhone(decryptPii(doc.recipientPhoneEncrypted)),
+      recipient: doc.recipientPhoneEncrypted ? maskPhone(decryptPii(doc.recipientPhoneEncrypted)) : "Erased",
       status: doc.status,
       failureCode: doc.failureCode ?? null,
       attempts: doc.attempts,

@@ -1,6 +1,8 @@
 import "server-only";
 import type { OtpDeliveryChannel } from "@/features/auth/schemas";
 import { getEnv } from "@/lib/env";
+import { getSmsConfig } from "@/lib/sms/config";
+import { twilioSmsOtpProvider } from "@/server/otp-delivery/sms";
 import { maskPhone } from "@/lib/validation/phone";
 import { sendTemplateMessage } from "@/lib/whatsapp/client";
 
@@ -85,6 +87,19 @@ function developmentProvider(): OtpDeliveryProvider {
       return {};
     },
   };
+}
+
+export interface SmsOtpOption {
+  provider: OtpDeliveryProvider;
+  perPhoneDaily: number;
+  dailyCap: number;
+}
+
+/** The SMS fallback, or null when SMS_PROVIDER isn't configured. */
+export function getSmsOtpOption(): SmsOtpOption | null {
+  const config = getSmsConfig();
+  if (!config) return null;
+  return { provider: twilioSmsOtpProvider(config), perPhoneDaily: config.perPhoneDaily, dailyCap: config.dailyCap };
 }
 
 export function getOtpDeliveryProvider(): OtpDeliveryProvider {

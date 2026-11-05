@@ -3,10 +3,12 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { BecomeDonorButton } from "@/components/donor/become-donor-button";
+import { DeleteAccount } from "@/components/donor/delete-account";
 import { DonorDashboard } from "@/components/donor/donor-dashboard";
 import { Spinner } from "@/components/ui/button";
 import { ArrowRightIcon, ChatIcon, CheckIcon, DropIcon, InfoIcon } from "@/components/ui/icons";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { isStaffRole, ROLE_LABELS } from "@/lib/auth/permissions";
 import { getDonorOverview } from "@/server/donors/service";
 
 export const metadata: Metadata = {
@@ -77,14 +79,14 @@ async function DashboardContent({ searchParams }: Pick<PageProps<"/dashboard">, 
         </section>
       )}
 
-      {user.role === "admin" && (
+      {isStaffRole(user.role) && (
         <Link
-          href="/admin/requests"
+          href="/admin/operations"
           className="group flex items-center justify-between gap-4 rounded-[var(--radius-card)] border border-ink/15 bg-ink p-5 text-white shadow-soft transition hover:bg-ink/90 sm:p-6"
         >
           <span>
-            <span className="block font-semibold">Admin · Requests & WhatsApp</span>
-            <span className="mt-0.5 block text-sm text-white/70">Verify and manage emergency requests, and manage the WhatsApp pilot.</span>
+            <span className="block font-semibold">Admin · {ROLE_LABELS[user.role]}</span>
+            <span className="mt-0.5 block text-sm text-white/70">Verify and coordinate emergency requests. Two-factor authentication is required.</span>
           </span>
           <ArrowRightIcon className="size-5 shrink-0 transition-transform group-hover:translate-x-1" />
         </Link>
@@ -100,6 +102,8 @@ async function DashboardContent({ searchParams }: Pick<PageProps<"/dashboard">, 
         </span>
         <ArrowRightIcon className="size-5 shrink-0 text-brand-500 transition-transform group-hover:translate-x-1" />
       </Link>
+
+      <DeleteAccount isStaff={isStaffRole(user.role)} />
     </div>
   );
 }

@@ -18,7 +18,8 @@ const notificationEventSchema = new Schema(
     matchingRunId: { type: Types.ObjectId, ref: "MatchingRun" },
     recipientUserId: { type: Types.ObjectId, ref: "User" },
     recipientLookup: { type: String, required: true },
-    recipientPhoneEncrypted: { type: String, required: true },
+    // Erased (unset) when the recipient deletes their account.
+    recipientPhoneEncrypted: { type: String },
     bodyEncrypted: { type: String },
     // Cloud API template values, encrypted and erased with the body.
     templateParamsEncrypted: { type: String },

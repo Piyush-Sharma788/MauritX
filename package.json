@@ -14,6 +14,8 @@
     "whatsapp:worker:prod": "NODE_ENV=production tsx --conditions=react-server src/worker/whatsapp/main.ts",
     "admin:grant": "tsx --conditions=react-server --env-file=.env.local scripts/admin-role.ts grant",
     "admin:revoke": "tsx --conditions=react-server --env-file=.env.local scripts/admin-role.ts revoke",
+    "admin:mfa-reset": "tsx --conditions=react-server --env-file=.env.local scripts/admin-role.ts mfa-reset",
+    "admin:list": "tsx --conditions=react-server --env-file=.env.local scripts/admin-role.ts list",
     "jobs:worker": "tsx --conditions=react-server --env-file=.env.local src/worker/jobs/main.ts",
     "jobs:worker:prod": "NODE_ENV=production tsx --conditions=react-server src/worker/jobs/main.ts"
   },

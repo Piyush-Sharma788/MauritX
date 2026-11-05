@@ -1,6 +1,7 @@
 import "server-only";
 import { decryptPii } from "@/lib/security/crypto";
 import { logger } from "@/lib/logger";
+import { reportError } from "@/server/monitoring/report";
 import { checkEligibility } from "@/server/messaging/eligibility";
 import { MessagingError, type DeliveryAck, type MessagingProvider } from "@/server/messaging/provider";
 import { NotificationEvent } from "@/server/models/notification-event";
@@ -21,6 +22,10 @@ export interface DispatchOptions {
 }
 
 export type DispatchOutcome = "idle" | "rate_limited" | "sent" | "retry" | "failed" | "suppressed";
+
+class MessagingDeliveryFailure extends Error {
+  override name = "MessagingDeliveryFailure";
+}
 
 const FINAL = { $unset: { bodyEncrypted: 1, templateParamsEncrypted: 1, lockedUntil: 1 } } as const;
 
@@ -81,6 +86,10 @@ export async function dispatchNext(
     return "idle";
   }
 
+  if (!message.recipientPhoneEncrypted) {
+    await NotificationEvent.updateOne({ _id: message._id }, { $set: { status: "suppressed", failureCode: "ACCOUNT_DELETED", failedAt: now }, ...FINAL });
+    return "suppressed";
+  }
   const phoneE164 = decryptPii(message.recipientPhoneEncrypted);
 
   // Consent can be withdrawn between queueing and sending.
@@ -147,6 +156,8 @@ export async function dispatchNext(
       { _id: message._id, status: "sending" },
       { $set: { status: "failed", failureCode: code, failedAt: new Date() }, ...FINAL },
     );
+    // Final failures only: grouped by provider error code (an unexpected exception groups by its message).
+    await reportError(error instanceof MessagingError ? new MessagingDeliveryFailure(code) : error, { source: "messaging", event: "messaging.delivery_failed", where: `${provider.name}:${message.kind}` });
     return "failed";
   }
 }

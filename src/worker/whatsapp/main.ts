@@ -13,6 +13,7 @@ import { hostname } from "node:os";
 import mongoose from "mongoose";
 import { connectToDatabase } from "@/lib/db/mongoose";
 import { logger } from "@/lib/logger";
+import { reportError } from "@/server/monitoring/report";
 import { getAiConfig } from "@/lib/ai/config";
 import { validateServerConfiguration } from "@/lib/security/config-check";
 import { getCoordinationConfig } from "@/lib/coordination/config";
@@ -91,7 +92,7 @@ async function main() {
 
   process.on("SIGINT", () => void shutdown(0));
   process.on("SIGTERM", () => void shutdown(0));
-  process.on("unhandledRejection", (error) => logger.error("whatsapp.worker.unhandled_rejection", { errorName: errorName(error) }));
+  process.on("unhandledRejection", (error) => void reportError(error, { source: "whatsapp_worker", event: "whatsapp.worker.unhandled_rejection" }));
 
   // Restore the saved session after a restart; otherwise wait for an admin.
   if (manager.hasSavedSession()) {
@@ -132,7 +133,7 @@ async function main() {
         else if (outcome === "suppressed") wait = 0;
         else if (outcome !== "idle") wait = config.minSendIntervalMs;
       } catch (error) {
-        logger.error("whatsapp.dispatch_error", { errorName: errorName(error) });
+        await reportError(error, { source: "messaging", event: "whatsapp.dispatch_error" });
         wait = 5_000;
       }
     }
@@ -141,10 +142,7 @@ async function main() {
 }
 
 main().catch(async (error: unknown) => {
-  logger.error("whatsapp.worker.fatal", {
-    errorName: errorName(error),
-    errorMessage: error instanceof Error ? error.message.slice(0, 300) : undefined,
-  });
+  await reportError(error, { source: "whatsapp_worker", event: "whatsapp.worker.fatal" });
   await mongoose.disconnect().catch(() => {});
   process.exit(1);
 });

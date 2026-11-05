@@ -7,7 +7,7 @@ import { adminOutreachAction } from "@/server/outreach/service";
 
 /** POST /api/v1/admin/requests/:id/outreach/:outreachId: `{ action: retry | send | cancel | record_response, ... }`. Admin only; audited. */
 export const POST = apiRoute(async (request, ctx, route) => {
-  const admin = await requireAdmin();
+  const admin = await requireAdmin("coordination.manage");
   const id = await readPublicRequestId(route);
   const { outreachId } = await route.params;
   const body = await parseJsonBody(request, outreachActionSchema);

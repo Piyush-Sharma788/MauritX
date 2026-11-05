@@ -119,7 +119,7 @@ export async function listFailedMessages(limit = 25): Promise<FailedMessageView[
   return docs.map((d) => ({
     id: d._id.toString(),
     kind: d.kind,
-    recipient: maskPhone(decryptPii(d.recipientPhoneEncrypted)),
+    recipient: d.recipientPhoneEncrypted ? maskPhone(decryptPii(d.recipientPhoneEncrypted)) : "Erased",
     failureCode: d.failureCode ?? null,
     failedAt: iso(d.failedAt),
     attempts: d.attempts,

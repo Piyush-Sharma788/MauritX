@@ -1,5 +1,6 @@
 import "server-only";
 import type { Types } from "mongoose";
+import { isStaffRole } from "@/lib/auth/permissions";
 import { isProduction } from "@/lib/env";
 import { generateSessionToken, hashSessionToken } from "@/lib/security/crypto";
 import { Session } from "@/server/models/session";
@@ -56,8 +57,13 @@ export async function revokeSession(token: string, reason: "logout" | "rotated" 
 
 export type SessionUser = UserDoc & { _id: Types.ObjectId };
 
-/** Resolves a cookie token to an active user, or null. */
-export async function findSessionUser(token: string | undefined, now = new Date()): Promise<SessionUser | null> {
+export interface ActiveSession {
+  user: SessionUser;
+  session: { id: Types.ObjectId; mfaVerifiedAt: Date | null; createdAt: Date };
+}
+
+/** Resolves a cookie token to an active user and session, or null. Applies the idle and admin limits. */
+export async function findSession(token: string | undefined, now = new Date()): Promise<ActiveSession | null> {
   if (!token || token.length > 128) return null;
   const session = await Session.findOne({
     tokenHash: hashSessionToken(token),
@@ -71,10 +77,10 @@ export async function findSessionUser(token: string | undefined, now = new Date(
   const limits = sessionLimits();
   const createdAt = (session as { createdAt?: Date }).createdAt ?? now;
   const lastSeen = session.lastSeenAt ?? createdAt;
-  const admin = user.role === "admin";
+  const staff = isStaffRole(user.role);
   const expired: "idle" | "max_age" | null =
-    admin && now.getTime() - createdAt.getTime() > limits.adminMaxAgeMs ? "max_age"
-    : now.getTime() - lastSeen.getTime() > (admin ? limits.adminIdleMs : limits.idleMs) ? "idle"
+    staff && now.getTime() - createdAt.getTime() > limits.adminMaxAgeMs ? "max_age"
+    : now.getTime() - lastSeen.getTime() > (staff ? limits.adminIdleMs : limits.idleMs) ? "idle"
     : null;
   if (expired) {
     await Session.updateOne({ _id: session._id, revokedAt: null }, { $set: { revokedAt: now, revokedReason: expired } });
@@ -83,7 +89,12 @@ export async function findSessionUser(token: string | undefined, now = new Date(
   if (now.getTime() - lastSeen.getTime() > TOUCH_INTERVAL_MS) {
     await Session.updateOne({ _id: session._id }, { $set: { lastSeenAt: now } });
   }
-  return user;
+  return { user, session: { id: session._id, mfaVerifiedAt: session.mfaVerifiedAt ?? null, createdAt } };
+}
+
+/** Resolves a cookie token to an active user, or null. */
+export async function findSessionUser(token: string | undefined, now = new Date()): Promise<SessionUser | null> {
+  return (await findSession(token, now))?.user ?? null;
 }
 
 /**
@@ -91,7 +102,7 @@ export async function findSessionUser(token: string | undefined, now = new Date(
  * stolen or stale session can't keep (or gain) privileges. `keepTokenHash`
  * spares the session that made the change.
  */
-export async function revokeAllSessions(userId: Types.ObjectId, reason: "role_changed" | "phone_changed", keepToken?: string): Promise<number> {
+export async function revokeAllSessions(userId: Types.ObjectId, reason: "role_changed" | "phone_changed" | "mfa_reset" | "account_deleted", keepToken?: string): Promise<number> {
   const result = await Session.updateMany(
     { userId, revokedAt: null, ...(keepToken ? { tokenHash: { $ne: hashSessionToken(keepToken) } } : {}) },
     { $set: { revokedAt: new Date(), revokedReason: reason } },

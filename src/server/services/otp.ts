@@ -9,7 +9,8 @@ import { generateOtp, hashOtp, phoneLookupToken, safeEqual } from "@/lib/securit
 import { maskPhone } from "@/lib/validation/phone";
 import { WhatsAppApiError } from "@/lib/whatsapp/client";
 import { OtpChallenge } from "@/server/models/otp-challenge";
-import { getOtpDeliveryProvider, type OtpDeliveryProvider } from "@/server/otp-delivery";
+import { getOtpDeliveryProvider, getSmsOtpOption, type OtpDeliveryProvider, type SmsOtpOption } from "@/server/otp-delivery";
+import { SmsApiError } from "@/server/otp-delivery/sms";
 import { recordAudit } from "@/server/services/audit";
 import { enforceRateLimit, RATE_LIMITS } from "@/server/services/rate-limit";
 
@@ -17,23 +18,52 @@ export const OTP_TTL_SECONDS = 5 * 60;
 export const OTP_RESEND_COOLDOWN_SECONDS = 30;
 export const OTP_MAX_VERIFY_ATTEMPTS = 5;
 
-type Purpose = "login" | "phone_change";
+type Purpose = "login" | "phone_change" | "account_deletion";
 
 const latestChallenge = (phoneLookup: string, purpose: Purpose) =>
   OtpChallenge.findOne({ phoneLookup, purpose }).sort({ createdAt: -1 }).lean();
 
+const DAY_SECONDS = 24 * 60 * 60;
+
+/** Every SMS code counts against the IP, the number's daily allowance and the service-wide daily cap. */
+async function enforceSmsLimits(sms: SmsOtpOption, phoneLookup: string, ip: string, now: Date) {
+  await enforceRateLimit(RATE_LIMITS.otpSmsPerIp, ip, now);
+  await enforceRateLimit({ scope: "otp-sms:phone", limit: sms.perPhoneDaily, windowSeconds: DAY_SECONDS }, phoneLookup, now);
+  try {
+    await enforceRateLimit({ scope: "otp-sms:global", limit: sms.dailyCap, windowSeconds: DAY_SECONDS }, "all", now);
+  } catch (error) {
+    if (error instanceof AppError) logger.error("otp.sms_daily_cap_reached", { dailyCap: sms.dailyCap });
+    throw error;
+  }
+}
+
+function deliveryFailureFields(error: unknown) {
+  return {
+    httpStatus: error instanceof WhatsAppApiError || error instanceof SmsApiError ? error.httpStatus : null,
+    providerCode: error instanceof WhatsAppApiError || error instanceof SmsApiError ? error.providerCode : null,
+    errorName: error instanceof Error ? error.name : "UnknownError",
+  };
+}
+
 /**
  * Issues a new code. The response is identical whether or not the number
  * already has an account, so it cannot be used to enumerate users.
+ *
+ * Delivery: WhatsApp (or the development provider), or SMS when the user
+ * asks for it. If WhatsApp fails outright and SMS is configured, the same
+ * code goes by SMS instead, within the SMS limits.
  */
 export async function requestOtp(
-  input: { phoneE164: string; purpose: Purpose },
+  input: { phoneE164: string; purpose: Purpose; channel?: "whatsapp" | "sms" },
   ctx: ApiContext,
   provider: OtpDeliveryProvider = getOtpDeliveryProvider(),
+  sms: SmsOtpOption | null = getSmsOtpOption(),
 ): Promise<SendOtpResponse> {
   await connectToDatabase();
   const now = new Date();
   const phoneLookup = phoneLookupToken(input.phoneE164);
+  const wantsSms = input.channel === "sms";
+  if (wantsSms && !sms) throw new AppError(400, "SMS_UNAVAILABLE", "Codes by SMS aren't available. Use WhatsApp instead.");
 
   await enforceRateLimit(RATE_LIMITS.otpSendPerIp, ctx.ip, now);
 
@@ -66,39 +96,52 @@ export async function requestOtp(
     expiresAt,
   });
 
+  const delivery = { phoneE164: input.phoneE164, code, expiresInMinutes: OTP_TTL_SECONDS / 60, requestId: ctx.requestId };
+  const failed = async (channel: string, error: unknown) => {
+    logger.warn("otp.delivery_failed", { requestId: ctx.requestId, channel, ...deliveryFailureFields(error) });
+    await recordAudit({ action: "auth.otp.delivery_failed", outcome: "failure", requestId: ctx.requestId, resourceType: "otp_challenge", resourceId: challengeId.toString() });
+  };
+  const sendBySms = async (activeSms: SmsOtpOption) => {
+    await enforceSmsLimits(activeSms, phoneLookup, ctx.ip, now);
+    return activeSms.provider.send(delivery);
+  };
+
+  let used: OtpDeliveryProvider = wantsSms ? sms!.provider : provider;
+  let fellBackToSms = false;
+  let sent: { providerMessageId?: string };
   try {
-    const sent = await provider.send({
-      phoneE164: input.phoneE164,
-      code,
-      expiresInMinutes: OTP_TTL_SECONDS / 60,
-      requestId: ctx.requestId,
-    });
-    if (sent.providerMessageId) {
-      // Webhook statuses update this, so support can see whether the code reached the phone.
-      await OtpChallenge.updateOne({ _id: challengeId }, { $set: { providerMessageId: sent.providerMessageId, deliveryStatus: "accepted", deliveryUpdatedAt: new Date() } });
-    }
+    sent = wantsSms ? await sendBySms(sms!) : await provider.send(delivery);
   } catch (error) {
-    await OtpChallenge.deleteOne({ _id: challengeId });
-    logger.warn("otp.delivery_failed", {
-      requestId: ctx.requestId,
-      channel: provider.channel,
-      httpStatus: error instanceof WhatsAppApiError ? error.httpStatus : null,
-      providerCode: error instanceof WhatsAppApiError ? error.providerCode : null,
-      errorName: error instanceof Error ? error.name : "UnknownError",
-    });
-    await recordAudit({
-      action: "auth.otp.delivery_failed",
-      outcome: "failure",
-      requestId: ctx.requestId,
-      resourceType: "otp_challenge",
-      resourceId: challengeId.toString(),
-    });
-    throw new AppError(
-      503,
-      "OTP_DELIVERY_FAILED",
-      "We couldn't send the code on WhatsApp. Check that this number uses WhatsApp, then try again.",
-    );
+    if (error instanceof AppError) {
+      await OtpChallenge.deleteOne({ _id: challengeId });
+      throw error;
+    }
+    await failed(used.channel, error);
+    if (wantsSms || !sms || provider.channel !== "whatsapp") {
+      await OtpChallenge.deleteOne({ _id: challengeId });
+      throw new AppError(
+        503,
+        "OTP_DELIVERY_FAILED",
+        wantsSms ? "We couldn't send the code by SMS. Please try again in a few minutes." : "We couldn't send the code on WhatsApp. Check that this number uses WhatsApp, then try again.",
+      );
+    }
+    try {
+      sent = await sendBySms(sms);
+      used = sms.provider;
+      fellBackToSms = true;
+    } catch (smsError) {
+      await OtpChallenge.deleteOne({ _id: challengeId });
+      if (!(smsError instanceof AppError)) await failed("sms", smsError);
+      throw new AppError(503, "OTP_DELIVERY_FAILED", "We couldn't send the code on WhatsApp or by SMS. Please try again in a few minutes.");
+    }
   }
+
+  // Webhook statuses (WhatsApp) update this, so support can see whether the code reached the phone.
+  await OtpChallenge.updateOne(
+    { _id: challengeId },
+    { $set: { deliveryChannel: used.channel, ...(sent.providerMessageId ? { providerMessageId: sent.providerMessageId, deliveryStatus: "accepted", deliveryUpdatedAt: new Date() } : {}) } },
+  );
+  if (fellBackToSms) logger.info("otp.sms_fallback_used", { requestId: ctx.requestId });
 
   await recordAudit({
     action: "auth.otp.requested",
@@ -109,7 +152,9 @@ export async function requestOtp(
   });
 
   return {
-    channel: provider.channel,
+    channel: used.channel,
+    fellBackToSms,
+    smsAvailable: Boolean(sms),
     maskedPhone: maskPhone(input.phoneE164),
     codeLength: OTP_LENGTH,
     expiresAt: expiresAt.toISOString(),

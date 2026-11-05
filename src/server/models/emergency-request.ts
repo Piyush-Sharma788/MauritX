@@ -115,6 +115,8 @@ const emergencyRequestSchema = new Schema(
     history: { type: [historyEntrySchema], default: [] },
     expiresAt: { type: Date, required: true },
     closedAt: { type: Date },
+    // Set when the retention job removed patient and requester details (src/server/services/retention.ts).
+    anonymizedAt: { type: Date },
   },
   { collection: "emergency_requests", timestamps: true, strict: "throw" },
 );
@@ -130,6 +132,7 @@ emergencyRequestSchema.index({ location: "2dsphere" }, { sparse: true });
 emergencyRequestSchema.index({ requesterPhoneLookup: 1, status: 1 }, { sparse: true });
 emergencyRequestSchema.index({ institutionId: 1, status: 1 }, { sparse: true });
 emergencyRequestSchema.index({ "automation.status": 1, status: 1 });
+emergencyRequestSchema.index({ closedAt: 1, anonymizedAt: 1 }, { sparse: true });
 
 export type EmergencyRequestDoc = InferSchemaType<typeof emergencyRequestSchema>;
 

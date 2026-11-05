@@ -5,6 +5,6 @@ import { whatsappWorker } from "@/lib/whatsapp-web/worker-client";
 
 /** GET /api/v1/admin/whatsapp/qr: the current pairing QR as SVG. Admin only; never cached. */
 export const GET = apiRoute(async (_request, ctx) => {
-  await requireAdmin();
+  await requireAdmin("whatsapp.manage");
   return ok<WhatsAppQrResponse>(ctx, await whatsappWorker.getQr());
 });

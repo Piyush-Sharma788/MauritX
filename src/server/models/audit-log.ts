@@ -64,6 +64,16 @@ export const AUDIT_ACTIONS = [
   "donor_contact.link_viewed",
   "donor_contact.marked_contacted",
   "jobs.retried",
+  "auth.mfa.enrollment_started",
+  "auth.mfa.enrolled",
+  "auth.mfa.verified",
+  "auth.mfa.failed",
+  "auth.mfa.recovery_code_used",
+  "auth.mfa.reset",
+  "account.deletion_requested",
+  "account.deleted",
+  "retention.requests_anonymized",
+  "admin.role_changed",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

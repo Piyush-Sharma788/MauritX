@@ -1,5 +1,6 @@
 import { verifyOtpBodySchema, type VerifyOtpResponse } from "@/features/auth/schemas";
 import { apiRoute, ok, parseJsonBody } from "@/lib/api/handler";
+import { isStaffRole } from "@/lib/auth/permissions";
 import { recordAudit } from "@/server/services/audit";
 import { verifyOtp } from "@/server/services/otp";
 import { createSession, revokeSession, sessionCookieName, sessionCookieOptions } from "@/server/services/session";
@@ -23,7 +24,8 @@ export const POST = apiRoute(async (request, ctx) => {
 
   const response = ok<VerifyOtpResponse>(ctx, {
     user: { id: user._id.toString(), role: user.role },
-    redirectTo: "/dashboard",
+    // Staff complete the second factor before anything else.
+    redirectTo: isStaffRole(user.role) ? "/admin/mfa" : "/dashboard",
   });
   response.cookies.set(sessionCookieName(), session.token, sessionCookieOptions(session.expiresAt));
   return response;

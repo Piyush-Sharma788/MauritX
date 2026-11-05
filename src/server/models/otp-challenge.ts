@@ -1,6 +1,6 @@
 import { Schema, model, models, type InferSchemaType, type Model } from "mongoose";
 
-export const OTP_PURPOSES = ["login", "registration", "request_verification", "phone_change"] as const;
+export const OTP_PURPOSES = ["login", "registration", "request_verification", "phone_change", "account_deletion"] as const;
 
 /** `otp_challenges` (DATABASE_SCHEMA.md §7). Only a keyed hash of the code is stored. */
 const otpChallengeSchema = new Schema(
@@ -11,6 +11,7 @@ const otpChallengeSchema = new Schema(
     attempts: { type: Number, required: true, default: 0, min: 0 },
     expiresAt: { type: Date, required: true },
     consumedAt: { type: Date, default: null },
+    deliveryChannel: { type: String, enum: ["whatsapp", "sms", "development"] },
     // Delivery tracking for codes sent through the WhatsApp Cloud API (from webhook statuses).
     providerMessageId: { type: String },
     deliveryStatus: { type: String, enum: ["accepted", "sent", "delivered", "read", "failed", "deleted", "warning"] },

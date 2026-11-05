@@ -5,6 +5,6 @@ import { listFailedMessages } from "@/server/admin/operations";
 
 /** GET /api/v1/admin/operations/failed-messages: recent failures, masked, with which can be retried. Admin only. */
 export const GET = apiRoute(async (_request, ctx) => {
-  await requireAdmin();
+  await requireAdmin("operations.read");
   return ok<{ messages: FailedMessageView[] }>(ctx, { messages: await listFailedMessages() });
 });

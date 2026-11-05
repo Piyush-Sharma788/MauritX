@@ -13,7 +13,7 @@ const querySchema = z.object({
 
 /** GET /api/v1/admin/audit?action=&cursor=&limit=: audit events, newest first. Admin only. */
 export const GET = apiRoute(async (request, ctx) => {
-  await requireAdmin();
+  await requireAdmin("audit.read");
   const query = querySchema.safeParse(Object.fromEntries(request.nextUrl.searchParams));
   if (!query.success) throw new AppError(422, "VALIDATION_ERROR", "Invalid filter.");
   return ok(ctx, await listAuditEvents(query.data));

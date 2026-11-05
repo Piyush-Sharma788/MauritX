@@ -6,7 +6,7 @@ import { setContactStatus } from "@/server/institutions/service";
 
 /** POST /api/v1/admin/institutions/:id/contacts/:contactId: `{ status: "pending" | "verified" | "revoked" }`. Admin only; audited. */
 export const POST = apiRoute(async (request, ctx, route) => {
-  const admin = await requireAdmin();
+  const admin = await requireAdmin("institutions.verify");
   const { institutionId, contactId } = await route.params;
   const body = await parseJsonBody(request, contactStatusSchema);
   await setContactStatus(institutionId ?? "", contactId ?? "", body.status, new Types.ObjectId(admin.id), ctx.requestId);

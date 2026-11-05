@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { randomUUID } from "node:crypto";
 import { Types } from "mongoose";
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { Suspense, type ReactNode } from "react";
 import { AutomationCard, HistoryCard, OutreachCard } from "@/components/admin/coordination-detail";
 import { CoordinationPanel } from "@/components/admin/coordination-panel";
@@ -13,7 +13,7 @@ import { ArrowLeftIcon, LockIcon, ShieldIcon } from "@/components/ui/icons";
 import { BLOOD_GROUP_LABELS } from "@/features/donors/schemas";
 import { COMPONENT_LABELS, PRIORITY_LABELS, publicRequestIdSchema } from "@/features/requests/schemas";
 import { AppError } from "@/lib/api/errors";
-import { getCurrentUser } from "@/lib/auth/current-user";
+import { requireAdminPage } from "@/lib/auth/require-admin";
 import { maskPhone } from "@/lib/validation/phone";
 import { getCoordinationConfig } from "@/lib/coordination/config";
 import { getRequestCoordination } from "@/server/coordination/admin";
@@ -59,9 +59,7 @@ function Rows({ rows }: { rows: [string, ReactNode][] }) {
 }
 
 async function DetailContent({ params }: Pick<PageProps<"/admin/requests/[publicRequestId]">, "params">) {
-  const user = await getCurrentUser();
-  if (!user) redirect("/login");
-  if (user.role !== "admin") notFound();
+  const user = await requireAdminPage("requests.manage");
   const parsed = publicRequestIdSchema.safeParse((await params).publicRequestId);
   if (!parsed.success) notFound();
 

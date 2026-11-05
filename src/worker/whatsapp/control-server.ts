@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import QRCode from "qrcode";
 import { logger } from "@/lib/logger";
+import { reportError } from "@/server/monitoring/report";
 import { safeEqual } from "@/lib/security/crypto";
 import type { WhatsAppWebConfig } from "@/lib/whatsapp-web/config";
 import { BusyError, type WhatsAppSessionManager } from "@/worker/whatsapp/session-manager";
@@ -63,7 +64,7 @@ export function startControlServer(config: WhatsAppWebConfig, manager: WhatsAppS
       }
     } catch (error) {
       if (error instanceof BusyError) return send(res, 409, { error: "busy" });
-      logger.error("whatsapp.control_error", { route, errorName: error instanceof Error ? error.name : "UnknownError" });
+      await reportError(error, { source: "whatsapp_worker", event: "whatsapp.control_error", where: route });
       return send(res, 500, { error: "internal" });
     }
   });

@@ -7,7 +7,7 @@ import { adminUpdateStatus } from "@/server/requests/service";
 
 /** POST /api/v1/admin/requests/:publicRequestId/status: verify, update, cancel or close. Admin only. */
 export const POST = apiRoute(async (request, ctx, route) => {
-  const admin = await requireAdmin();
+  const admin = await requireAdmin("requests.manage");
   const id = await readPublicRequestId(route);
   const body = await parseJsonBody(request, adminStatusSchema);
   await adminUpdateStatus(id, body.status, body.note || undefined, new Types.ObjectId(admin.id), ctx);

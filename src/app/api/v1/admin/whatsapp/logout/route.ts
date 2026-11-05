@@ -6,7 +6,7 @@ import { recordAudit } from "@/server/services/audit";
 
 /** POST /api/v1/admin/whatsapp/logout: unlink the device and delete the saved session. Admin only. */
 export const POST = apiRoute(async (_request, ctx) => {
-  const admin = await requireAdmin();
+  const admin = await requireAdmin("whatsapp.manage");
   const result = await whatsappWorker.logout();
   await recordAudit({
     action: "whatsapp.logout_requested",

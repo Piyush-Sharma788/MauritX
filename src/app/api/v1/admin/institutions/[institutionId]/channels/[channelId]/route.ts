@@ -6,7 +6,7 @@ import { upsertChannel } from "@/server/institutions/service";
 
 /** PATCH /api/v1/admin/institutions/:id/channels/:channelId: correct a contact `{ type, value, status }`. Admin only; audited. */
 export const PATCH = apiRoute(async (request, ctx, route) => {
-  const admin = await requireAdmin();
+  const admin = await requireAdmin("institutions.review");
   const { institutionId, channelId } = await route.params;
   const body = await parseJsonBody(request, channelUpdateSchema);
   await upsertChannel(institutionId ?? "", channelId ?? "", body, new Types.ObjectId(admin.id), ctx.requestId);

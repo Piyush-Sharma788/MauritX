@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+
 import { Suspense } from "react";
 import { z } from "zod";
 import { Card, EmptyState, PageHeader, Pill } from "@/components/admin/kit";
 import { formatIST } from "@/components/requests/status";
 import { Spinner } from "@/components/ui/button";
 import { inputClasses } from "@/components/ui/form";
-import { getCurrentUser } from "@/lib/auth/current-user";
+import { requireAdminPage } from "@/lib/auth/require-admin";
 import { listAuditEvents } from "@/server/admin/operations";
 import { AUDIT_ACTIONS } from "@/server/models/audit-log";
 
@@ -30,9 +30,7 @@ export default function AuditPage({ searchParams }: PageProps<"/admin/audit">) {
 }
 
 async function AuditContent({ searchParams }: Pick<PageProps<"/admin/audit">, "searchParams">) {
-  const user = await getCurrentUser();
-  if (!user) redirect("/login");
-  if (user.role !== "admin") notFound();
+  await requireAdminPage("audit.read");
   const raw = Object.fromEntries(Object.entries(await searchParams).flatMap(([k, v]) => (typeof v === "string" && v ? [[k, v]] : [])));
   const filters = filtersSchema.parse(raw);
   const { events, nextCursor } = await listAuditEvents(filters);

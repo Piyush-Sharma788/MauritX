@@ -12,7 +12,7 @@ const querySchema = z.object({
 
 /** GET /api/v1/admin/whatsapp/messages: recent message log (masked recipients, no bodies). Admin only. */
 export const GET = apiRoute(async (request, ctx) => {
-  await requireAdmin();
+  await requireAdmin("whatsapp.read");
   const query = querySchema.safeParse(Object.fromEntries(request.nextUrl.searchParams));
   if (!query.success) throw new AppError(422, "VALIDATION_ERROR", "Invalid limit or cursor.");
   return ok<MessageLogResponse>(ctx, await listRecentMessages(query.data));

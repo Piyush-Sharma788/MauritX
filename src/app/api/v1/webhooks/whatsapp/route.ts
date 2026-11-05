@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { logger } from "@/lib/logger";
 import { getWhatsAppCloudConfig } from "@/lib/whatsapp/cloud-config";
 import { processCloudWebhook, verifySignature, verifySubscription, webhookPayloadSchema } from "@/server/messaging/cloud-webhook";
+import { reportError } from "@/server/monitoring/report";
 
 const MAX_BODY_BYTES = 1024 * 1024;
 const plain = (body: string, status: number) => new NextResponse(body, { status, headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" } });
@@ -52,7 +53,7 @@ export async function POST(request: NextRequest) {
     await processCloudWebhook(payload, config);
     return plain("OK", 200);
   } catch (error) {
-    logger.error("whatsapp_cloud.webhook_failed", { requestId, errorName: error instanceof Error ? error.name : "UnknownError" });
+    await reportError(error, { source: "whatsapp_webhook", event: "whatsapp_cloud.webhook_failed", requestId });
     return plain("Retry", 500);
   }
 }

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+
 import { Suspense } from "react";
 import { z } from "zod";
 import { StatusBadge, formatIST } from "@/components/requests/status";
@@ -8,7 +8,7 @@ import { Spinner } from "@/components/ui/button";
 import { inputClasses } from "@/components/ui/form";
 import { BLOOD_GROUP_LABELS, BLOOD_GROUPS } from "@/features/donors/schemas";
 import { COMPONENT_LABELS, PRIORITY_LABELS, publicRequestIdSchema, REQUEST_STATUSES, STATUS_LABELS } from "@/features/requests/schemas";
-import { getCurrentUser } from "@/lib/auth/current-user";
+import { requireAdminPage } from "@/lib/auth/require-admin";
 import { listRequests } from "@/server/requests/service";
 
 export const metadata: Metadata = { title: "Requests · Admin", robots: { index: false } };
@@ -43,9 +43,7 @@ const STAT_CARDS = [
 ] as const;
 
 async function RequestsContent({ searchParams }: Pick<PageProps<"/admin/requests">, "searchParams">) {
-  const user = await getCurrentUser();
-  if (!user) redirect("/login");
-  if (user.role !== "admin") notFound();
+  await requireAdminPage("requests.manage");
 
   const raw = Object.fromEntries(Object.entries(await searchParams).flatMap(([k, v]) => (typeof v === "string" && v !== "" ? [[k, v]] : [])));
   const filters = filtersSchema.parse(raw);

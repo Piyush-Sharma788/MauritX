@@ -2,16 +2,18 @@ import type { Metadata } from "next";
 import { randomUUID } from "node:crypto";
 import { Types } from "mongoose";
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+
 import { Suspense } from "react";
 import { BotSwitches, RetryMessageButton } from "@/components/admin/admin-actions";
 import { RetryJobButton } from "@/components/admin/coordination-actions";
 import { Card, EmptyState, PageHeader, Pill, Stat } from "@/components/admin/kit";
 import { formatIST } from "@/components/requests/status";
 import { Spinner } from "@/components/ui/button";
-import { getCurrentUser } from "@/lib/auth/current-user";
+import { can } from "@/lib/auth/permissions";
+import { requireAdminPage } from "@/lib/auth/require-admin";
 import { getOperationsOverview, listConversations, listFailedMessages } from "@/server/admin/operations";
 import { jobStats, listDeadJobs } from "@/server/jobs/queue";
+import { listRecentErrors } from "@/server/monitoring/report";
 
 export const metadata: Metadata = { title: "Operations · Admin", robots: { index: false } };
 
@@ -36,9 +38,10 @@ const FLOW_LABEL: Record<string, string> = {
 };
 
 async function OperationsContent() {
-  const user = await getCurrentUser();
-  if (!user) redirect("/login");
-  if (user.role !== "admin") notFound();
+  const user = await requireAdminPage("operations.read");
+  const canSettings = can(user.role, "operations.settings");
+  const canRetryJobs = can(user.role, "jobs.retry");
+  const canReadErrors = can(user.role, "errors.read");
 
   const [o, failed, { conversations }, jobs, dead] = await Promise.all([
     getOperationsOverview(),
@@ -47,6 +50,7 @@ async function OperationsContent() {
     jobStats(),
     listDeadJobs(10),
   ]);
+  const errors = canReadErrors ? await listRecentErrors(10) : [];
   const wa = o.whatsapp;
   const waTone = wa.workerOnline && wa.state === "connected" ? "good" : wa.state === "qr_required" ? "warn" : "bad";
 
@@ -71,7 +75,13 @@ async function OperationsContent() {
         </Card>
 
         <Card title="Bot controls" id="controls" note="STOP is always honoured, even with the bot switched off. Changes are audit-logged.">
-          <BotSwitches botEnabled={o.settings.botEnabled} alertsPaused={o.settings.alertsPaused} />
+          {canSettings ? (
+            <BotSwitches botEnabled={o.settings.botEnabled} alertsPaused={o.settings.alertsPaused} />
+          ) : (
+            <p className="text-sm text-ink-soft">
+              Bot {o.settings.botEnabled ? "on" : "off"} · alerts {o.settings.alertsPaused ? "paused" : "running"}. Only a super admin can change these.
+            </p>
+          )}
           <p className="mt-4 text-xs text-ink-muted">
             AI understanding: {o.ai.provider === "none" ? "off (commands and keywords only)" : `${o.ai.provider} · ${o.ai.model}`}. AI only proposes; the bot validates and acts.
           </p>
@@ -119,13 +129,34 @@ async function OperationsContent() {
             {dead.map((j) => (
               <li key={j.id} className="flex flex-wrap items-center justify-between gap-3 py-2.5">
                 <span><span className="font-medium text-ink">{j.type.replace(/_/g, " ")}</span><span className="block text-xs text-ink-muted">{j.attempts} attempts{j.finishedAt ? ` · ${formatIST(j.finishedAt)}` : ""} · {j.lastError ?? "no error recorded"}</span></span>
-                <RetryJobButton jobId={j.id} />
+                {canRetryJobs && <RetryJobButton jobId={j.id} />}
               </li>
             ))}
           </ul>
         )}
         {jobs.queued > 0 && jobs.running === 0 && <p className="mt-3 text-xs text-warning-800">Jobs are waiting. If this persists, check that the jobs worker is running.</p>}
       </Card>
+
+      {canReadErrors && (
+        <Card title="Server errors" id="errors" note="Unexpected errors from the API, pages, workers, WhatsApp and jobs, grouped by kind. Messages are redacted: no numbers, codes or tokens. Kept 90 days after last seen.">
+          {errors.length === 0 ? (
+            <EmptyState>No unexpected errors recorded.</EmptyState>
+          ) : (
+            <ul className="divide-y divide-line text-sm">
+              {errors.map((e) => (
+                <li key={e.fingerprint} className="py-2.5">
+                  <span className="flex flex-wrap items-center gap-2">
+                    <Pill tone="bad">{e.source.replace(/_/g, " ")}</Pill>
+                    <span className="font-medium text-ink">{e.event}</span>
+                    <span className="text-xs text-ink-muted">{e.count}× · last {formatIST(e.lastSeenAt)}</span>
+                  </span>
+                  <span className="mt-0.5 block break-words text-xs text-ink-muted">{e.errorName}{e.message ? `: ${e.message}` : ""}{e.where ? ` · ${e.where}` : ""}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      )}
 
       <Card title="Emergency coordination" id="coord" note="Interest is not a donation. Donations count only when a coordinator confirms them. Alert figures cover the last 7 days.">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
@@ -178,7 +209,7 @@ async function OperationsContent() {
               ))}
             </ul>
           )}
-          <p className="mt-3 text-xs"><Link href="/admin/audit" className="font-semibold text-brand-600 hover:text-brand-700">Audit history →</Link></p>
+          {can(user.role, "audit.read") && <p className="mt-3 text-xs"><Link href="/admin/audit" className="font-semibold text-brand-600 hover:text-brand-700">Audit history →</Link></p>}
         </Card>
       </div>
     </div>

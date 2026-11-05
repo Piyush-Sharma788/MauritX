@@ -4,6 +4,7 @@ import { runDonorWave, scheduleFirstWave, startCoordination, PAUSED_DEFER_MS } f
 import { discoverForRequest } from "@/server/discovery/service";
 import { claimNextJob, completeJob, deferJob, enqueueJob, failJob, type JobRecord } from "@/server/jobs/queue";
 import type { JobType } from "@/server/models/job";
+import { reportError } from "@/server/monitoring/report";
 import { runOutreach, sendOutreachEmail } from "@/server/outreach/service";
 
 /**
@@ -67,6 +68,8 @@ export async function runOneJob(workerId: string, now = new Date()): Promise<boo
   } catch (error) {
     const result = await failJob(job, error, new Date());
     logger.warn("jobs.failed", { type: job.type, attempt: job.attempts, result, errorName: error instanceof Error ? error.name : "UnknownError" });
+    // A job out of retries needs a person: coordination for that request has stopped.
+    if (result === "dead") await reportError(error, { source: job.type === "donor_wave" || job.type === "coordinate_request" ? "coordination" : "jobs", event: "jobs.dead", where: job.type });
   }
   return true;
 }

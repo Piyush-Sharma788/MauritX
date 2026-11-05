@@ -222,3 +222,21 @@ Meta ── POST /api/v1/webhooks/whatsapp (HMAC verified) ──> inbound pipel
 - `MESSAGING_PROVIDER` decides which provider new messages are queued for. Both can run during migration.
 - Every process validates its configuration at startup (`lib/security/config-check.ts`); in production it exits on problems.
 - CI (`.github/workflows/ci.yml`) runs three parallel jobs: lint and typecheck, all tests against a MongoDB 8.0 service container (pinned by digest), and the production build.
+
+## 16. Production safety and operations (Sprint 2)
+- **Staff access.**
+  - `permissions.ts`, a pure module, maps roles to permissions. `requireAdmin(permission)` covers APIs and `requireAdminPage(permission)` covers pages; both require a session that has passed the second factor (`sessions.mfaVerifiedAt`).
+  - `/admin/mfa` handles both enrollment and verification.
+  - Role and MFA changes go through `services/staff.ts` and `services/mfa.ts` via the CLI, and revoke every session of that account.
+- **Privacy.**
+  - `services/account-deletion.ts` handles self-service deletion behind a step-up OTP.
+  - `services/retention.ts` is the hourly sweep in the jobs worker that anonymises closed requests.
+- **Monitoring.**
+  - `monitoring/report.ts` provides one entry point, `reportError`, wired into every failure boundary: the API wrapper, `onRequestError`, workers, the webhook, dead jobs and final delivery failures. It writes redacted structured logs, the `error_events` collection, and the optional alert webhook.
+  - `lib/security/redact.ts` is the shared redaction used by the logger.
+- **OTP delivery.**
+  - `OtpDeliveryProvider` now has an SMS implementation (`otp-delivery/sms.ts`, Twilio).
+  - `requestOtp` sends by the requested channel, or falls back from WhatsApp to SMS, inside SMS-specific caps.
+- **Backups.**
+  - `scripts/backup.sh`, `scripts/restore-test.sh` and `scripts/verify-restore.ts`, scheduled with the systemd units in `deploy/backup/`.
+  - The restore drill is exercised in CI-compatible integration tests when the MongoDB database tools are installed.

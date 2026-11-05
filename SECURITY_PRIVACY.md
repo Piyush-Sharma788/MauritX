@@ -23,7 +23,7 @@ Collect the minimum data necessary. Avoid patient names, diagnoses, government I
 - Requesters can access only their request or a valid, scoped share link.
 - Donors can access and edit only their own profile and responses.
 - Institution users can access only their institution's records.
-- Admin access must be least-privilege, MFA-protected where possible and fully audited.
+- Admin access must be least-privilege, MFA-protected and fully audited. *(Implemented: coordinator/super_admin roles, mandatory TOTP, see §4 "Production safety sprint".)*
 - Never rely on hidden buttons or client-side role checks.
 
 ## 4. Privacy and consent
@@ -80,6 +80,96 @@ Collect the minimum data necessary. Avoid patient names, diagnoses, government I
   - revocations record a reason.
 - **WhatsApp webhooks** are accepted only with a valid HMAC-SHA256 signature over the raw body.
 
+### Production safety sprint (2026-11-05)
+
+**Staff roles and RBAC.** The roles are `coordinator`, `super_admin`, and legacy `admin`, which is treated as `super_admin` until migrated. Permissions live in `src/lib/auth/permissions.ts`.
+
+- **Every route is gated.** Each admin route handler calls `requireAdmin("<permission>")`, and each admin page calls `requireAdminPage(...)`. The check reads the role stored now, so a change applies on the next request. Hidden buttons are only cosmetic.
+- **Coordinators can:**
+  - verify and coordinate requests;
+  - review discovered institutions;
+  - see operations, read the WhatsApp status and log;
+  - retry failed alerts and see conversations.
+- **Only a super admin can:**
+  - change bot and alert settings;
+  - pair, connect or disconnect WhatsApp, and send test messages;
+  - verify institutions and their WhatsApp staff contacts, which grants WhatsApp access;
+  - retry dead jobs;
+  - read the audit log and server error reports.
+- **Role changes and MFA resets are CLI-only** (`npm run admin:grant|admin:revoke|admin:mfa-reset`). Each one is audit-logged and ends every session of that account.
+
+**Mandatory 2FA for staff.** Staff use TOTP (RFC 6238: SHA-1, 30 s, 6 digits, ±1 step).
+
+- **Gate.** Admin pages and APIs return `MFA_REQUIRED` until the current session has passed the second factor.
+- **Storage.** The secret is encrypted with AES-256-GCM, like other PII. The ten recovery codes are kept only as HMAC hashes, are single-use, and are shown once.
+- **Replay protection.** The last accepted time step is stored and updated atomically.
+- **Attempt limits.** Every attempt counts (5 per 15 min and 20 per day per account; 20 per 15 min per IP). With three valid codes at any moment, this keeps the long-run guessing odds to about 6 in 100,000 per day.
+- **Revoking access.** Removing staff access also deletes the authenticator.
+
+**Account deletion.** Self-service from the dashboard. It requires a fresh OTP for the new purpose `account_deletion` (a login code doesn't work) plus typing DELETE. Staff must be demoted first.
+
+| Data | What happens |
+|---|---|
+| Donor profile, WhatsApp conversation state, OTP challenges | Deleted |
+| User record | Tombstone: status `deleted`, random lookup, placeholder ciphertext, no name, no MFA. The number can sign up again as a new account |
+| Stored messages (`notification_events`) | Recipient number, body and template values erased. Queued messages are suppressed, and failed ones can't be retried |
+| Alert consent | Withdrawn; a `withdrawn` consent record is appended |
+| Responses on open requests | Set to `not_proceeding` (coordinators see the withdrawal). Contact sharing is withdrawn on all responses |
+| Confirmed donations | Kept: they are part of the patient's record, with no contact sharing |
+| Opt-out entry | Kept: a keyed hash, so the number is never alerted again |
+| Consent history, audit and contact-access logs | Kept: they hold no personal data |
+| Sessions | All revoked (`account_deleted`) |
+
+Emergency requests are not tied to accounts. Instead, the jobs worker's hourly retention sweep anonymises them once they have been closed for `REQUEST_RETENTION_DAYS` (default 180).
+
+- **Removed:** patient name and age, requester name and number, WhatsApp requester number, hospital phone, location, history and coordination notes, and institution response contacts.
+- **Revoked:** share links.
+- **Kept for reporting:** blood group, component, units, hospital, city, status timeline and counters.
+
+**Error monitoring.** `reportError()` (`src/server/monitoring/report.ts`) is called from:
+
+- the API wrapper (unhandled errors);
+- Next.js `onRequestError` (render and server-action errors);
+- dead jobs;
+- the jobs and WhatsApp worker loops and fatal paths;
+- the Cloud API webhook;
+- final message-delivery failures.
+
+What it does with each error:
+
+- **Grouped, redacted record.** Errors are grouped by fingerprint into `error_events` (a count plus first and last seen; dropped 90 days after last seen) and shown to super admins on Operations.
+- **Optional alerts** go to `ERROR_ALERT_WEBHOOK_URL`, at most once per kind every 30 minutes.
+- **Redaction.** `redactText()` strips phone numbers, emails, 6-digit codes, bearer and `key=` secrets, and long opaque strings. The logger applies it to every string field.
+- **Location** is recorded as the route file path or a shaped path (`/requests/track/:id`), never the raw URL.
+
+**SMS fallback for OTPs** (optional, `SMS_PROVIDER=twilio`).
+
+- **When it's used.** Codes go by SMS when the user asks ("Send by SMS instead") or automatically when WhatsApp delivery fails outright. It's still one challenge and one code.
+- **Abuse limits.** SMS has its own limits on top of the OTP limits: 5 per IP per hour, `OTP_SMS_PER_PHONE_DAILY` (default 3), and a service-wide `OTP_SMS_DAILY_CAP` (default 500, which logs an error when reached). Only Indian mobile numbers are accepted, which removes international SMS-pumping targets.
+- **DLT.** India requires a DLT-registered sender and an exact registered template; production startup warns about this.
+
+**Backups.** `scripts/backup.sh`:
+
+- runs `mongodump --gzip`, optionally with `--oplog`;
+- can encrypt the archive with AES-256-CBC and PBKDF2 (600k iterations) from a passphrase file;
+- writes a SHA-256 checksum and a manifest of collection counts;
+- keeps the URI out of `argv`;
+- refuses to back up an empty database;
+- prunes archives after `BACKUP_RETENTION_DAYS`.
+
+`scripts/restore-test.sh`:
+
+- verifies the checksum, then decrypts;
+- restores into a scratch database, refusing to restore over the source;
+- checks counts against the manifest and that unique indexes exist;
+- decrypts PII and recomputes phone lookups with the deployment's keys;
+- then drops the scratch copy.
+
+Limitations:
+
+- `openssl enc` isn't authenticated encryption. The checksum detects corruption, so keep archives in versioned or object-locked storage to protect against tampering.
+- Archives hold only ciphertext and hashes. They are useless without `PII_ENCRYPTION_KEY`, which must be escrowed separately, never next to the backups.
+
 ## 5. Application security
 - Validate every request with a strict schema and size limits.
 - Use parameterised/typed database operations; never accept raw MongoDB operators from clients.
@@ -134,14 +224,16 @@ Collect the minimum data necessary. Avoid patient names, diagnoses, government I
 
 ## 11. Pre-launch security checklist
 - [ ] Threat model completed.
-- [ ] RBAC and resource ownership tests pass.
+- [x] RBAC and resource ownership tests pass. *(Admin RBAC + MFA: tests/sprint2-security.integration.test.ts.)*
 - [ ] OTP brute-force and enumeration tests pass.
 - [ ] Webhook signature and replay tests pass.
 - [ ] Donor contact/location privacy tests pass.
 - [ ] Consent withdrawal and opt-out tested end-to-end.
 - [ ] Share links expire and can be revoked.
-- [ ] Logs redact personal data and secrets.
-- [ ] Backup restore and incident response tested.
+- [x] Logs redact personal data and secrets. *(Logger and error store redaction, tested; callers still must not log PII deliberately.)*
+- [ ] Backup restore and incident response tested. *(Restore drill implemented and executed against local MongoDB, tests/backup-restore.integration.test.ts. Still to do: a drill against the production cluster, and an incident-response exercise.)*
+- [ ] Every existing `admin` account moved to `coordinator` or `super_admin`, and every staff member enrolled in 2FA.
+- [ ] DLT sender and template registered before `SMS_PROVIDER` is enabled.
 - [ ] Independent penetration test and legal/clinical review completed.
 - [ ] whatsapp-web.js pilot retired; Cloud API provider (WHATSAPP_BOT.md §12) tested with the real number, templates approved and `MESSAGING_PROVIDER=whatsapp_cloud`.
 - [ ] Clinical review and approval of the donor matching policy (`policy.ts`).

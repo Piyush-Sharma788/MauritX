@@ -7,7 +7,7 @@ import { readPublicRequestId } from "@/server/requests/http";
 
 /** POST /api/v1/admin/requests/:id/automation: `{ action: pause | resume | cancel | run_wave_now | rediscover | start }`. Admin only; audited. 202. */
 export const POST = apiRoute(async (request, ctx, route) => {
-  const admin = await requireAdmin();
+  const admin = await requireAdmin("coordination.manage");
   const id = await readPublicRequestId(route);
   const body = await parseJsonBody(request, automationActionSchema);
   await controlAutomation(id, body.action, new Types.ObjectId(admin.id), ctx.requestId);

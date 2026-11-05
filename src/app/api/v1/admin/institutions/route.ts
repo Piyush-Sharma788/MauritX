@@ -7,13 +7,13 @@ import { createInstitution, listInstitutions } from "@/server/institutions/servi
 
 /** GET /api/v1/admin/institutions: all institutions. Admin only. */
 export const GET = apiRoute(async (_request, ctx) => {
-  await requireAdmin();
+  await requireAdmin("admin.access");
   return ok<{ institutions: InstitutionSummary[] }>(ctx, { institutions: await listInstitutions() });
 });
 
 /** POST /api/v1/admin/institutions: add a hospital or blood bank (starts as pending). Admin only; audited. */
 export const POST = apiRoute(async (request, ctx) => {
-  const admin = await requireAdmin();
+  const admin = await requireAdmin("institutions.review");
   const body = await parseJsonBody(request, createInstitutionSchema);
   return ok<InstitutionSummary>(ctx, await createInstitution(body, new Types.ObjectId(admin.id), ctx.requestId), 201);
 });

@@ -78,7 +78,11 @@ The send payload follows Meta's copy-code template format: the code is passed as
 | `npm run typecheck` | Generate Next route types, then run `tsc --noEmit` |
 | `npm test` | Unit tests. Integration tests are skipped unless `MONGODB_URI_TEST` is set |
 | `npm run whatsapp:worker` | Start the WhatsApp Web pilot worker (dev, reads `.env.local`) |
-| `npm run admin:grant -- <phone>` / `admin:revoke` | Give or remove the admin role for an existing account |
+| `npm run admin:grant -- <coordinator\|super_admin> <phone>` | Give an existing account a staff role (signs them out everywhere) |
+| `npm run admin:revoke -- <phone>` | Remove staff access and the authenticator |
+| `npm run admin:mfa-reset -- <phone>` | Lost authenticator: remove 2FA, sign out everywhere; they set it up again |
+| `npm run admin:list` | List staff accounts (masked numbers), roles and 2FA status |
+| `scripts/backup.sh` / `scripts/restore-test.sh` | MongoDB backup, and the restore drill (see "Backups and restore drills") |
 | `npm run test:integration` | All tests against `mongodb://127.0.0.1:27017/marutix_test`. **This database is dropped on each run.** |
 
 ## Auth API
@@ -386,6 +390,58 @@ The design is in WHATSAPP_BOT.md §11 and SYSTEM_DESIGN.md §14.
 - **Requests without any location** (no pin, geocoding failed) are matched by city, so the zones don't apply.
 - **Not tested end to end:** real SMTP delivery and real WhatsApp delivery of Phase 6 messages. OpenStreetMap discovery, geocoding and website enrichment were run live in development.
 
+## Production safety and operations
+
+### Staff accounts and 2FA
+1. The person signs in once on the website with their mobile number.
+2. On the server: `npm run admin:grant -- coordinator +91XXXXXXXXXX`, or `super_admin` for full control. In Docker, run it in the worker image: `docker compose run --rm jobs node_modules/.bin/tsx --conditions=react-server scripts/admin-role.ts grant coordinator +91…`.
+3. At their next sign-in they are sent to `/admin/mfa`. There they scan the QR code with an authenticator app, enter a code, and save the ten recovery codes.
+
+Every later sign-in asks for a code. Staff sessions expire after 2 h idle and 12 h at most.
+
+**Migration.** Accounts with the old `admin` role keep full access, and also have to set up 2FA at their next sign-in. Run `npm run admin:list`, then move each account with `admin:grant -- super_admin` or `admin:grant -- coordinator`.
+
+### Backups and restore drills
+Requires the MongoDB Database Tools (`mongodump`, `mongorestore`), `mongosh` and `openssl` on the backup host.
+
+1. Create a `marutix-backup` system user and a database user with the `backup` role. Use a separate user, with `readWrite` on the scratch database only, for the drill.
+2. Create `/etc/marutix/backup.env` from `deploy/backup/backup.env.example` and the passphrase file (`openssl rand -base64 32`), both mode 0600. Store a copy of the passphrase **and** of `PII_ENCRYPTION_KEY` in your secret manager. A backup can't be read without both.
+3. Install the units: `cp deploy/backup/*.service deploy/backup/*.timer /etc/systemd/system/ && systemctl enable --now marutix-backup.timer marutix-restore-test.timer`.
+4. Copy archives off the host: uncomment the `rclone` line, or use any object storage with versioning or object lock.
+5. Run both once by hand (`systemctl start marutix-backup marutix-restore-test`) and read `journalctl -u marutix-restore-test`. It must end with `RESTORE VERIFICATION PASSED`.
+
+**Defaults.**
+
+- **Schedule:** backup nightly at 02:30 IST; restore drill every Sunday.
+- **Local retention:** 14 days (`BACKUP_RETENTION_DAYS`).
+- **Consistency:** point-in-time with `BACKUP_OPLOG=1` (replica sets and Atlas).
+- **Atlas:** also turn on Atlas Cloud Backup with point-in-time restore where your tier offers it. These scripts are an independent, provider-neutral copy.
+
+**Recovery (real incident).**
+
+1. Stop the web app and workers.
+2. Restore the newest good archive into a new database: decrypt it with `openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -pass file:<passfile>`, then run `mongorestore --archive --gzip --nsFrom 'marutix.*' --nsTo '<newdb>.*'`.
+3. Run `RESTORE_TEST_URI=<new db uri> tsx scripts/verify-restore.ts <manifest>`.
+4. Point `MONGODB_URI` at it and start the services.
+
+Data written after the backup is lost unless you restore from Atlas point-in-time recovery.
+
+### Error monitoring
+Unexpected errors from the API, pages, both workers, the WhatsApp webhook, dead jobs and final delivery failures are written to the logs. They are also grouped in `error_events` and shown to super admins under **Operations → Server errors**.
+
+Set `ERROR_ALERT_WEBHOOK_URL` (https; Slack-compatible `{"text": …}`) to receive at most one alert per kind of error every 30 minutes. Messages are redacted before they are stored or sent.
+
+### SMS fallback for sign-in codes
+1. **Register in India first.** Register the sender ID (header) and the exact message text as a DLT content template, in the "Service Implicit" or OTP category, through Twilio's India registration. Example template: `{#var#} is your MarutiX verification code. It expires in {#var#} minutes. - MARUTX`.
+2. **Configure Twilio:**
+   - `SMS_PROVIDER=twilio`;
+   - `TWILIO_ACCOUNT_SID` and `TWILIO_AUTH_TOKEN`;
+   - `TWILIO_MESSAGING_SERVICE_SID`, holding the registered sender;
+   - `SMS_OTP_BODY_TEMPLATE`, the same text with `{code}` and `{minutes}`.
+3. **Set the caps.** Adjust `OTP_SMS_PER_PHONE_DAILY` and `OTP_SMS_DAILY_CAP` to your budget. When the daily cap is reached, sign-in by SMS stops until the next UTC day, and an error is logged.
+
+The login page then offers "Send by SMS instead", and failed WhatsApp sends fall back automatically.
+
 ## CI
 
 `.github/workflows/ci.yml` runs on every pull request and push to `main`, in three parallel jobs:
@@ -396,7 +452,7 @@ The design is in WHATSAPP_BOT.md §11 and SYSTEM_DESIGN.md §14.
 | Unit & integration tests | A MongoDB 8.0.32 service container (pinned by digest), then `npm run test:integration` (every test file, including the MongoDB workflows) |
 | Production build | `npm ci`, `npm run build` |
 
-Tests generate throwaway secrets (`tests/setup.ts`) and use fake providers; CI never contacts WhatsApp, Meta, email or AI services. Actions are pinned to full commit SHAs; update them (and dependencies) by hand.
+Tests generate throwaway secrets (`tests/setup.ts`) and use fake providers; CI never contacts WhatsApp, Meta, Twilio, email or AI services. The executed backup/restore drill (`tests/backup-restore.integration.test.ts`) needs the MongoDB Database Tools and `mongosh` on PATH and is skipped on runners without them; run `npm run test:integration` locally or on the backup host to exercise it. Actions are pinned to full commit SHAs; update them (and dependencies) by hand.
 
 ## Switching to the official WhatsApp Cloud API
 

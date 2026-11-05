@@ -4,6 +4,6 @@ import { jobStats, listDeadJobs } from "@/server/jobs/queue";
 
 /** GET /api/v1/admin/jobs: queue counts and dead-lettered jobs. Admin only. */
 export const GET = apiRoute(async (_request, ctx) => {
-  await requireAdmin();
+  await requireAdmin("operations.read");
   return ok(ctx, { stats: await jobStats(), dead: await listDeadJobs() });
 });

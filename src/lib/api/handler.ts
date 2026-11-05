@@ -5,6 +5,7 @@ import type { z } from "zod";
 import { AppError, type ApiErrorBody } from "@/lib/api/errors";
 import { getEnv } from "@/lib/env";
 import { logger } from "@/lib/logger";
+import { reportError } from "@/server/monitoring/report";
 import { trustedProxyHops } from "@/lib/security/config-check";
 
 const MAX_JSON_BODY_BYTES = 2_048;
@@ -122,6 +123,15 @@ export interface RouteParams {
 
 type Handler = (request: NextRequest, ctx: ApiContext, route: RouteParams) => Promise<Response>;
 
+/** The path with IDs and tokens replaced, so errors group by route and never carry a token. */
+export function routeShape(pathname: string): string {
+  return pathname
+    .split("/")
+    .map((segment) => (segment.length >= 8 && /\d/.test(segment) ? ":id" : segment))
+    .join("/")
+    .slice(0, 200);
+}
+
 /** Wraps a route handler with correlation IDs, origin checks and safe error mapping. */
 export function apiRoute(handler: Handler, options: { checkOrigin?: boolean } = { checkOrigin: true }) {
   return async (request: NextRequest, route: RouteParams = { params: Promise.resolve({}) }): Promise<Response> => {
@@ -137,15 +147,10 @@ export function apiRoute(handler: Handler, options: { checkOrigin?: boolean } = 
       if (error instanceof AppError) return fail(ctx, error);
       const errorName = error instanceof Error ? error.name : "UnknownError";
       if (isDatabaseUnavailable(error)) {
-        logger.error("api.dependency_unavailable", { requestId: ctx.requestId, errorName, path: request.nextUrl.pathname });
+        logger.error("api.dependency_unavailable", { requestId: ctx.requestId, errorName, path: routeShape(request.nextUrl.pathname) });
         return fail(ctx, new AppError(503, "SERVICE_UNAVAILABLE", "MarutiX is temporarily unavailable. Please try again shortly."));
       }
-      logger.error("api.unhandled_error", {
-        requestId: ctx.requestId,
-        errorName,
-        errorMessage: error instanceof Error ? error.message.slice(0, 300) : undefined,
-        path: request.nextUrl.pathname,
-      });
+      await reportError(error, { source: "api", event: "api.unhandled_error", where: `${request.method} ${routeShape(request.nextUrl.pathname)}`, requestId: ctx.requestId });
       return fail(ctx, new AppError(500, "INTERNAL_ERROR", "Something went wrong. Please try again."));
     }
   };

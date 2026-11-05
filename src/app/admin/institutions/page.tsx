@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+
 import { Suspense } from "react";
 import { CreateInstitutionForm } from "@/components/admin/admin-actions";
 import { Card, EmptyState, PageHeader, Pill } from "@/components/admin/kit";
 import { formatIST } from "@/components/requests/status";
 import { Spinner } from "@/components/ui/button";
 import { CAPABILITY_LABELS } from "@/features/coordination/schemas";
-import { getCurrentUser } from "@/lib/auth/current-user";
+import { requireAdminPage } from "@/lib/auth/require-admin";
 import { listInstitutions } from "@/server/institutions/service";
 
 export const metadata: Metadata = { title: "Institutions · Admin", robots: { index: false } };
@@ -33,9 +33,7 @@ const FILTERS = [
 ] as const;
 
 async function InstitutionsContent({ searchParams }: Pick<PageProps<"/admin/institutions">, "searchParams">) {
-  const user = await getCurrentUser();
-  if (!user) redirect("/login");
-  if (user.role !== "admin") notFound();
+  await requireAdminPage("admin.access");
   const raw = (await searchParams).review;
   const review = raw === "unreviewed" || raw === "approved" || raw === "excluded" ? raw : undefined;
   const institutions = await listInstitutions({ review });

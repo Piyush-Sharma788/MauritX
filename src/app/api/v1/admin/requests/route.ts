@@ -18,7 +18,7 @@ const querySchema = z.object({
 
 /** GET /api/v1/admin/requests: stats plus a filtered, paginated list. Admin only. */
 export const GET = apiRoute(async (request, ctx) => {
-  await requireAdmin();
+  await requireAdmin("requests.manage");
   const raw = Object.fromEntries([...request.nextUrl.searchParams].filter(([, v]) => v !== ""));
   const query = querySchema.safeParse(raw);
   if (!query.success) throw new AppError(422, "VALIDATION_ERROR", "Invalid filters.", { fields: { query: query.error.issues[0].message } });

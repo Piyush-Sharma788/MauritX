@@ -24,7 +24,8 @@ export const sendOtpBodySchema = z.strictObject({
   phone: indianMobileSchema,
   // Phase 1 has a single sign-in flow that also creates the account on first verification.
   purpose: z.literal("login").default("login"),
-  channel: z.literal("whatsapp").default("whatsapp"),
+  // "sms" only when the server has SMS configured (SendOtpResponse.smsAvailable).
+  channel: z.enum(["whatsapp", "sms"]).default("whatsapp"),
 });
 
 export const verifyOtpBodySchema = z.strictObject({
@@ -36,7 +37,7 @@ export type SendOtpBody = z.output<typeof sendOtpBodySchema>;
 export type VerifyOtpBody = z.output<typeof verifyOtpBodySchema>;
 
 /** Response payloads shared by the API and the browser client. */
-export type OtpDeliveryChannel = "whatsapp" | "development";
+export type OtpDeliveryChannel = "whatsapp" | "sms" | "development";
 
 export interface SendOtpResponse {
   channel: OtpDeliveryChannel;
@@ -44,6 +45,10 @@ export interface SendOtpResponse {
   codeLength: number;
   expiresAt: string;
   resendAvailableAt: string;
+  /** WhatsApp failed, so the code was sent by SMS instead. */
+  fellBackToSms: boolean;
+  /** The user may ask for the code by SMS. */
+  smsAvailable: boolean;
 }
 
 export interface VerifyOtpResponse {

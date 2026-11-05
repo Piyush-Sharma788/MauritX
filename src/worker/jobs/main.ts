@@ -16,11 +16,15 @@ import { getWhatsAppWebConfig } from "@/lib/whatsapp-web/config";
 import { getMessagingProviderName, getWhatsAppCloudConfig } from "@/lib/whatsapp/cloud-config";
 import { validateServerConfiguration } from "@/lib/security/config-check";
 import { runOneJob } from "@/server/jobs/runner";
+import { reportError } from "@/server/monitoring/report";
 import { CloudApiMessagingProvider } from "@/server/messaging/cloud-provider";
 import { dispatchNext } from "@/server/messaging/dispatcher";
+import { requestRetentionDays } from "@/lib/privacy/retention-config";
+import { anonymizeClosedRequests } from "@/server/services/retention";
 import { getMessagingSettings } from "@/server/settings/service";
 
 const IDLE_POLL_MS = 3_000;
+const RETENTION_EVERY_MS = 60 * 60_000;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function main() {
@@ -29,6 +33,7 @@ async function main() {
   const coordination = getCoordinationConfig();
   const discovery = getDiscoveryConfig();
   const email = getEmailConfig();
+  const retentionDays = requestRetentionDays();
   await connectToDatabase();
   const workerId = `${hostname()}:${process.pid}:${randomUUID().slice(0, 8)}`;
   logger.info("jobs.worker.started", { workerId, discovery: discovery.provider, email: email.provider, autostart: coordination.autostart });
@@ -44,11 +49,17 @@ async function main() {
   const cloud = getMessagingProviderName() === "whatsapp_cloud" ? getWhatsAppCloudConfig() : null;
   const dispatching = cloud ? dispatchLoop(new CloudApiMessagingProvider(cloud), cloud.pacing, () => running) : Promise.resolve();
 
+  let nextRetentionAt = 0;
   while (running) {
     try {
+      if (Date.now() >= nextRetentionAt) {
+        nextRetentionAt = Date.now() + RETENTION_EVERY_MS;
+        const anonymized = await anonymizeClosedRequests(new Date(), retentionDays);
+        if (anonymized > 0) logger.info("retention.requests_anonymized", { count: anonymized, retentionDays });
+      }
       if (!(await runOneJob(workerId))) await sleep(IDLE_POLL_MS);
     } catch (error) {
-      logger.error("jobs.worker.loop_error", { errorName: error instanceof Error ? error.name : "UnknownError" });
+      await reportError(error, { source: "jobs", event: "jobs.worker.loop_error" });
       await sleep(5_000);
     }
   }
@@ -69,7 +80,7 @@ async function dispatchLoop(provider: CloudApiMessagingProvider, pacing: { maxMe
       else if (outcome === "suppressed") wait = 0;
       else if (outcome !== "idle") wait = pacing.minSendIntervalMs;
     } catch (error) {
-      logger.error("whatsapp_cloud.dispatch_error", { errorName: error instanceof Error ? error.name : "UnknownError" });
+      await reportError(error, { source: "messaging", event: "whatsapp_cloud.dispatch_error" });
       wait = 5_000;
     }
     await sleep(wait);
@@ -86,7 +97,7 @@ function testRecipients(): Set<string> {
 }
 
 main().catch(async (error: unknown) => {
-  logger.error("jobs.worker.fatal", { errorName: error instanceof Error ? error.name : "UnknownError", errorMessage: error instanceof Error ? error.message.slice(0, 300) : undefined });
+  await reportError(error, { source: "jobs", event: "jobs.worker.fatal" });
   await mongoose.disconnect().catch(() => {});
   process.exit(1);
 });

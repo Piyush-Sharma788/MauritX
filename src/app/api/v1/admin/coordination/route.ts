@@ -4,6 +4,6 @@ import { getCoordinationOverview } from "@/server/admin/coordination";
 
 /** GET /api/v1/admin/coordination: live overview of every open request's coordination. Admin only. */
 export const GET = apiRoute(async (_request, ctx) => {
-  await requireAdmin();
+  await requireAdmin("admin.access");
   return ok(ctx, await getCoordinationOverview());
 });

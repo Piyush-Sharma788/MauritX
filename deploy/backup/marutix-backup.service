@@ -1,0 +1,20 @@
+# Nightly MarutiX MongoDB backup. Install: see SETUP.md → Backups.
+[Unit]
+Description=MarutiX MongoDB backup
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=marutix-backup
+# MONGODB_URI, BACKUP_DIR, BACKUP_RETENTION_DAYS, BACKUP_ENCRYPTION_PASSPHRASE_FILE (mode 0600, owned by marutix-backup)
+EnvironmentFile=/etc/marutix/backup.env
+ExecStart=/opt/marutix/scripts/backup.sh
+# Copy the newest archive off this host (object storage with versioning / object lock). Example:
+# ExecStartPost=/usr/bin/rclone copy --max-age 2h /var/backups/marutix remote:marutix-backups
+Nice=10
+IOSchedulingClass=idle
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/var/backups/marutix

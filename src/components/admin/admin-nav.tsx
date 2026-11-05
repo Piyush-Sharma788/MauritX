@@ -3,20 +3,21 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Suspense } from "react";
+import { can, type Permission } from "@/lib/auth/permissions";
 
-const LINKS = [
-  { href: "/admin/operations", label: "Operations" },
-  { href: "/admin/coordination", label: "Coordination" },
-  { href: "/admin/requests", label: "Requests" },
-  { href: "/admin/institutions", label: "Institutions" },
-  { href: "/admin/whatsapp", label: "WhatsApp" },
-  { href: "/admin/audit", label: "Audit" },
+const LINKS: { href: string; label: string; permission: Permission }[] = [
+  { href: "/admin/operations", label: "Operations", permission: "operations.read" },
+  { href: "/admin/coordination", label: "Coordination", permission: "admin.access" },
+  { href: "/admin/requests", label: "Requests", permission: "requests.manage" },
+  { href: "/admin/institutions", label: "Institutions", permission: "admin.access" },
+  { href: "/admin/whatsapp", label: "WhatsApp", permission: "whatsapp.read" },
+  { href: "/admin/audit", label: "Audit", permission: "audit.read" },
 ];
 
-function NavLinks({ pathname }: { pathname: string | null }) {
+function NavLinks({ pathname, role }: { pathname: string | null; role: string }) {
   return (
     <nav aria-label="Admin" className="flex gap-1 overflow-x-auto">
-      {LINKS.map((link) => {
+      {LINKS.filter((link) => can(role, link.permission)).map((link) => {
         const active = pathname?.startsWith(link.href) ?? false;
         return (
           <Link
@@ -33,15 +34,15 @@ function NavLinks({ pathname }: { pathname: string | null }) {
   );
 }
 
-function ActiveNav() {
-  return <NavLinks pathname={usePathname()} />;
+function ActiveNav({ role }: { role: string }) {
+  return <NavLinks pathname={usePathname()} role={role} />;
 }
 
 /** The URL is request data under Cache Components, so the active state streams in behind Suspense. */
-export function AdminNav() {
+export function AdminNav({ role }: { role: string }) {
   return (
-    <Suspense fallback={<NavLinks pathname={null} />}>
-      <ActiveNav />
+    <Suspense fallback={<NavLinks pathname={null} role={role} />}>
+      <ActiveNav role={role} />
     </Suspense>
   );
 }

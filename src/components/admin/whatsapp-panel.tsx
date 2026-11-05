@@ -66,7 +66,8 @@ const DOT_CLASSES: Record<Display["tone"], string> = {
   danger: "bg-danger-600",
 };
 
-export function WhatsAppPanel() {
+/** canManage: pairing, connect/disconnect and test sends (super admin). Coordinators get the read-only view. */
+export function WhatsAppPanel({ canManage }: { canManage: boolean }) {
   const [status, setStatus] = useState<WhatsAppStatusResponse | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [qr, setQr] = useState<WhatsAppQrResponse | null>(null);
@@ -104,7 +105,7 @@ export function WhatsAppPanel() {
     return () => window.clearInterval(id);
   }, [refreshMessages]);
 
-  const needsQr = status?.workerOnline === true && status.state === "qr_required";
+  const needsQr = canManage && status?.workerOnline === true && status.state === "qr_required";
   useEffect(() => {
     if (!needsQr) return;
     let cancelled = false;
@@ -191,6 +192,7 @@ export function WhatsAppPanel() {
             <Row label="Send pacing" value={status ? `≥ ${status.limits.minSendIntervalMs / 1000}s apart · max ${status.limits.maxMessagesPerHour}/hour` : "…"} />
           </dl>
 
+          {canManage ? (
           <div className="mt-6 flex flex-wrap gap-3">
             {!running && (
               <Button onClick={() => run("connect")} disabled={disabled || !online}>
@@ -210,6 +212,9 @@ export function WhatsAppPanel() {
               </Button>
             )}
           </div>
+          ) : (
+            <p className="mt-6 text-sm text-ink-muted">Only a super admin can pair, reconnect or disconnect WhatsApp.</p>
+          )}
 
           {confirmLogout && (
             <div className="mt-4 rounded-2xl border border-danger-600/20 bg-danger-50 p-4 text-sm text-danger-600" role="alertdialog" aria-labelledby="wa-logout-title">
@@ -247,6 +252,8 @@ export function WhatsAppPanel() {
                   Start it in a terminal with <code className="rounded bg-surface px-1.5 py-0.5 text-ink">npm run whatsapp:worker</code>.
                 </p>
               </>
+            ) : status?.state === "qr_required" && !canManage ? (
+              <p className="text-sm text-ink-soft">Waiting for a super admin to pair the phone.</p>
             ) : status?.state === "qr_required" ? (
               visibleQr ? (
                 <>
@@ -288,7 +295,7 @@ export function WhatsAppPanel() {
         </section>
       </div>
 
-      <TestMessageForm disabled={!online || status?.state !== "connected"} onQueued={refreshMessages} />
+      {canManage && <TestMessageForm disabled={!online || status?.state !== "connected"} onQueued={refreshMessages} />}
       <MessageLog messages={messages} onRefresh={refreshMessages} />
     </div>
   );

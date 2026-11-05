@@ -35,6 +35,42 @@ Example request:
 ```
 Do not reveal whether a phone number already has an account. Apply IP, phone and device rate limits.
 
+### Staff two-factor authentication (Sprint 2)
+Staff (coordinator, super_admin, admin) must pass a second factor in each session. Until then, every admin API returns `403 MFA_REQUIRED` and admin pages redirect to `/admin/mfa`.
+
+| Method | Path | Body | Result |
+|---|---|---|---|
+| POST | `/api/v1/auth/mfa/enroll` | (none) | `{ secret, otpauthUri, qrSvg }`. Staff only; `409` if already enrolled |
+| POST | `/api/v1/auth/mfa/enroll/confirm` | `{ code }` | `{ recoveryCodes: string[10] }` (shown once); marks this session verified |
+| POST | `/api/v1/auth/mfa/verify` | `{ code }` or `{ recoveryCode }` | `{ recoveryCodesRemaining }`; marks this session verified |
+
+Errors:
+
+- `MFA_INVALID` (400): wrong, replayed or already-used code.
+- `RATE_LIMITED` (429): 5 attempts per 15 minutes or 20 per day per account, or 20 per 15 minutes per IP.
+- `FORBIDDEN` (403): not a staff account.
+
+`POST /api/v1/auth/otp/request` accepts `channel: "whatsapp" | "sms"`. `"sms"` returns `400 SMS_UNAVAILABLE` unless `SMS_PROVIDER` is configured. The response includes `channel` (the channel actually used), `fellBackToSms` and `smsAvailable`. SMS sends are limited separately (per IP, per number per day, service-wide per day).
+
+On success, `POST /api/v1/auth/otp/verify` returns `redirectTo: "/admin/mfa"` for staff.
+
+### Account deletion
+| Method | Path | Body | Result |
+|---|---|---|---|
+| POST | `/api/v1/account/deletion/otp` | (none) | Sends a code (purpose `account_deletion`) to the signed-in number |
+| POST | `/api/v1/account/deletion` | `{ code, confirm: "DELETE" }` | `{ deleted: true }`, and clears the session cookie |
+
+`409 STAFF_ACCOUNT` means a super admin must first remove staff access. SECURITY_PRIVACY.md §4 lists what is deleted, anonymised and kept.
+
+### Admin permissions
+Every `/api/v1/admin/*` handler checks a permission (`src/lib/auth/permissions.ts`). Coordinators receive `403 FORBIDDEN` on the super-admin-only endpoints:
+
+- `PATCH operations/settings`;
+- WhatsApp `qr`, `connect`, `logout` and `send-message`;
+- institution `status` and `contacts`;
+- `jobs/:id/retry`;
+- `audit`.
+
 ## Donors
 Donor **registration has no API**: it happens only in the WhatsApp bot (WHATSAPP_BOT.md §3), which creates the user and profile from the sender's normalized WhatsApp number. The endpoints below are for **profile access and management** after website sign-in (OTP to the same number). All require a session and act only on the caller's own records.
 

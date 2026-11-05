@@ -4,16 +4,19 @@
  */
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
-  // `next build` imports this too; secrets aren't present (or needed) at build time.
-  if (process.env.NEXT_PHASE === "phase-production-build") return;
-  const { validateServerConfiguration } = await import("@/lib/security/config-check");
-  try {
-    validateServerConfiguration("web");
-  } catch (error) {
-    // Next.js would only log this and answer every request with 500; in production, stop so the
-    // process manager and health checks see a failed start.
-    console.error(error instanceof Error ? error.message : error);
-    if (process.env.NODE_ENV === "production") process.exit(1);
-    throw error;
-  }
+  const { registerNode } = await import("./instrumentation-node");
+  await registerNode();
+}
+
+/**
+ * Server errors Next.js catches outside our API wrapper (Server Components, Server Actions).
+ * Uses the route's file path, never the request URL, which can carry tokens.
+ */
+export async function onRequestError(error: unknown, _request: { path: string; method: string }, context: { routePath: string; routeType: string }) {
+  if (process.env.NEXT_RUNTIME !== "nodejs") return;
+  const digest = typeof error === "object" && error !== null && "digest" in error ? String((error as { digest: unknown }).digest) : "";
+  // redirect() and notFound() are control flow, not failures.
+  if (digest.startsWith("NEXT_")) return;
+  const { reportError } = await import("@/server/monitoring/report");
+  await reportError(error, { source: context.routeType === "route" ? "api" : "render", event: `next.${context.routeType}_error`, where: context.routePath });
 }

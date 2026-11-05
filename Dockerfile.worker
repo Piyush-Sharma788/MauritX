@@ -17,6 +17,8 @@ COPY package.json package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
 COPY tsconfig.json ./
 COPY src ./src
+# Operator scripts (admin roles, MFA reset, restore verification) run in this image too.
+COPY scripts ./scripts
 
 # Session files live on a mounted volume, owned by the unprivileged user.
 RUN mkdir -p /app/.data && chown -R node:node /app/.data

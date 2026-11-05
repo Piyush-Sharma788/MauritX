@@ -18,7 +18,7 @@ import { getEnv } from "@/lib/env";
  * - PII_ENCRYPTION_KEY -> AES-256-GCM for phone numbers and the deterministic phone lookup
  *                        token. Rotating it requires a re-encryption migration.
  */
-type KeyPurpose = "otp" | "rate-limit" | "session" | "tracking" | "phone-lookup" | "phone-encryption";
+type KeyPurpose = "otp" | "rate-limit" | "session" | "tracking" | "mfa-recovery" | "phone-lookup" | "phone-encryption";
 
 const keyCache = new Map<KeyPurpose, Buffer>();
 
@@ -29,7 +29,7 @@ function key(purpose: KeyPurpose): Buffer {
   const material =
     purpose === "otp" || purpose === "rate-limit"
       ? Buffer.from(env.OTP_HASH_SECRET, "utf8")
-      : purpose === "session" || purpose === "tracking"
+      : purpose === "session" || purpose === "tracking" || purpose === "mfa-recovery"
         ? Buffer.from(env.AUTH_JWT_SECRET, "utf8")
         : Buffer.from(env.PII_ENCRYPTION_KEY, "base64");
   const derived = Buffer.from(hkdfSync("sha256", material, "marutix", `marutix:${purpose}:v1`, 32));
@@ -120,6 +120,13 @@ export function generatePublicRequestId(): string {
   let id = "";
   for (let i = 0; i < 8; i++) id += ID_ALPHABET[bytes[i] % 32];
   return `MX-${id}`;
+}
+
+/* ---------------------------- Admin MFA ---------------------------- */
+
+/** Keyed hash of a one-time recovery code (normalised: no dashes, upper case). */
+export function hashRecoveryCode(code: string): string {
+  return hmac("mfa-recovery", code.replace(/[\s-]/g, "").toUpperCase());
 }
 
 /* ---------------------------- Rate limits -------------------------- */

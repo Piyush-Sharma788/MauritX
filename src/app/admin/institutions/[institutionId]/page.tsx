@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { AddContactForm, ContactStatusButtons, InstitutionStatusButtons } from "@/components/admin/admin-actions";
 import { ChannelEditor, ChannelStatusButton, ReviewButtons } from "@/components/admin/coordination-actions";
@@ -12,7 +12,8 @@ import { ArrowLeftIcon, LockIcon } from "@/components/ui/icons";
 import { BLOOD_GROUP_LABELS } from "@/features/donors/schemas";
 import { COMPONENT_LABELS } from "@/features/requests/schemas";
 import { AppError } from "@/lib/api/errors";
-import { getCurrentUser } from "@/lib/auth/current-user";
+import { can } from "@/lib/auth/permissions";
+import { requireAdminPage } from "@/lib/auth/require-admin";
 import { getInstitutionDetail } from "@/server/institutions/service";
 
 export const metadata: Metadata = { title: "Institution · Admin", robots: { index: false } };
@@ -33,9 +34,8 @@ export default function InstitutionDetailPage({ params }: PageProps<"/admin/inst
 }
 
 async function Detail({ params }: Pick<PageProps<"/admin/institutions/[institutionId]">, "params">) {
-  const user = await getCurrentUser();
-  if (!user) redirect("/login");
-  if (user.role !== "admin") notFound();
+  const user = await requireAdminPage("admin.access");
+  const canVerify = can(user.role, "institutions.verify");
   const { institutionId } = await params;
   let i;
   try {
@@ -55,7 +55,7 @@ async function Detail({ params }: Pick<PageProps<"/admin/institutions/[instituti
           <p className="mt-1 text-sm text-ink-soft">{i.address}, {i.locality}, {i.city}{i.publicPhone ? ` · ${i.publicPhone}` : ""}</p>
           <p className="mt-1 inline-flex items-center gap-1 text-xs text-ink-muted"><LockIcon className="size-3.5" /> Licence: {i.licenceReference ?? "not recorded"}{i.verifiedAt ? ` · verified ${formatIST(i.verifiedAt)}` : ""}</p>
         </div>
-        <InstitutionStatusButtons id={i.id} status={i.verificationStatus} />
+        {canVerify && <InstitutionStatusButtons id={i.id} status={i.verificationStatus} />}
       </header>
 
       <Card
@@ -113,12 +113,12 @@ async function Detail({ params }: Pick<PageProps<"/admin/institutions/[instituti
                   <span className="font-medium text-ink">{c.name}</span> <Pill tone={c.status === "verified" ? "good" : c.status === "pending" ? "warn" : "neutral"}>{c.status}</Pill>
                   <span className="block text-xs text-ink-muted">{c.maskedPhone} · {c.role}{c.verifiedAt ? ` · verified ${formatIST(c.verifiedAt)}` : ""}</span>
                 </span>
-                <ContactStatusButtons institutionId={i.id} contactId={c.id} status={c.status} />
+                {canVerify && <ContactStatusButtons institutionId={i.id} contactId={c.id} status={c.status} />}
               </li>
             ))}
           </ul>
         )}
-        <div className="mt-5 border-t border-line pt-5"><AddContactForm institutionId={i.id} /></div>
+        {canVerify ? <div className="mt-5 border-t border-line pt-5"><AddContactForm institutionId={i.id} /></div> : <p className="mt-4 text-xs text-ink-muted">Only a super admin can verify institutions or add WhatsApp staff contacts, because that grants WhatsApp access.</p>}
       </Card>
 
       <div className="grid gap-5 lg:grid-cols-2">

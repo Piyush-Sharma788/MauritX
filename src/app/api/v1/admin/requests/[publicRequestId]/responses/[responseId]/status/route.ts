@@ -7,7 +7,7 @@ import { readPublicRequestId } from "@/server/requests/http";
 
 /** POST /api/v1/admin/requests/:id/responses/:responseId/status: `{ status, note? }`. Moves a donor response forward. Admin only; audited. */
 export const POST = apiRoute(async (request, ctx, route) => {
-  const admin = await requireAdmin();
+  const admin = await requireAdmin("coordination.manage");
   const id = await readPublicRequestId(route);
   const { responseId } = await route.params;
   const body = await parseJsonBody(request, coordinationUpdateSchema);

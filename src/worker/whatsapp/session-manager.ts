@@ -5,6 +5,7 @@ import path from "node:path";
 import WAWebJS from "whatsapp-web.js";
 import type { WhatsAppConnectionState } from "@/features/whatsapp/types";
 import { logger } from "@/lib/logger";
+import { reportError } from "@/server/monitoring/report";
 import { maskPhone } from "@/lib/validation/phone";
 import type { WhatsAppWebConfig } from "@/lib/whatsapp-web/config";
 import type { InboundMessage } from "@/server/messaging/inbound";
@@ -286,7 +287,7 @@ export class WhatsAppSessionManager implements MessagingProvider {
     // progress is tracked through events.
     client.initialize().catch(async (error: unknown) => {
       if (this.client !== client) return;
-      logger.error("whatsapp.initialize_failed", { errorName: error instanceof Error ? error.name : "UnknownError" });
+      await reportError(error, { source: "whatsapp_worker", event: "whatsapp.initialize_failed" });
       await this.teardown();
       await this.setState("disconnected", {
         lastDisconnectedAt: new Date(),
@@ -372,7 +373,7 @@ export class WhatsAppSessionManager implements MessagingProvider {
     client.on("message", (message: WAWebJS.Message) => {
       if (!current()) return;
       void this.handleInbound(message).catch((error: unknown) =>
-        logger.error("whatsapp.inbound_failed", { errorName: error instanceof Error ? error.name : "UnknownError" }),
+        reportError(error, { source: "whatsapp_worker", event: "whatsapp.inbound_failed" }),
       );
     });
 
@@ -463,7 +464,7 @@ export class WhatsAppSessionManager implements MessagingProvider {
     try {
       await writeConnection(this.owner, patch);
     } catch (error) {
-      logger.error("whatsapp.persist_failed", { errorName: error instanceof Error ? error.name : "UnknownError" });
+      await reportError(error, { source: "whatsapp_worker", event: "whatsapp.persist_failed" });
     }
   }
 }

@@ -7,6 +7,8 @@ import { getEnv } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { getMessagingProviderName, getWhatsAppCloudConfig } from "@/lib/whatsapp/cloud-config";
 import { getWhatsAppWebConfig } from "@/lib/whatsapp-web/config";
+import { requestRetentionDays } from "@/lib/privacy/retention-config";
+import { getSmsConfig } from "@/lib/sms/config";
 
 /**
  * Startup validation of every secret and integration setting. Each process
@@ -57,6 +59,12 @@ export function checkServerConfiguration(role: ProcessRole, environment: Record<
   attempt("ai", getAiConfig);
   attempt("whatsapp cloud", getMessagingProviderName);
   attempt("proxy", trustedProxyHops);
+  attempt("sms", () => getSmsConfig(environment));
+  attempt("retention", () => requestRetentionDays(environment));
+  attempt("error alerts", () => {
+    const url = environment.ERROR_ALERT_WEBHOOK_URL?.trim();
+    if (url && new URL(url).protocol !== "https:") throw new Error("ERROR_ALERT_WEBHOOK_URL must be an https URL");
+  });
   if (role === "whatsapp-worker") attempt("whatsapp web", getWhatsAppWebConfig);
   if (errors.length) return { errors, warnings };
 
@@ -88,6 +96,7 @@ export function checkServerConfiguration(role: ProcessRole, environment: Record<
     if (new URL(env.APP_BASE_URL).protocol !== "https:") errors.push("APP_BASE_URL must use https in production");
     if (getMessagingProviderName() === "whatsapp_cloud" && !getWhatsAppCloudConfig()?.appSecret) errors.push("WHATSAPP_APP_SECRET is required to verify webhooks");
     if (environment.TRUSTED_PROXY_HOPS === undefined) warnings.push("TRUSTED_PROXY_HOPS is not set; assuming exactly one reverse proxy in front of the app");
+    if (getSmsConfig(environment)) warnings.push("SMS sign-in codes are on: SMS_OTP_BODY_TEMPLATE must match your DLT-registered template exactly, or Indian operators will drop the messages");
     if (getMessagingProviderName() === "whatsapp_web") warnings.push("Messaging uses the unofficial whatsapp-web.js pilot (MESSAGING_PROVIDER=whatsapp_web)");
   } else {
     warnings.push(...problems);

@@ -11,7 +11,7 @@ import { queueAdminTestMessage } from "@/server/messaging/queue";
  * Requires an Idempotency-Key header. Returns 202; delivery happens in the worker.
  */
 export const POST = apiRoute(async (request, ctx) => {
-  const admin = await requireAdmin();
+  const admin = await requireAdmin("whatsapp.manage");
   const key = idempotencyKeySchema.safeParse(request.headers.get("idempotency-key") ?? undefined);
   if (!key.success) throw new AppError(400, "IDEMPOTENCY_KEY_REQUIRED", key.error.issues[0].message);
   const body = await parseJsonBody(request, sendTestMessageBodySchema);

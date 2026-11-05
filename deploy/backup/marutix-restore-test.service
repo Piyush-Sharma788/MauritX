@@ -1,0 +1,20 @@
+# Weekly restore drill: restores the newest backup into a scratch database and verifies it.
+# A failure exits non-zero; alert on it (OnFailure= below, or your monitoring of systemd units).
+[Unit]
+Description=MarutiX backup restore drill
+Wants=network-online.target
+After=network-online.target
+# OnFailure=marutix-alert@%n.service
+
+[Service]
+Type=oneshot
+User=marutix-backup
+# RESTORE_TEST_URI must name a scratch database (ideally a separate MongoDB server), never production.
+# ENV_FILE points at the production app env file so PII keys are checked exactly as deployed.
+EnvironmentFile=/etc/marutix/backup.env
+ExecStart=/opt/marutix/scripts/restore-test.sh
+Nice=10
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/var/backups/marutix

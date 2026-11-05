@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+
 import { Suspense } from "react";
 import { Card, EmptyState, PageHeader, Pill, Stat } from "@/components/admin/kit";
 import { formatIST, StatusBadge } from "@/components/requests/status";
 import { Spinner } from "@/components/ui/button";
 import { BLOOD_GROUP_LABELS, type BloodGroup } from "@/features/donors/schemas";
 import { COMPONENT_LABELS, type Component } from "@/features/requests/schemas";
-import { getCurrentUser } from "@/lib/auth/current-user";
+import { requireAdminPage } from "@/lib/auth/require-admin";
 import { getCoordinationOverview } from "@/server/admin/coordination";
 
 export const metadata: Metadata = { title: "Coordination · Admin", robots: { index: false } };
@@ -26,9 +26,7 @@ export default function CoordinationPage() {
 const AUTOMATION_TONE: Record<string, "good" | "warn" | "bad" | "neutral" | "brand"> = { running: "brand", paused: "warn", cancelled: "bad", completed: "good" };
 
 async function Overview() {
-  const user = await getCurrentUser();
-  if (!user) redirect("/login");
-  if (user.role !== "admin") notFound();
+  await requireAdminPage("admin.access");
   const { rows, totals } = await getCoordinationOverview();
 
   return (

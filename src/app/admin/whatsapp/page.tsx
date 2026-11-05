@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
-import { notFound, redirect } from "next/navigation";
+
 import { Suspense } from "react";
 import { WhatsAppPanel } from "@/components/admin/whatsapp-panel";
 import { Spinner } from "@/components/ui/button";
-import { getCurrentUser } from "@/lib/auth/current-user";
+import { can } from "@/lib/auth/permissions";
+import { requireAdminPage } from "@/lib/auth/require-admin";
 
 export const metadata: Metadata = {
   title: "WhatsApp integration · Admin",
@@ -33,8 +34,6 @@ export default function WhatsAppAdminPage() {
 
 /** Server-side gate: non-admins get a 404 so the page's existence isn't revealed. */
 async function AdminGate() {
-  const user = await getCurrentUser();
-  if (!user) redirect("/login");
-  if (user.role !== "admin") notFound();
-  return <WhatsAppPanel />;
+  const user = await requireAdminPage("whatsapp.read");
+  return <WhatsAppPanel canManage={can(user.role, "whatsapp.manage")} />;
 }

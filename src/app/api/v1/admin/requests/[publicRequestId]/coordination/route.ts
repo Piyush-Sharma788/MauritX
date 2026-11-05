@@ -5,6 +5,6 @@ import { readPublicRequestId } from "@/server/requests/http";
 
 /** GET /api/v1/admin/requests/:id/coordination: alert counts, latest donor search and responses. Admin only. */
 export const GET = apiRoute(async (_request, ctx, route) => {
-  await requireAdmin();
+  await requireAdmin("coordination.manage");
   return ok(ctx, await getRequestCoordination(await readPublicRequestId(route)));
 });

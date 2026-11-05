@@ -7,7 +7,7 @@ import { recordAudit } from "@/server/services/audit";
 
 /** POST /api/v1/admin/whatsapp/connect: start, restore or (with `restart`) reconnect the client. Admin only. */
 export const POST = apiRoute(async (request, ctx) => {
-  const admin = await requireAdmin();
+  const admin = await requireAdmin("whatsapp.manage");
   const body = await parseJsonBody(request, connectBodySchema);
   const result = await whatsappWorker.connect(body.restart);
   await recordAudit({

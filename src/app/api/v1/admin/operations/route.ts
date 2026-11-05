@@ -5,6 +5,6 @@ import { getOperationsOverview } from "@/server/admin/operations";
 
 /** GET /api/v1/admin/operations: live counts for the control centre. Admin only. */
 export const GET = apiRoute(async (_request, ctx) => {
-  await requireAdmin();
+  await requireAdmin("operations.read");
   return ok<OperationsOverview>(ctx, await getOperationsOverview());
 });

@@ -74,12 +74,12 @@ export function PhoneLoginFlow() {
     setStep({ name: "otp", phoneE164, delivery: result.data });
   }
 
-  async function resendCode() {
+  async function resendCode(channel: "whatsapp" | "sms" = "whatsapp") {
     if (step.name !== "otp" || resendIn > 0) return;
     setError(null);
     setNotice(null);
     setPending("resend");
-    const result = await authApi.sendOtp(step.phoneE164);
+    const result = await authApi.sendOtp(step.phoneE164, channel);
     setPending(null);
     if (!result.ok) {
       setError(result.error.message);
@@ -87,7 +87,9 @@ export function PhoneLoginFlow() {
     }
     setCode("");
     setStep({ ...step, delivery: result.data });
-    setNotice(result.data.channel === "whatsapp" ? "A new code is on its way to WhatsApp." : "A new development code was generated.");
+    setNotice(
+      result.data.channel === "sms" ? "A new code is on its way by SMS." : result.data.channel === "whatsapp" ? "A new code is on its way to WhatsApp." : "A new development code was generated.",
+    );
   }
 
   async function verifyCode(value: string) {
@@ -163,7 +165,13 @@ export function PhoneLoginFlow() {
             </p>
           ) : (
             <p className="mt-2 leading-relaxed text-ink-soft">
-              {step.delivery.channel === "whatsapp" ? "We sent a 6-digit code on WhatsApp to " : "A 6-digit code was generated for "}
+              {step.delivery.channel === "sms"
+                ? step.delivery.fellBackToSms
+                  ? "We couldn't reach you on WhatsApp, so we sent a 6-digit code by SMS to "
+                  : "We sent a 6-digit code by SMS to "
+                : step.delivery.channel === "whatsapp"
+                  ? "We sent a 6-digit code on WhatsApp to "
+                  : "A 6-digit code was generated for "}
               <span className="whitespace-nowrap font-semibold text-ink">{step.delivery.maskedPhone}</span>.
             </p>
           )}
@@ -292,15 +300,30 @@ export function PhoneLoginFlow() {
                     Resend in {formatSeconds(resendIn)}
                   </span>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={resendCode}
-                    disabled={pending === "resend"}
-                    className="inline-flex items-center gap-1.5 rounded-md font-semibold text-brand-600 hover:text-brand-700 disabled:opacity-60"
-                  >
-                    {pending === "resend" && <Spinner className="size-3.5" />}
-                    Resend code
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => void resendCode(step.delivery.channel === "sms" ? "sms" : "whatsapp")}
+                      disabled={pending === "resend"}
+                      className="inline-flex items-center gap-1.5 rounded-md font-semibold text-brand-600 hover:text-brand-700 disabled:opacity-60"
+                    >
+                      {pending === "resend" && <Spinner className="size-3.5" />}
+                      Resend code
+                    </button>
+                    {step.delivery.smsAvailable && step.delivery.channel !== "sms" && (
+                      <>
+                        <span aria-hidden="true">·</span>
+                        <button
+                          type="button"
+                          onClick={() => void resendCode("sms")}
+                          disabled={pending === "resend"}
+                          className="rounded-md font-semibold text-brand-600 hover:text-brand-700 disabled:opacity-60"
+                        >
+                          Send by SMS instead
+                        </button>
+                      </>
+                    )}
+                  </>
                 )}
               </div>
             </form>

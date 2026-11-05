@@ -12,7 +12,9 @@ const sessionSchema = new Schema(
     revokedAt: { type: Date, default: null },
     // Last authenticated use, for the idle timeout (updated at most every few minutes).
     lastSeenAt: { type: Date },
-    revokedReason: { type: String, enum: ["logout", "rotated", "idle", "max_age", "role_changed", "phone_changed"] },
+    // Set when the admin passed the second factor in this session.
+    mfaVerifiedAt: { type: Date },
+    revokedReason: { type: String, enum: ["logout", "rotated", "idle", "max_age", "role_changed", "phone_changed", "mfa_reset", "account_deleted"] },
   },
   { collection: "sessions", timestamps: { createdAt: true, updatedAt: false }, strict: "throw" },
 );

@@ -6,7 +6,7 @@ import { setInstitutionStatus } from "@/server/institutions/service";
 
 /** POST /api/v1/admin/institutions/:id/status: `{ verificationStatus, note? }`. Admin only; audited. */
 export const POST = apiRoute(async (request, ctx, route) => {
-  const admin = await requireAdmin();
+  const admin = await requireAdmin("institutions.verify");
   const { institutionId } = await route.params;
   const body = await parseJsonBody(request, institutionStatusSchema);
   await setInstitutionStatus(institutionId ?? "", body.verificationStatus, body.note || undefined, new Types.ObjectId(admin.id), ctx.requestId);

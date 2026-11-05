@@ -6,6 +6,6 @@ import { readConnectionStatus } from "@/server/whatsapp/connection-store";
 
 /** GET /api/v1/admin/whatsapp/status: current WhatsApp Web pilot connection. Admin only. */
 export const GET = apiRoute(async (_request, ctx) => {
-  await requireAdmin();
+  await requireAdmin("whatsapp.read");
   return ok<WhatsAppStatusResponse>(ctx, await readConnectionStatus(getWhatsAppWebConfig()));
 });

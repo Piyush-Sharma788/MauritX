@@ -1,6 +1,21 @@
+import { networkInterfaces } from "node:os";
 import type { NextConfig } from "next";
 
 const isDev = process.env.NODE_ENV === "development";
+
+/**
+ * Development only: let this machine's own LAN addresses (e.g. opening the dev
+ * server from a phone on the same Wi-Fi) load dev resources such as HMR, plus
+ * any hostnames in DEV_ALLOWED_ORIGINS (comma-separated, no scheme or port).
+ */
+function devOrigins(): string[] {
+  const own = Object.values(networkInterfaces())
+    .flat()
+    .filter((i) => i && i.family === "IPv4" && !i.internal)
+    .map((i) => i!.address);
+  const extra = (process.env.DEV_ALLOWED_ORIGINS ?? "").split(",").map((h) => h.trim()).filter(Boolean);
+  return [...new Set([...own, ...extra])];
+}
 
 /**
  * Baseline CSP without nonces, so pages can stay statically prerendered.
@@ -36,6 +51,7 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
   poweredByHeader: false,
+  ...(isDev ? { allowedDevOrigins: devOrigins() } : {}),
   turbopack: {
     root: __dirname,
     rules: {

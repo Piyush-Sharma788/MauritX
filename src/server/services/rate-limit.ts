@@ -15,6 +15,9 @@ export const RATE_LIMITS = {
   otpSendPerPhone: { scope: "otp-send:phone", limit: 5, windowSeconds: 60 * 60 },
   otpVerifyPerIp: { scope: "otp-verify:ip", limit: 30, windowSeconds: 15 * 60 },
   otpVerifyPerPhone: { scope: "otp-verify:phone", limit: 15, windowSeconds: 60 * 60 },
+  // SMS costs money per message and is the usual target of OTP pumping; the per-number
+  // and service-wide daily caps come from config (getSmsConfig).
+  otpSmsPerIp: { scope: "otp-sms:ip", limit: 5, windowSeconds: 60 * 60 },
 } satisfies Record<string, RateLimitRule>;
 
 function isDuplicateKeyError(error: unknown): boolean {

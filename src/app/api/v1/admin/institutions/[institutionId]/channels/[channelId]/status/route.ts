@@ -6,7 +6,7 @@ import { setChannelStatus } from "@/server/institutions/service";
 
 /** POST /api/v1/admin/institutions/:id/channels/:channelId/status: `{ status }`. Admin only; audited. */
 export const POST = apiRoute(async (request, ctx, route) => {
-  const admin = await requireAdmin();
+  const admin = await requireAdmin("institutions.review");
   const { institutionId, channelId } = await route.params;
   const body = await parseJsonBody(request, channelStatusSchema);
   await setChannelStatus(institutionId ?? "", channelId ?? "", body.status, new Types.ObjectId(admin.id), ctx.requestId);

@@ -18,6 +18,21 @@ Use MongoDB collections with schema validation at the application layer (Zod) an
 ```
 Indexes: unique `phoneE164` (or deterministic lookup token), `role`, `status`.
 
+**Sprint 2 additions to `users`:**
+
+- `role`: one of `donor | institution_user | coordinator | super_admin | admin`, where `admin` is legacy and means super_admin.
+- `mfa`:
+  - `secretEncrypted` and `pendingSecretEncrypted` (AES-256-GCM);
+  - `enabledAt`;
+  - `recoveryCodeHashes[]` (HMAC);
+  - `lastUsedStep` (TOTP replay guard).
+- After deletion: `status: "deleted"`, `deletedAt`, a `phoneLookup` of `deleted:<uuid>`, placeholder `phoneEncrypted`, and no `displayName` or `mfa`.
+
+`sessions` additions:
+
+- `mfaVerifiedAt`: when this session passed the second factor;
+- `revokedReason` also takes `mfa_reset` and `account_deleted`.
+
 ## 2. `donor_profiles`
 ```ts
 {
@@ -285,6 +300,21 @@ Indexes: TTL on `expiresAt`, `{ phoneLookup: 1, createdAt: -1 }`.
 - `system_settings` (Phase 5): a single document, `_id: "messaging"`, holding `{ botEnabled, alertsPaused, updatedBy }`. These are admin switches; STOP is never affected.
 - `bot_metrics` (Phase 5): `{ _id: "YYYY-MM-DD" (IST), counts: { inbound_processed, inbound_dropped_disabled, bot_errors, ai_calls, ai_errors, ai_rejected_output }, expiresAt (TTL 90 days) }`. Counts only, with no identifiers.
 - `whatsapp_inbound_messages`: `{ providerMessageId (unique), receivedAt, expiresAt (TTL 14 days) }`. Guarantees each inbound message is processed once. No content is stored.
+
+### `error_events` (Sprint 2)
+One row per kind of unexpected server error.
+
+- **Fields:** `fingerprint` (unique), `source` (`api | render | jobs | whatsapp_worker | whatsapp_webhook | messaging | coordination`), `event`, `errorName`, a redacted `message`, `where` (route file or shaped path, or job type), `count`, `firstSeenAt`, `lastSeenAt`, `lastRequestId`, and `alertedAt`.
+- **Expiry:** a TTL deletes the row 90 days after `lastSeenAt`.
+- **Contents:** no personal data.
+
+### Sprint 2 field changes
+- **`emergency_requests.anonymizedAt`:** set by the retention sweep. Index on `{ closedAt, anonymizedAt }`.
+- **`otp_challenges`:**
+  - `purpose` also takes `account_deletion`;
+  - `deliveryChannel` is `whatsapp | sms | development`;
+  - `providerMessageId` holds the Twilio SID for SMS.
+- **`notification_events.recipientPhoneEncrypted`** is now optional: it's unset when the recipient deletes their account, and `recipientLookup` becomes `deleted:<userId>`.
 
 ## 8. `consent_records` and `audit_logs`
 Consent records (`consent_records`, append-only): `{ userId, purpose: "donor_alerts", channel: "whatsapp", action: "granted" | "paused" | "resumed" | "withdrawn", source: "web" | "whatsapp", noticeVersion, createdAt }`. Each event is a row, so a withdrawal is its own timestamped record. Index `{ userId: 1, createdAt: -1 }`.
