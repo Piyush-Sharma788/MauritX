@@ -230,3 +230,4 @@ The Deploy workflow performs this rollback automatically on health-check failure
 | Automatic staging deploys | Delete or set `STAGING_DEPLOY_ENABLED` variable to anything other than `true` |
 | Automatic production deploys | Delete or set `PRODUCTION_DEPLOY_ENABLED` variable to anything other than `true` |
 | All deploys | Remove the `Deploy` environment secrets — the SSH step will fail safely |
+

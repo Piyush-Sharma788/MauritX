@@ -213,3 +213,4 @@ The following **cannot be verified locally** and require the full GitHub Actions
 | `shellcheck SC2029` in deploy SSH steps | Intentional client-side expansion | Annotated with `# shellcheck disable=SC2029` |
 | MongoDB 8.0.32 fails on kernel ≥ 6.19 | `SERVER-121912` tcmalloc rseq conflict | Updated to `mongo:9.0.4` (SERVER-131779 fix) |
 | Old `ci.yml` duplicated jobs | Workflow was not retired when new files were added | Deleted `.github/workflows/ci.yml` |
+
