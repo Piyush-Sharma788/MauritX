@@ -1,0 +1,65 @@
+# MarutiX workers on an always-on VM (e.g. Oracle Cloud Always Free).
+#
+# The web app runs on Vercel; this host runs only the two background workers.
+# Both talk to the web app through MongoDB Atlas (the outbox and the job queue),
+# so nothing on this host needs to be reachable from the internet.
+#
+#   cd ~/MauritX/deploy/oracle
+#   docker compose up -d --build
+#
+# Secrets live in deploy/oracle/.env.production (gitignored; see README.md).
+
+name: marutix-workers
+
+x-hardening: &hardening
+  restart: unless-stopped
+  env_file: .env.production
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
+
+x-image: &image
+  image: marutix-worker:local
+  build:
+    context: ../..
+    dockerfile: Dockerfile.worker
+
+services:
+  # Owns the WhatsApp Web session: drains the outbox (alerts, bot replies, sign-in codes)
+  # and handles inbound messages. Exactly one may run (also enforced by a MongoDB lease),
+  # so stop any other worker (e.g. on your laptop) before starting this one.
+  worker:
+    <<: [*hardening, *image]
+    init: true
+    shm_size: "512m"
+    stop_grace_period: 45s
+    environment:
+      NODE_ENV: production
+      WHATSAPP_WEB_WORKER_URL: http://127.0.0.1:3100
+      WHATSAPP_WEB_SESSION_DIR: /app/.data/whatsapp-session
+      PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
+      # Chromium's own sandbox needs privileges the container doesn't have.
+      WHATSAPP_WEB_NO_SANDBOX: "true"
+    volumes:
+      # The linked WhatsApp session survives restarts and rebuilds.
+      - whatsapp-data:/app/.data
+
+  # Background jobs: donor waves, request coordination, institution discovery and
+  # outreach email. Stateless; writes to the outbox the worker drains.
+  jobs:
+    <<: [*hardening, *image]
+    command: ["node_modules/.bin/tsx", "--conditions=react-server", "src/worker/jobs/main.ts"]
+    environment:
+      NODE_ENV: production
+    healthcheck:
+      disable: true
+    stop_grace_period: 30s
+
+volumes:
+  whatsapp-data:
