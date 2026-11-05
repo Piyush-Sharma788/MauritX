@@ -233,6 +233,27 @@ export async function queueCoordinatorAlert(input: { requestId: string; phoneE16
   });
 }
 
+/** The sign-in code text. The code is never logged; the outbox erases the body once sent. */
+export const signInCodeText = (code: string, minutes: number) =>
+  `${code} is your MarutiX sign-in code. It expires in ${minutes} minutes.\nDon't share it with anyone: MarutiX will never ask you for it.`;
+
+/**
+ * A sign-in code through the outbox, so the web app never has to reach the WhatsApp
+ * worker directly (it may run on another machine). Expires with the code: a late code
+ * is never sent. One message per OTP request.
+ */
+export async function queueSignInCode(input: { phoneE164: string; code: string; minutes: number; requestId: string }): Promise<EnqueueResult> {
+  return enqueueMessage({
+    kind: "sign_in_code",
+    templateName: "sign_in_code",
+    phoneE164: input.phoneE164,
+    body: signInCodeText(input.code, input.minutes),
+    idempotencyKey: `sign_in_code:${input.requestId}:${phoneLookupToken(input.phoneE164)}`,
+    ttlMs: input.minutes * 60_000,
+    recordSuppressed: false,
+  });
+}
+
 const istDay = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" });
 
 /** STOP confirmation or HELP reply; at most one of each per number per day. */

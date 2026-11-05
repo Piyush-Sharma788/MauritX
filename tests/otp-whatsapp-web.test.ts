@@ -1,22 +1,27 @@
 import { randomBytes } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseServerEnv } from "@/lib/env";
-import { whatsAppWebDevOtpProvider } from "@/server/otp-delivery";
 
 /**
- * OTP_PROVIDER=whatsapp_web (development only): sign-in codes go from the phone linked
- * to the WhatsApp Web pilot worker, through its authenticated loopback control channel.
+ * OTP_PROVIDER=whatsapp_web (pilot): sign-in codes go from the phone linked to the
+ * WhatsApp Web worker, through the MongoDB outbox, so the web app never calls the worker
+ * directly (they may run on different machines).
  */
+const status = vi.hoisted(() => ({ value: { workerOnline: true, state: "connected" } as { workerOnline: boolean; state: string } }));
+const queueSignInCode = vi.hoisted(() => vi.fn());
+
+vi.mock("@/server/whatsapp/connection-store", () => ({ readConnectionStatus: vi.fn(async () => status.value) }));
+vi.mock("@/server/messaging/queue", () => ({ queueSignInCode }));
+
+const { whatsAppWebDevOtpProvider } = await import("@/server/otp-delivery");
+
 const input = { phoneE164: "+919000012345", code: "482913", expiresInMinutes: 5, requestId: "req-1" };
-const workerReplies = (status: number, body: unknown) => {
-  const fetchMock = vi.fn(async () => new Response(JSON.stringify(body), { status }));
-  vi.stubGlobal("fetch", fetchMock);
-  return fetchMock;
-};
 
 afterEach(() => {
-  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   vi.restoreAllMocks();
+  queueSignInCode.mockReset();
+  status.value = { workerOnline: true, state: "connected" };
 });
 
 describe("OTP_PROVIDER=whatsapp_web", () => {
@@ -35,27 +40,33 @@ describe("OTP_PROVIDER=whatsapp_web", () => {
     expect(parseServerEnv({ ...base, NODE_ENV: "development" }).success).toBe(true);
   });
 
-  it("sends the code from the linked phone through the worker's authenticated control channel", async () => {
-    const fetchMock = workerReplies(200, { providerMessageId: "true_91900@c.us_ABC" });
+  it("queues the code in the outbox when the worker is connected, expiring with the code", async () => {
+    queueSignInCode.mockResolvedValue({ outcome: "queued", messageId: "m1", status: "queued" });
     const sent = await whatsAppWebDevOtpProvider().send(input);
-    expect(sent).toEqual({ providerMessageId: "true_91900@c.us_ABC" });
-    const [url, init] = fetchMock.mock.calls[0] as unknown as [URL, RequestInit];
-    expect(String(url)).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/send-otp$/);
-    expect((init.headers as Record<string, string>).Authorization).toBe(`Bearer ${process.env.WHATSAPP_WEB_WORKER_SECRET}`);
-    expect(JSON.parse(String(init.body))).toEqual({ phone: "+919000012345", code: "482913", minutes: 5 });
+    expect(sent).toEqual({});
+    expect(queueSignInCode).toHaveBeenCalledWith({ phoneE164: "+919000012345", code: "482913", minutes: 5, requestId: "req-1" });
   });
 
   it("falls back to the labelled development print when no phone is linked or the worker is down", async () => {
     const print = vi.spyOn(console, "warn").mockImplementation(() => {});
-    workerReplies(503, { error: "not_connected" });
+    status.value = { workerOnline: true, state: "qr_required" };
     expect(await whatsAppWebDevOtpProvider().send(input)).toEqual({ channel: "development" });
-    vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError("fetch failed"); }));
+    status.value = { workerOnline: false, state: "disconnected" };
     expect(await whatsAppWebDevOtpProvider().send(input)).toEqual({ channel: "development" });
     expect(print.mock.calls.flat().join("\n")).toMatch(/DEVELOPMENT OTP[\s\S]*NOT SENT VIA WHATSAPP/);
+    expect(queueSignInCode).not.toHaveBeenCalled();
   });
 
-  it("fails honestly when the number isn't on WhatsApp (no silent fallback)", async () => {
-    workerReplies(422, { error: "not_on_whatsapp" });
-    await expect(whatsAppWebDevOtpProvider().send(input)).rejects.toThrow(/not_on_whatsapp/);
+  it("fails in production when no worker is connected (never prints a code there)", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("OTP_ALLOW_WHATSAPP_WEB_IN_PROD", "true");
+    status.value = { workerOnline: false, state: "disconnected" };
+    await expect(whatsAppWebDevOtpProvider().send(input)).rejects.toThrow(/worker not connected/);
+    expect(queueSignInCode).not.toHaveBeenCalled();
+  });
+
+  it("fails honestly when the outbox refuses the message (no silent fallback)", async () => {
+    queueSignInCode.mockResolvedValue({ outcome: "suppressed", messageId: null, status: "suppressed", reason: "OPTED_OUT" });
+    await expect(whatsAppWebDevOtpProvider().send(input)).rejects.toThrow(/OPTED_OUT/);
   });
 });

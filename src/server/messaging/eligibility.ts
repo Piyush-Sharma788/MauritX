@@ -102,8 +102,9 @@ async function donorConsent(
  * message is queued and again immediately before it is sent.
  */
 export async function checkEligibility(input: EligibilityInput): Promise<Eligibility> {
-  // An opt-out confirmation is the one message allowed after STOP.
-  if (input.kind === "opt_out_confirmation") return { ok: true, recipientUserId: input.recipientUserId };
+  // An opt-out confirmation is allowed after STOP, and so is a sign-in code the person just asked
+  // for (STOP opts out of alerts and updates, not out of signing in).
+  if (input.kind === "opt_out_confirmation" || input.kind === "sign_in_code") return { ok: true, recipientUserId: input.recipientUserId };
   if (await isOptedOut(input.phoneLookup)) return { ok: false, reason: "OPTED_OUT" };
 
   switch (input.kind) {

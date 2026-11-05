@@ -6,7 +6,9 @@ import { twilioSmsOtpProvider } from "@/server/otp-delivery/sms";
 import { maskPhone } from "@/lib/validation/phone";
 import { logger } from "@/lib/logger";
 import { sendTemplateMessage } from "@/lib/whatsapp/client";
-import { whatsappWorker } from "@/lib/whatsapp-web/worker-client";
+import { getWhatsAppWebConfig } from "@/lib/whatsapp-web/config";
+import { queueSignInCode } from "@/server/messaging/queue";
+import { readConnectionStatus } from "@/server/whatsapp/connection-store";
 
 export interface OtpDeliveryInput {
   phoneE164: string;
@@ -106,11 +108,13 @@ export function getSmsOtpOption(): SmsOtpOption | null {
 }
 
 /**
- * DEVELOPMENT ONLY (OTP_PROVIDER=whatsapp_web): sends the code from the phone linked to the
- * WhatsApp Web pilot worker. The official channel (an approved authentication template)
- * stays mandatory in production; config validation refuses this provider there.
- * Until a phone is linked (an admin has to sign in to link one), the code is printed in the
- * terminal like the development provider, and the sign-in screen says so.
+ * PILOT ONLY (OTP_PROVIDER=whatsapp_web): sends the code from the phone linked to the
+ * WhatsApp Web pilot worker. Refused in production unless OTP_ALLOW_WHATSAPP_WEB_IN_PROD=true.
+ *
+ * The code goes through the MongoDB outbox, which the worker drains, so the web app never
+ * calls the worker directly: they may run on different machines (e.g. Vercel + a local worker).
+ * When no worker is connected, development prints the code in the terminal and the sign-in
+ * screen says so; production fails, so the OTP service can fall back to SMS if configured.
  */
 export function whatsAppWebDevOtpProvider(): OtpDeliveryProvider {
   const fallback = developmentProvider();
@@ -120,14 +124,16 @@ export function whatsAppWebDevOtpProvider(): OtpDeliveryProvider {
       if (process.env.NODE_ENV === "production" && process.env.OTP_ALLOW_WHATSAPP_WEB_IN_PROD !== "true") {
         throw new Error("OTP_PROVIDER=whatsapp_web is disabled in production");
       }
-      const result = await whatsappWorker.sendOtp({ phone: input.phoneE164, code: input.code, minutes: input.expiresInMinutes });
-      if (result.ok) return { providerMessageId: result.providerMessageId };
-      if (result.reason === "not_connected" || result.reason === "unavailable") {
-        logger.warn("otp.whatsapp_web_fallback", { requestId: input.requestId, reason: result.reason });
+      const status = await readConnectionStatus(getWhatsAppWebConfig());
+      if (!status.workerOnline || status.state !== "connected") {
+        logger.warn("otp.whatsapp_web_fallback", { requestId: input.requestId, reason: status.workerOnline ? "not_connected" : "unavailable" });
+        if (process.env.NODE_ENV === "production") throw new Error("WhatsApp Web sign-in code not sent: worker not connected");
         await fallback.send(input);
         return { channel: "development" };
       }
-      throw new Error(`WhatsApp Web sign-in code not sent: ${result.reason}`);
+      const result = await queueSignInCode({ phoneE164: input.phoneE164, code: input.code, minutes: input.expiresInMinutes, requestId: input.requestId });
+      if (result.outcome === "suppressed") throw new Error(`WhatsApp Web sign-in code not sent: ${result.reason}`);
+      return {};
     },
   };
 }

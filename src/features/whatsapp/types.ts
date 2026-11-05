@@ -19,10 +19,12 @@ export const MESSAGE_KINDS = [
   "request_confirmation",
   "coordinator_alert",
   "requester_update",
+  // A sign-in code the person just asked for (OTP_PROVIDER=whatsapp_web).
+  "sign_in_code",
 ] as const;
 
 /** Replies inside a conversation the person started. Sent first, with their own cap. */
-export const CONVERSATIONAL_KINDS: readonly MessageKind[] = ["opt_out_confirmation", "help_reply", "bot_reply"];
+export const CONVERSATIONAL_KINDS: readonly MessageKind[] = ["opt_out_confirmation", "help_reply", "bot_reply", "sign_in_code"];
 export type MessageKind = (typeof MESSAGE_KINDS)[number];
 
 /**
