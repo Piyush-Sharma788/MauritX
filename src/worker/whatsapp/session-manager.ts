@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readlinkSync, rmSync, writeFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import path from "node:path";
+import QRCode from "qrcode";
 import WAWebJS from "whatsapp-web.js";
 import type { WhatsAppConnectionState } from "@/features/whatsapp/types";
 import { logger } from "@/lib/logger";
@@ -370,6 +371,11 @@ export class WhatsAppSessionManager implements MessagingProvider {
     client.on("qr", async (qr: string) => {
       if (!current()) return;
       this.qr = { value: qr, generatedAt: new Date() };
+      QRCode.toString(qr, { type: "terminal", small: true })
+        .then((art) => {
+          console.log("\nScan this QR code with WhatsApp on your pilot phone:\n" + art);
+        })
+        .catch(() => {});
       if (!this.pairingTimer) {
         this.pairingTimer = setTimeout(() => void this.onPairingTimeout(client), PAIRING_TIMEOUT_MS);
       }
