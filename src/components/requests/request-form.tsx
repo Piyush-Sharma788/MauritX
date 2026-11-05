@@ -486,7 +486,7 @@ function Confirmation({ result, onNew, topRef }: { result: CreateRequestResponse
           <StatusBadge status={result.status} />
         </div>
         <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-ink-soft">
-          This request is <strong>not yet verified</strong>. The MarutiX team will verify it with the hospital before it&apos;s marked verified.
+          Your request is <strong>active</strong>. Nearby registered donor matching and hospital coordination have started automatically.
         </p>
         {result.replayed && <p className="mt-2 text-xs text-ink-muted">This request was already submitted; you&apos;re seeing the same confirmation.</p>}
       </section>

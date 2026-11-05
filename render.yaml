@@ -1,0 +1,61 @@
+# Render Blueprint Specification for MarutiX
+# Deploy with one click via: Render Dashboard -> New -> Blueprint
+services:
+  - type: web
+    name: marutix
+    runtime: docker
+    dockerfilePath: ./Dockerfile.render
+    plan: starter
+    region: oregon
+    disk:
+      name: marutix-data
+      mountPath: /app/.data
+      sizeGB: 1
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: APP_BASE_URL
+        sync: false
+      - key: MONGODB_URI
+        sync: false
+      - key: AUTH_JWT_SECRET
+        generateValue: true
+      - key: OTP_HASH_SECRET
+        generateValue: true
+      - key: PII_ENCRYPTION_KEY
+        sync: false
+      - key: OTP_PROVIDER
+        value: whatsapp_web
+      - key: OTP_ALLOW_WHATSAPP_WEB_IN_PROD
+        value: "true"
+      - key: WHATSAPP_WEB_WORKER_SECRET
+        generateValue: true
+      - key: WHATSAPP_WEB_WORKER_URL
+        value: http://127.0.0.1:3100
+      - key: WHATSAPP_WEB_SESSION_DIR
+        value: /app/.data/whatsapp-session
+      - key: WHATSAPP_WEB_NO_SANDBOX
+        value: "true"
+      - key: MESSAGING_PROVIDER
+        value: whatsapp_web
+      - key: EMAIL_PROVIDER
+        value: smtp
+      - key: EMAIL_FROM
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "465"
+      - key: SMTP_SECURE
+        value: "true"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: AI_PROVIDER
+        value: gemini
+      - key: GEMINI_API_KEY
+        sync: false

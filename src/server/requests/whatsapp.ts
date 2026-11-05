@@ -109,8 +109,8 @@ export async function continueRequestConversation(conversation: ConversationReco
     await saveConversation(conversation, { status: "completed", now });
     await reply(msg, [
       [
-        `✅ Request ${created.publicRequestId} submitted.`,
-        "Status: Pending verification. Our team verifies every request with the hospital before any donor is alerted.",
+        `✅ Request ${created.publicRequestId} is now active.`,
+        "Donor matching and hospital coordination have started automatically.",
         "",
         "Your private link to track, update or cancel (don't forward it):",
         created.manageUrl,

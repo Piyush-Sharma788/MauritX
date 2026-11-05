@@ -343,7 +343,7 @@ export class WhatsAppSessionManager implements MessagingProvider {
         handleSIGTERM: false,
         handleSIGHUP: false,
         executablePath: this.config.executablePath,
-        args: this.config.noSandbox ? ["--no-sandbox", "--disable-setuid-sandbox"] : [],
+        args: this.config.noSandbox ? ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"] : [],
       },
     });
     this.client = client;

@@ -21,6 +21,7 @@ const envSchema = z
       }),
     // whatsapp_web: development only, sends codes from the phone linked to the WhatsApp Web pilot.
     OTP_PROVIDER: z.enum(["whatsapp", "whatsapp_web", "development"]).optional(),
+    OTP_ALLOW_WHATSAPP_WEB_IN_PROD: z.enum(["true", "false"]).optional(),
     WHATSAPP_ACCESS_TOKEN: z.string().optional(),
     WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
     WHATSAPP_OTP_TEMPLATE_NAME: z.string().optional(),
@@ -41,7 +42,7 @@ const envSchema = z
     return { ...env, otpProvider, hasWhatsApp };
   })
   .superRefine((env, ctx) => {
-    if (env.otpProvider === "whatsapp_web" && env.NODE_ENV === "production") {
+    if (env.otpProvider === "whatsapp_web" && env.NODE_ENV === "production" && env.OTP_ALLOW_WHATSAPP_WEB_IN_PROD !== "true") {
       ctx.addIssue({
         code: "custom",
         path: ["OTP_PROVIDER"],

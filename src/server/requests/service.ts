@@ -138,7 +138,8 @@ export async function createRequest(
 
   const expiresAt = computeExpiry(now, input.requiredBy);
   const base = {
-    status: "pending_verification" as const,
+    status: "active" as const,
+    verifiedAt: now,
     priority: input.priority,
     patientNameEncrypted: encryptPii(input.patientName),
     ...(input.patientAge !== null ? { patientAge: input.patientAge } : {}),
@@ -166,7 +167,7 @@ export async function createRequest(
     ...(requesterLookup ? { requesterPhoneLookup: requesterLookup, requesterPhoneEncrypted: encryptPii(options.requesterE164!) } : {}),
     consent: { sharingAcceptedAt: now, privacyNoticeVersion: input.privacyNoticeVersion },
     dedupeKey,
-    history: [{ status: "pending_verification" as const, at: now, actor: "requester" as const, ...(requesterLookup ? { note: "Created on WhatsApp" } : {}) }],
+    history: [{ status: "active" as const, at: now, actor: "requester" as const, ...(requesterLookup ? { note: "Created on WhatsApp" } : { note: "Created on web" }) }],
     expiresAt,
   };
 
@@ -204,9 +205,12 @@ export async function createRequest(
     resourceId: request.publicRequestId,
   });
 
+  // Automated discovery, outreach and donor waves begin immediately on request creation.
+  await onRequestActivated(request._id);
+
   const response: CreateRequestResponse = {
     publicRequestId: request.publicRequestId,
-    status: "pending_verification",
+    status: "active",
     manageUrl: trackingUrl(manageToken),
     manageLinkExpiresAt: manageExpiresAt.toISOString(),
     whatsappConfirmation,

@@ -162,7 +162,7 @@ export function routeShape(pathname: string): string {
 
 /** Wraps a route handler with correlation IDs, origin checks and safe error mapping. */
 export function apiRoute(handler: Handler, options: { checkOrigin?: boolean } = { checkOrigin: true }) {
-  return async (request: NextRequest, route: RouteParams = { params: Promise.resolve({}) }): Promise<Response> => {
+  return async (request: NextRequest, route: RouteParams): Promise<Response> => {
     const ctx: ApiContext = {
       requestId: randomUUID(),
       ip: clientIp(request),

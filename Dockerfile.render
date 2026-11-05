@@ -1,0 +1,45 @@
+# syntax=docker/dockerfile:1.7
+# MarutiX Unified Production Container (Next.js Web + Background Jobs + WhatsApp Worker)
+ARG NODE_IMAGE=node:24-bookworm-slim
+
+FROM ${NODE_IMAGE} AS runner
+WORKDIR /app
+
+# Install system Chromium, Indic/Emoji fonts, CA certs
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends chromium fonts-noto-core fonts-noto-color-emoji ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
+ENV PUPPETEER_SKIP_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
+    NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
+    PORT=10000 \
+    WHATSAPP_WEB_SESSION_DIR=/app/.data/whatsapp-session \
+    WHATSAPP_WEB_NO_SANDBOX=true
+
+# Copy package manifests & install all dependencies
+COPY package.json package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
+
+# Copy application source code
+COPY tsconfig.json next.config.ts ./
+COPY src ./src
+COPY scripts ./scripts
+COPY public ./public
+
+# Build Next.js production bundle
+RUN npm run build
+
+# Create data directory for persistent WhatsApp session & files
+RUN mkdir -p /app/.data && chown -R node:node /app/.data
+
+# Switch to unprivileged node user
+USER node
+
+EXPOSE 10000
+
+HEALTHCHECK --interval=20s --timeout=5s --start-period=30s --retries=3 \
+  CMD ["node", "-e", "fetch('http://127.0.0.1:' + (process.env.PORT || 10000) + '/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+
+CMD ["node", "scripts/prod-start.mjs"]

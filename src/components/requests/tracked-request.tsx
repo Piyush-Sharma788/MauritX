@@ -15,17 +15,17 @@ const SAFETY =
   "MarutiX helps coordinate contacts. It does not guarantee donor eligibility, blood availability or compatibility. Contact the treating hospital/blood centre immediately; do not delay urgent medical care while using this app.";
 
 function VerificationBanner({ view }: { view: TrackedRequestView }) {
-  if (view.status === "pending_verification") {
+  if (view.status === "active") {
     return (
-      <Notice tone="warn" as="p">
-        <span><strong>Not yet verified.</strong> The MarutiX team is verifying this request with the hospital. Until then, treat these details as unconfirmed.</span>
+      <Notice tone="shield" as="p">
+        <span><strong>Active Emergency Request.</strong> Automated donor matching and nearby hospital outreach are currently active.</span>
       </Notice>
     );
   }
   if (view.verifiedAt) {
     return (
       <Notice tone="shield" as="p">
-        <span><strong>Verified by MarutiX</strong> with the hospital on {formatIST(view.verifiedAt)}. Availability is still not guaranteed.</span>
+        <span><strong>Active Request.</strong> Coordinated by MarutiX since {formatIST(view.verifiedAt)}.</span>
       </Notice>
     );
   }

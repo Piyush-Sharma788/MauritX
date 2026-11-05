@@ -117,7 +117,9 @@ export function whatsAppWebDevOtpProvider(): OtpDeliveryProvider {
   return {
     channel: "whatsapp",
     async send(input) {
-      if (process.env.NODE_ENV === "production") throw new Error("OTP_PROVIDER=whatsapp_web is disabled in production");
+      if (process.env.NODE_ENV === "production" && process.env.OTP_ALLOW_WHATSAPP_WEB_IN_PROD !== "true") {
+        throw new Error("OTP_PROVIDER=whatsapp_web is disabled in production");
+      }
       const result = await whatsappWorker.sendOtp({ phone: input.phoneE164, code: input.code, minutes: input.expiresInMinutes });
       if (result.ok) return { providerMessageId: result.providerMessageId };
       if (result.reason === "not_connected" || result.reason === "unavailable") {

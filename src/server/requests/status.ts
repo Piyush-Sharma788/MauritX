@@ -7,7 +7,7 @@ import type { RequestStatus } from "@/features/requests/schemas";
  */
 
 const ADMIN_TRANSITIONS: Record<RequestStatus, RequestStatus[]> = {
-  pending_verification: ["verified", "cancelled"],
+  pending_verification: ["active", "verified", "cancelled"],
   verified: ["active", "partially_fulfilled", "fulfilled", "cancelled"],
   active: ["partially_fulfilled", "fulfilled", "cancelled"],
   partially_fulfilled: ["active", "fulfilled", "cancelled"],
