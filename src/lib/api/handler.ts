@@ -77,13 +77,41 @@ function assertSameOrigin(request: NextRequest) {
   }
 }
 
+const tooLarge = () => new AppError(400, "BAD_REQUEST", "Request body is too large.");
+
+/**
+ * Reads at most `maxBytes` of the body and stops as soon as it is exceeded,
+ * so an oversized (or endless, chunked) upload is never buffered in memory.
+ * Next.js applies no size limit to Route Handler bodies.
+ */
+export async function readBodyLimited(request: Request, maxBytes: number): Promise<string> {
+  const declared = Number(request.headers.get("content-length") ?? "");
+  if (Number.isFinite(declared) && declared > maxBytes) throw tooLarge();
+  if (!request.body) return "";
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => {});
+      throw tooLarge();
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
 /** Reads a small JSON body and validates it. */
 export async function parseJsonBody<S extends z.ZodType>(request: NextRequest, schema: S): Promise<z.output<S>> {
   if (!request.headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
     throw new AppError(400, "BAD_REQUEST", "Expected a JSON request body.");
   }
-  const raw = await request.text();
-  if (raw.length > MAX_JSON_BODY_BYTES) throw new AppError(400, "BAD_REQUEST", "Request body is too large.");
+  // The limit is in characters; UTF-8 needs at most 3 bytes per UTF-16 unit, so this byte cap never rejects a body the character check would accept.
+  const raw = await readBodyLimited(request, MAX_JSON_BODY_BYTES * 3);
+  if (raw.length > MAX_JSON_BODY_BYTES) throw tooLarge();
 
   let body: unknown;
   try {

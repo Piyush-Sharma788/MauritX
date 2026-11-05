@@ -37,15 +37,15 @@ async function AuditContent({ searchParams }: Pick<PageProps<"/admin/audit">, "s
 
   return (
     <div className="mt-8 space-y-5">
-      <form method="get" className="flex flex-wrap items-end gap-3 rounded-[var(--radius-card)] border border-line bg-surface p-4 shadow-soft">
-        <label className="min-w-64 flex-1 text-xs font-semibold text-ink-soft">Action
+      <form method="get" className="flex flex-wrap items-end gap-3 rounded-[var(--radius-card)] border-2 border-ink bg-surface p-4 shadow-brut">
+        <label className="min-w-64 flex-1 text-xs font-bold text-ink">Action
           <select name="action" defaultValue={filters.action ?? ""} className={`${inputClasses} mt-1 h-11 border-line-strong text-sm`}>
             <option value="">All actions</option>
             {AUDIT_ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
         </label>
-        <button type="submit" className="h-11 rounded-full bg-ink px-5 text-sm font-semibold text-white hover:bg-ink/90">Filter</button>
-        {filters.action && <Link href="/admin/audit" className="h-11 rounded-full px-4 py-3 text-sm font-medium text-ink-soft hover:bg-ink/5">Reset</Link>}
+        <button type="submit" className="h-11 rounded-md border-2 border-ink bg-ink px-5 text-sm font-bold text-white brut-press hover:bg-brand-600">Filter</button>
+        {filters.action && <Link href="/admin/audit" className="h-11 rounded-md border-2 border-transparent px-4 py-3 text-sm font-semibold text-ink transition-colors hover:border-ink hover:bg-signal-300">Reset</Link>}
       </form>
       <Card title="Events" id="events" note="Append-only. Never contains OTPs, tokens, full phone numbers or message text.">
         {events.length === 0 ? (
@@ -53,7 +53,7 @@ async function AuditContent({ searchParams }: Pick<PageProps<"/admin/audit">, "s
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[40rem] text-left text-sm">
-              <thead className="border-b border-line text-xs uppercase tracking-wide text-ink-muted">
+              <thead className="border-b-2 border-ink bg-paper-deep font-mono text-[0.66rem] uppercase tracking-[0.1em] text-ink">
                 <tr>{["When", "Action", "Outcome", "Actor", "Resource"].map((h) => <th key={h} scope="col" className="px-3 py-2 font-semibold">{h}</th>)}</tr>
               </thead>
               <tbody className="divide-y divide-line">
@@ -73,7 +73,7 @@ async function AuditContent({ searchParams }: Pick<PageProps<"/admin/audit">, "s
       </Card>
       {nextCursor && (
         <div className="flex justify-end">
-          <Link href={`/admin/audit?${new URLSearchParams({ ...raw, cursor: nextCursor }).toString()}`} className="rounded-full border border-line-strong px-4 py-2 text-sm font-semibold text-ink hover:bg-paper-deep">Older events →</Link>
+          <Link href={`/admin/audit?${new URLSearchParams({ ...raw, cursor: nextCursor }).toString()}`} className="rounded-md border-2 border-ink bg-surface px-4 py-2 text-sm font-bold text-ink brut-press-sm hover:bg-signal-100">Older events →</Link>
         </div>
       )}
     </div>

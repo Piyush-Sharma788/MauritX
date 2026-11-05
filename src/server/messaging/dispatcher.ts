@@ -1,9 +1,11 @@
 import "server-only";
 import { decryptPii } from "@/lib/security/crypto";
 import { logger } from "@/lib/logger";
+import { resolveMediaAsset } from "@/lib/whatsapp/media-config";
+import { incrementMetric } from "@/server/metrics/bot-metrics";
 import { reportError } from "@/server/monitoring/report";
 import { checkEligibility } from "@/server/messaging/eligibility";
-import { MessagingError, type DeliveryAck, type MessagingProvider } from "@/server/messaging/provider";
+import { MessagingError, type DeliveryAck, type MessagingProvider, type SendContext } from "@/server/messaging/provider";
 import { NotificationEvent } from "@/server/models/notification-event";
 import { WhatsAppInboundMessage } from "@/server/models/whatsapp-inbound-message";
 
@@ -19,9 +21,21 @@ export interface DispatchOptions {
   testRecipients: Set<string>;
   /** Admin switch: hold emergency alerts (they stay queued until they expire). */
   alertsPaused?: boolean;
+  /**
+   * False while the caller's pacing doesn't allow a proactive message yet (see pacing.ts);
+   * conversational replies may still go. Default true.
+   */
+  proactiveAllowed?: boolean;
 }
 
-export type DispatchOutcome = "idle" | "rate_limited" | "sent" | "retry" | "failed" | "suppressed";
+/** "paced": only proactive messages are waiting and the pacing interval hasn't passed. */
+export type DispatchOutcome = "idle" | "rate_limited" | "paced" | "sent" | "retry" | "failed" | "suppressed";
+
+export interface DispatchResult {
+  outcome: DispatchOutcome;
+  /** Whether the message handled was a reply in a conversation the person started (priority 0). */
+  conversational: boolean;
+}
 
 class MessagingDeliveryFailure extends Error {
   override name = "MessagingDeliveryFailure";
@@ -45,26 +59,62 @@ async function sweep(now: Date) {
 }
 
 /**
+ * Sends the message: an image with the body as caption when it has a usable
+ * one, else text. If the image fails in a way the provider knows sent nothing
+ * (file unreadable, upload refused, platform refusal), the caption goes as
+ * text in the same attempt, so the person still gets the words exactly once.
+ * Errors after an image send may have started are not followed by text.
+ */
+async function deliver(
+  provider: MessagingProvider,
+  message: { _id: unknown; mediaKey?: string | null },
+  phoneE164: string,
+  body: string,
+  context: SendContext,
+): Promise<{ providerMessageId: string; mediaOutcome?: "image" | "text_fallback" }> {
+  if (!message.mediaKey) return provider.sendText(phoneE164, body, context);
+  const asset = message.mediaKey === "welcome" ? resolveMediaAsset("welcome") : null;
+  if (!asset || !provider.sendImage) {
+    logger.warn("messaging.media_unavailable", { messageId: String(message._id), reason: asset ? "provider_text_only" : "asset_missing_or_disabled" });
+    return { ...(await provider.sendText(phoneE164, body, context)), mediaOutcome: "text_fallback" };
+  }
+  try {
+    return { ...(await provider.sendImage(phoneE164, asset, body, context)), mediaOutcome: "image" };
+  } catch (error) {
+    if (!(error instanceof MessagingError) || !error.notSent) throw error;
+    logger.warn("messaging.media_fallback_text", { messageId: String(message._id), code: error.code });
+    await incrementMetric("media_fallback_text", context.now);
+    return { ...(await provider.sendText(phoneE164, body, context)), mediaOutcome: "text_fallback" };
+  }
+}
+
+/**
  * Claims and sends at most one queued message. The caller paces calls and
  * only invokes this while the provider is connected.
  */
-export async function dispatchNext(
+export async function dispatchNext(provider: MessagingProvider, options: DispatchOptions, now = new Date()): Promise<DispatchOutcome> {
+  return (await dispatchOne(provider, options, now)).outcome;
+}
+
+/** dispatchNext, also saying whether the message was a conversational reply (for pacing). */
+export async function dispatchOne(
   provider: MessagingProvider,
   options: DispatchOptions,
   now = new Date(),
-): Promise<DispatchOutcome> {
+): Promise<DispatchResult> {
   await sweep(now);
+  const result = (outcome: DispatchOutcome, conversational = false): DispatchResult => ({ outcome, conversational });
 
   const hourAgo = new Date(now.getTime() - 60 * 60 * 1000);
   const [repliesSent, proactiveSent] = await Promise.all([
     NotificationEvent.countDocuments({ provider: provider.name, priority: 0, sentAt: { $gte: hourAgo } }),
     NotificationEvent.countDocuments({ provider: provider.name, priority: { $ne: 0 }, sentAt: { $gte: hourAgo } }),
   ]);
-  const allowed = [
-    ...(repliesSent < options.maxRepliesPerHour ? [0] : []),
-    ...(proactiveSent < options.maxMessagesPerHour ? [1] : []),
-  ];
-  if (allowed.length === 0) return "rate_limited";
+  const replyCapOk = repliesSent < options.maxRepliesPerHour;
+  const proactiveCapOk = proactiveSent < options.maxMessagesPerHour;
+  const paced = options.proactiveAllowed === false;
+  const allowed = [...(replyCapOk ? [0] : []), ...(proactiveCapOk && !paced ? [1] : [])];
+  if (allowed.length === 0) return result(proactiveCapOk ? "paced" : "rate_limited");
 
   const message = await NotificationEvent.findOneAndUpdate(
     {
@@ -79,16 +129,17 @@ export async function dispatchNext(
     { sort: { priority: 1, nextAttemptAt: 1, createdAt: 1 }, returnDocument: "after", lean: true },
   );
   if (!message) {
-    // Distinguish "nothing to do" from "work is waiting behind a cap".
+    // Distinguish "nothing to do" from "work is waiting behind a cap or the pacing interval".
     if (allowed.length < 2 && (await NotificationEvent.exists({ status: "queued", provider: provider.name, priority: { $nin: allowed }, nextAttemptAt: { $lte: now } }))) {
-      return "rate_limited";
+      return result(!allowed.includes(1) && proactiveCapOk && paced ? "paced" : "rate_limited");
     }
-    return "idle";
+    return result("idle");
   }
+  const conversational = message.priority === 0;
 
   if (!message.recipientPhoneEncrypted) {
     await NotificationEvent.updateOne({ _id: message._id }, { $set: { status: "suppressed", failureCode: "ACCOUNT_DELETED", failedAt: now }, ...FINAL });
-    return "suppressed";
+    return result("suppressed", conversational);
   }
   const phoneE164 = decryptPii(message.recipientPhoneEncrypted);
 
@@ -107,7 +158,7 @@ export async function dispatchNext(
       { _id: message._id },
       { $set: { status: "suppressed", failureCode: eligibility.reason, failedAt: now }, ...FINAL },
     );
-    return "suppressed";
+    return result("suppressed", conversational);
   }
 
   if (!message.bodyEncrypted) {
@@ -115,13 +166,13 @@ export async function dispatchNext(
       { _id: message._id },
       { $set: { status: "failed", failureCode: "MISSING_BODY", failedAt: now }, ...FINAL },
     );
-    return "failed";
+    return result("failed", conversational);
   }
 
   try {
     // The person's last message to us opens a 24-hour window for free-form replies (Cloud API rule).
     const lastInbound = await WhatsAppInboundMessage.findOne({ phoneLookup: message.recipientLookup }, { receivedAt: 1 }).sort({ receivedAt: -1 }).lean();
-    const { providerMessageId } = await provider.sendText(phoneE164, decryptPii(message.bodyEncrypted), {
+    const { providerMessageId, mediaOutcome } = await deliver(provider, message, phoneE164, decryptPii(message.bodyEncrypted), {
       kind: message.kind,
       templateParams: message.templateParamsEncrypted ? (JSON.parse(decryptPii(message.templateParamsEncrypted)) as string[]) : null,
       lastInboundAt: lastInbound?.receivedAt ?? null,
@@ -129,10 +180,10 @@ export async function dispatchNext(
     });
     await NotificationEvent.updateOne(
       { _id: message._id, status: "sending" },
-      { $set: { status: "sent", providerMessageId, sentAt: new Date() }, ...FINAL },
+      { $set: { status: "sent", providerMessageId, sentAt: new Date(), ...(mediaOutcome ? { mediaOutcome } : {}) }, ...FINAL },
     );
-    logger.info("messaging.sent", { messageId: message._id.toString(), kind: message.kind, attempt: message.attempts });
-    return "sent";
+    logger.info("messaging.sent", { messageId: message._id.toString(), kind: message.kind, attempt: message.attempts, ...(mediaOutcome ? { media: mediaOutcome } : {}) });
+    return result("sent", conversational);
   } catch (error) {
     const code = error instanceof MessagingError ? error.code : "SEND_FAILED";
     const retryable = error instanceof MessagingError ? error.retryable : true;
@@ -150,7 +201,7 @@ export async function dispatchNext(
         { _id: message._id, status: "sending" },
         { $set: { status: "queued", failureCode: code, nextAttemptAt: new Date(now.getTime() + delay) }, $unset: { lockedUntil: 1 } },
       );
-      return "retry";
+      return result("retry", conversational);
     }
     await NotificationEvent.updateOne(
       { _id: message._id, status: "sending" },
@@ -158,7 +209,7 @@ export async function dispatchNext(
     );
     // Final failures only: grouped by provider error code (an unexpected exception groups by its message).
     await reportError(error instanceof MessagingError ? new MessagingDeliveryFailure(code) : error, { source: "messaging", event: "messaging.delivery_failed", where: `${provider.name}:${message.kind}` });
-    return "failed";
+    return result("failed", conversational);
   }
 }
 

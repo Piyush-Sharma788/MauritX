@@ -67,6 +67,10 @@ export function emergencyRequestText(input: EmergencyRequestSummary): string {
 export const OPT_OUT_CONFIRMATION_TEXT =
   "You've been unsubscribed from MarutiX. You won't receive any more messages from us, including emergency alerts. To come back later, reply START.";
 
+/** Reply to photos, voice notes, stickers and files (at most once a day per number). */
+export const UNSUPPORTED_MEDIA_TEXT =
+  "Sorry, I can only read text messages and shared locations, not photos, voice notes, stickers or files. Please type your message, or reply MENU to see the options.";
+
 export const HELP_TEXT = [
   "MarutiX coordinates emergency blood requests and voluntary donors.",
   "",

@@ -37,20 +37,16 @@ Reduce the time and friction involved in finding an appropriate blood donor or v
 - Redis-compatible store for rate limits, queues and short-lived OTP state
 - Vercel or equivalent hosting; managed worker/queue for background jobs
 
-## Local setup (initial)
-1. Install Node.js LTS and a package manager.
-2. Create a Next.js TypeScript app.
-3. Configure environment variables using `.env.example` (never commit real secrets).
-4. Provision a development MongoDB database.
-5. Configure a Meta WhatsApp Business Platform app and approved templates.
-6. Run migrations/index setup, then start the development server.
+## Local setup
+1. Install Node.js LTS and MongoDB (macOS: `brew tap mongodb/brew && brew install mongodb-community`), or use a MongoDB Atlas URI.
+2. Install dependencies and start everything with one command:
 
 ```bash
-npx create-next-app@latest pranex --typescript --tailwind --eslint --app
-cd pranex
-npm install mongoose zod
+npm install
 npm run dev
 ```
+
+`npm run dev` creates `.env.local` with generated secrets on the first run, starts MongoDB if needed, then the web app, the jobs worker and the WhatsApp worker. It prints what is running and which external credentials (Meta WhatsApp, Anthropic, email) are still missing. See `docs/WHATSAPP_BOT_GUIDE.md` to connect WhatsApp.
 
 ## Environment variables (names only)
 ```env
@@ -103,7 +99,7 @@ WHATSAPP_WEB_MAX_REPLIES_PER_HOUR=
 WHATSAPP_WEB_MIN_SEND_INTERVAL_MS=
 WHATSAPP_WEB_MESSAGE_TTL_MINUTES=
 ```
-See `SETUP.md` for how to run the app and the WhatsApp worker.
+See `SETUP.md` for details and `docs/WHATSAPP_BOT_GUIDE.md` for the WhatsApp bot.
 
 Use a secret manager in production. Do not put server secrets in `NEXT_PUBLIC_*` variables.
 

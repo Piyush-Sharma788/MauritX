@@ -103,16 +103,16 @@ export function DonorProfileForm({ maskedPhone, profile }: { maskedPhone: string
         </Field>
 
         <div>
-          <p id={f("blood-label")} className="text-sm font-semibold text-ink">Blood group</p>
+          <p id={f("blood-label")} className="text-sm font-bold text-ink">Blood group</p>
           <div role="radiogroup" aria-labelledby={f("blood-label")} className="mt-2 grid grid-cols-4 gap-2">
             {BLOOD_GROUPS.map((group) => {
               const checked = form.bloodGroup === group;
               return (
                 <label
                   key={group}
-                  className={`flex h-12 cursor-pointer items-center justify-center rounded-xl border font-display text-base font-bold transition has-[:focus-visible]:ring-4 has-[:focus-visible]:ring-brand-100 ${
-                    group === "unknown" ? "col-span-4 text-sm font-semibold" : ""
-                  } ${checked ? "border-brand-500 bg-brand-500 text-white shadow-soft" : `${errors.bloodGroup ? "border-danger-600" : "border-line-strong"} bg-surface text-ink hover:border-ink/30`}`}
+                  className={`flex h-13 cursor-pointer items-center justify-center rounded-md border-2 font-display text-lg font-extrabold transition-[transform,box-shadow,background-color] duration-150 has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ink ${
+                    group === "unknown" ? "col-span-4 font-sans text-sm font-bold" : ""
+                  } ${checked ? "-translate-x-0.5 -translate-y-0.5 border-ink bg-brand-500 text-white shadow-brut" : `${errors.bloodGroup ? "border-danger-600" : "border-ink"} bg-surface text-ink shadow-brut-xs hover:bg-signal-50`}`}
                 >
                   <input type="radio" name="bloodGroup" value={group} checked={checked} onChange={() => set("bloodGroup", group)} className="sr-only" />
                   {BLOOD_GROUP_LABELS[group]}
@@ -121,7 +121,7 @@ export function DonorProfileForm({ maskedPhone, profile }: { maskedPhone: string
               );
             })}
           </div>
-          {errors.bloodGroup && <p role="alert" className="mt-1.5 text-xs font-medium text-danger-600">{errors.bloodGroup}</p>}
+          {errors.bloodGroup && <p role="alert" className="mt-1.5 text-xs font-bold text-danger-600">{errors.bloodGroup}</p>}
         </div>
 
         <div className="grid gap-5 sm:grid-cols-2">
@@ -134,13 +134,13 @@ export function DonorProfileForm({ maskedPhone, profile }: { maskedPhone: string
         </div>
 
         <div>
-          <p className="flex items-baseline justify-between text-sm font-semibold text-ink">
-            Current location <span className="text-xs font-normal text-ink-muted">Optional</span>
+          <p className="flex items-baseline justify-between text-sm font-bold text-ink">
+            Current location <span className="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-ink-muted">Optional</span>
           </p>
           <div className="mt-2">
             <LocationPicker value={form.location} onChange={(v) => set("location", v)} />
           </div>
-          {errors.location && <p role="alert" className="mt-1.5 text-xs font-medium text-danger-600">{errors.location}</p>}
+          {errors.location && <p role="alert" className="mt-1.5 text-xs font-bold text-danger-600">{errors.location}</p>}
         </div>
 
         <Field id={f("last")} label="Last blood donation" optional hint="Self-reported. Leave empty if you've never donated or don't remember." error={errors.lastDonationDate}>
@@ -148,13 +148,13 @@ export function DonorProfileForm({ maskedPhone, profile }: { maskedPhone: string
         </Field>
       </section>
 
-      <p className="flex gap-2 rounded-xl bg-paper-deep/70 px-4 py-3 text-xs leading-relaxed text-ink-soft">
+      <p className="flex gap-2 rounded-md border-2 border-ink bg-paper px-4 py-3 text-xs leading-relaxed text-ink-soft">
         <InfoIcon className="mt-px size-4 shrink-0" />
         We never ask for medical history. Registering isn&apos;t a medical eligibility check: a licensed blood centre always makes that decision.
       </p>
 
       {formError && (
-        <p role="alert" className="flex gap-2 rounded-xl bg-danger-50 px-4 py-3 text-sm text-danger-600">
+        <p role="alert" className="flex gap-2 rounded-md border-2 border-danger-600 bg-danger-50 px-4 py-3 text-sm font-semibold text-danger-600">
           <InfoIcon className="mt-px size-4 shrink-0" />
           {formError}
         </p>

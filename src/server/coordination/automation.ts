@@ -104,7 +104,13 @@ export async function runDonorWave(requestObjectId: string, waveNumber: number, 
     Math.min(config.waveSize, allowance),
   );
   if (plan.exhausted) {
-    await setPhase("exhausted", "MarutiX has contacted every matching registered donor it could find nearby. Keep working with the hospital's blood bank.");
+    const alertedAny = (request.automation.waves ?? []).some((w) => (w.queued ?? 0) > 0);
+    await setPhase(
+      "exhausted",
+      alertedAny
+        ? "MarutiX has contacted every matching registered donor it could find nearby. Keep working with the hospital's blood bank."
+        : "MarutiX hasn't found registered donors matching this request nearby yet. Keep working with the hospital's blood bank; the MarutiX team is also reaching out to hospitals.",
+    );
     return "exhausted";
   }
 

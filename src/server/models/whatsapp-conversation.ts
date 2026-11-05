@@ -1,7 +1,7 @@
 import { Schema, Types, model, models, type InferSchemaType, type Model } from "mongoose";
 
 export const CONVERSATION_STATUSES = ["active", "completed", "cancelled"] as const;
-export const CONVERSATION_FLOWS = ["donor_onboarding", "donor_update", "emergency_request", "request_cancel", "donor_response"] as const;
+export const CONVERSATION_FLOWS = ["main_menu", "donor_onboarding", "donor_update", "emergency_request", "request_cancel", "donor_response"] as const;
 export type ConversationFlowName = (typeof CONVERSATION_FLOWS)[number];
 
 /**

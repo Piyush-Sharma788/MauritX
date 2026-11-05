@@ -51,7 +51,7 @@ async function Overview() {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[64rem] text-left text-sm">
-              <thead className="border-b border-line text-xs uppercase tracking-wide text-ink-muted">
+              <thead className="border-b-2 border-ink bg-paper-deep font-mono text-[0.66rem] uppercase tracking-[0.1em] text-ink">
                 <tr>{["Request", "Need", "Automation", "Institutions found / contacted / replied", "Donors matched / notified / interested", "Awaiting", "Failed", "Donated"].map((h) => <th key={h} scope="col" className="px-3 py-2 font-semibold">{h}</th>)}</tr>
               </thead>
               <tbody className="divide-y divide-line">

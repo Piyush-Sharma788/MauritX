@@ -84,7 +84,8 @@ export async function runOutreach(requestObjectId: string, now = new Date()): Pr
     const plan = planOutreach({
       verificationStatus: institution.verificationStatus,
       reviewStatus: institution.review?.status ?? "approved",
-      channels: (institution.contactChannels ?? []).map((c) => ({ id: c._id.toString(), type: c.type, value: c.value, status: c.status })),
+      // An unverified contact its source no longer publishes (stale) is not used automatically.
+      channels: (institution.contactChannels ?? []).map((c) => ({ id: c._id.toString(), type: c.type, value: c.value, status: c.status === "unverified" && c.staleSince ? ("invalid" as const) : c.status })),
       verifiedWhatsAppContacts: contacts.length,
       emailConfigured: canEmail,
       includeUnreviewed: config.outreachIncludeUnreviewed,

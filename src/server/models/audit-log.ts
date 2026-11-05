@@ -63,6 +63,7 @@ export const AUDIT_ACTIONS = [
   "donor_contact.link_created",
   "donor_contact.link_viewed",
   "donor_contact.marked_contacted",
+  "donor_contact.viewed_by_admin",
   "jobs.retried",
   "auth.mfa.enrollment_started",
   "auth.mfa.enrolled",

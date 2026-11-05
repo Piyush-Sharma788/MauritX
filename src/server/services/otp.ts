@@ -1,6 +1,6 @@
 import "server-only";
 import { Types } from "mongoose";
-import { OTP_LENGTH, type SendOtpResponse } from "@/features/auth/schemas";
+import { OTP_LENGTH, type OtpDeliveryChannel, type SendOtpResponse } from "@/features/auth/schemas";
 import type { ApiContext } from "@/lib/api/handler";
 import { AppError } from "@/lib/api/errors";
 import { connectToDatabase } from "@/lib/db/mongoose";
@@ -108,7 +108,7 @@ export async function requestOtp(
 
   let used: OtpDeliveryProvider = wantsSms ? sms!.provider : provider;
   let fellBackToSms = false;
-  let sent: { providerMessageId?: string };
+  let sent: { providerMessageId?: string; channel?: OtpDeliveryChannel };
   try {
     sent = wantsSms ? await sendBySms(sms!) : await provider.send(delivery);
   } catch (error) {
@@ -139,7 +139,7 @@ export async function requestOtp(
   // Webhook statuses (WhatsApp) update this, so support can see whether the code reached the phone.
   await OtpChallenge.updateOne(
     { _id: challengeId },
-    { $set: { deliveryChannel: used.channel, ...(sent.providerMessageId ? { providerMessageId: sent.providerMessageId, deliveryStatus: "accepted", deliveryUpdatedAt: new Date() } : {}) } },
+    { $set: { deliveryChannel: sent.channel ?? used.channel, ...(sent.providerMessageId ? { providerMessageId: sent.providerMessageId, deliveryStatus: "accepted", deliveryUpdatedAt: new Date() } : {}) } },
   );
   if (fellBackToSms) logger.info("otp.sms_fallback_used", { requestId: ctx.requestId });
 
@@ -152,7 +152,8 @@ export async function requestOtp(
   });
 
   return {
-    channel: used.channel,
+    // A provider may report a different channel than its default (a development fallback).
+    channel: sent.channel ?? used.channel,
     fellBackToSms,
     smsAvailable: Boolean(sms),
     maskedPhone: maskPhone(input.phoneE164),

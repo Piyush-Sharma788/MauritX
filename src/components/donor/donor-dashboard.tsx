@@ -1,5 +1,6 @@
 "use client";
 
+import { badgeBase } from "@/components/ui/primitives";
 import { useEffect, useId, useState } from "react";
 import { Button, ButtonLink, Spinner } from "@/components/ui/button";
 import { Checkbox, Switch } from "@/components/ui/form";
@@ -13,10 +14,10 @@ const dateOnly = new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeZon
 const formatDay = (iso: string) => dateOnly.format(new Date(`${iso}T00:00:00+05:30`));
 
 const ALERT_STATUS: Record<NotificationStatus, { label: string; tone: string }> = {
-  active: { label: "On", tone: "bg-success-50 text-success-600 ring-success-600/20" },
-  paused: { label: "Paused", tone: "bg-warning-50 text-warning-800 ring-warning-200" },
-  not_enabled: { label: "Off", tone: "bg-paper-deep text-ink-soft ring-line-strong" },
-  opted_out: { label: "Stopped", tone: "bg-danger-50 text-danger-600 ring-danger-600/20" },
+  active: { label: "On", tone: "bg-mint-400 text-ink" },
+  paused: { label: "Paused", tone: "bg-signal-300 text-ink" },
+  not_enabled: { label: "Off", tone: "bg-paper-deep text-ink" },
+  opted_out: { label: "Stopped", tone: "bg-brand-500 text-white" },
 };
 
 export function DonorDashboard({ initial, flash }: { initial: DonorProfileView; flash: "registered" | "updated" | null }) {
@@ -26,26 +27,27 @@ export function DonorDashboard({ initial, flash }: { initial: DonorProfileView; 
   return (
     <div className="space-y-5">
       {flash && (
-        <p role="status" className="flex items-center gap-2.5 rounded-2xl border border-success-600/20 bg-success-50 px-4 py-3 text-sm font-medium text-success-600">
+        <p role="status" className="animate-rise flex items-center gap-2.5 rounded-md border-2 border-ink bg-mint-300 px-4 py-3 text-sm font-bold text-ink shadow-brut-sm">
           <CheckIcon className="size-5 shrink-0" />
           {flash === "registered" ? "You're registered as a MarutiX donor. Thank you for volunteering." : "Your profile has been updated."}
         </p>
       )}
 
-      <header className="flex items-center justify-between gap-4 rounded-[var(--radius-card)] border border-line bg-gradient-to-br from-surface via-surface to-brand-50 p-6 shadow-soft sm:p-8">
-        <div>
-          <p className="inline-flex items-center gap-1.5 rounded-full bg-success-50 px-3 py-1 text-xs font-semibold text-success-600">
-            <CheckIcon className="size-3.5" /> Registered donor
+      <header className="relative flex items-center justify-between gap-4 overflow-hidden rounded-[var(--radius-card)] border-2 border-ink bg-surface p-6 shadow-brut-lg sm:p-8">
+        <div aria-hidden="true" className="absolute inset-y-0 right-0 hidden w-44 border-l-2 border-ink bg-signal-300 bg-dots sm:block" />
+        <div className="relative min-w-0">
+          <p className={`${badgeBase} bg-mint-400 text-ink`}>
+            <CheckIcon className="size-3.5" strokeWidth={3} /> Registered donor
           </p>
-          <h1 className="mt-3 font-display text-3xl font-bold tracking-[-0.04em] text-ink sm:text-4xl">Hi, {first}</h1>
+          <h1 className="mt-3 font-display text-[2rem] font-extrabold leading-[1.02] tracking-[-0.045em] text-ink sm:text-[2.6rem]">Hi, {first}</h1>
           <p className="mt-2 text-ink-soft">
             Registered on {dateOnly.format(new Date(profile.registeredAt))} via {profile.registeredVia === "whatsapp" ? "WhatsApp" : "the web"}.
           </p>
         </div>
-        <div className="shrink-0">
+        <div className="relative flex shrink-0 justify-center sm:w-[8.5rem]">
           <div className="relative flex size-20 items-center justify-center sm:size-24" role="img" aria-label={`Blood group ${BLOOD_GROUP_LABELS[profile.bloodGroup]}`}>
-            <DropIcon className="absolute inset-0 size-20 fill-brand-500 text-brand-500 sm:size-24" strokeWidth={0.5} />
-            <span className={`relative mt-3 font-display font-bold text-white sm:mt-4 ${profile.bloodGroup === "unknown" ? "text-[0.65rem]" : "text-xl sm:text-2xl"}`}>
+            <DropIcon className="absolute inset-0 size-20 fill-brand-500 text-ink drop-shadow-[4px_4px_0_var(--color-ink)] sm:size-24" strokeWidth={1.2} />
+            <span className={`relative mt-3 font-display font-extrabold text-white sm:mt-4 ${profile.bloodGroup === "unknown" ? "text-[0.65rem]" : "text-xl sm:text-2xl"}`}>
               {BLOOD_GROUP_LABELS[profile.bloodGroup]}
             </span>
           </div>
@@ -67,11 +69,11 @@ export function DonorDashboard({ initial, flash }: { initial: DonorProfileView; 
 
 function Card({ title, icon, children, action }: { title: string; icon: React.ReactNode; children: React.ReactNode; action?: React.ReactNode }) {
   return (
-    <section className="flex flex-col rounded-[var(--radius-card)] border border-line bg-surface p-6 shadow-soft sm:p-7">
+    <section className="flex flex-col rounded-[var(--radius-card)] border-2 border-ink bg-surface p-6 shadow-brut sm:p-7">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <span className="flex size-10 items-center justify-center rounded-2xl bg-brand-50 text-brand-600">{icon}</span>
-          <h2 className="font-semibold text-ink">{title}</h2>
+          <span className="flex size-10 items-center justify-center rounded-sm border-2 border-ink bg-signal-300 text-ink">{icon}</span>
+          <h2 className="font-display text-lg font-extrabold tracking-[-0.02em] text-ink">{title}</h2>
         </div>
         {action}
       </div>
@@ -83,7 +85,7 @@ function Card({ title, icon, children, action }: { title: string; icon: React.Re
 function ErrorText({ message }: { message: string | null }) {
   if (!message) return null;
   return (
-    <p role="alert" className="mt-3 flex gap-2 text-sm text-danger-600">
+    <p role="alert" className="mt-3 flex gap-2 text-sm font-semibold text-danger-600">
       <InfoIcon className="mt-px size-4 shrink-0" />
       {message}
     </p>
@@ -105,9 +107,9 @@ function AvailabilityCard({ profile, onChange }: { profile: DonorProfileView; on
 
   return (
     <Card title="Donation availability" icon={<DropIcon className="size-5" />}>
-      <div className="flex items-center justify-between gap-4 rounded-2xl bg-paper-deep/60 p-4">
+      <div className="flex items-center justify-between gap-4 rounded-md border-2 border-ink bg-paper p-4">
         <div>
-          <p className="font-semibold text-ink">{profile.availableForRequests ? "Available to donate" : "Not available right now"}</p>
+          <p className="font-bold text-ink">{profile.availableForRequests ? "Available to donate" : "Not available right now"}</p>
           <p className="mt-0.5 text-sm text-ink-soft">
             {profile.availableForRequests ? "You can be contacted about nearby requests." : "You won't be contacted until you switch this on."}
           </p>
@@ -156,11 +158,11 @@ function AlertsCard({ profile, onChange }: { profile: DonorProfileView; onChange
     <Card
       title="Emergency alerts"
       icon={<ChatIcon className="size-5" />}
-      action={<span className={`rounded-full px-3 py-1 text-sm font-semibold ring-1 ${badge.tone}`}>{badge.label}</span>}
+      action={<span className={`${badgeBase} text-[0.75rem] ${badge.tone}`}><span aria-hidden="true" className="size-1.5 rounded-full bg-current" />{badge.label}</span>}
     >
       <p className="text-ink-soft">{description}</p>
       {status === "active" && !profile.availableForRequests && (
-        <p className="mt-3 flex gap-2 rounded-xl bg-warning-50 px-3.5 py-2.5 text-sm text-warning-800">
+        <p className="mt-3 flex gap-2 rounded-md border-2 border-ink bg-signal-50 px-3.5 py-2.5 text-sm text-ink">
           <AlertIcon className="mt-0.5 size-4 shrink-0" />
           You&apos;re marked as not available, so no alerts will be sent until you switch availability on.
         </p>
@@ -198,7 +200,7 @@ function AlertsCard({ profile, onChange }: { profile: DonorProfileView; onChange
       )}
 
       {confirmStop && (
-        <div role="alertdialog" aria-labelledby={`${id}-stop`} className="mt-5 rounded-2xl border border-danger-600/20 bg-danger-50 p-4 text-sm text-danger-600">
+        <div role="alertdialog" aria-labelledby={`${id}-stop`} className="mt-5 rounded-md border-2 border-ink bg-danger-50 p-4 text-sm text-danger-600">
           <p id={`${id}-stop`} className="font-semibold">Stop all MarutiX messages?</p>
           <p className="mt-1 leading-relaxed">
             We&apos;ll stop WhatsApp messages to {profile.maskedPhone} immediately, including anything already queued. Your donor profile stays, and you can turn alerts back on later.
@@ -230,7 +232,7 @@ function ProfileCard({ profile }: { profile: DonorProfileView }) {
       "Location",
       profile.location ? (
         <span className="inline-flex items-center gap-1.5">
-          <MapPinIcon className="size-4 text-brand-500" /> Approximate · updated {dateOnly.format(new Date(profile.location.updatedAt))}
+          <MapPinIcon className="size-4 text-brand-600" /> Approximate · updated {dateOnly.format(new Date(profile.location.updatedAt))}
         </span>
       ) : (
         <span className="text-ink-muted">Not shared</span>
@@ -243,8 +245,8 @@ function ProfileCard({ profile }: { profile: DonorProfileView }) {
       <dl className="divide-y divide-line text-sm">
         {rows.map(([label, value]) => (
           <div key={label} className="flex flex-col gap-0.5 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-            <dt className="text-ink-muted">{label}</dt>
-            <dd className="font-medium text-ink sm:text-right">{value}</dd>
+            <dt className="font-mono text-[0.7rem] font-bold uppercase tracking-[0.1em] text-ink-muted">{label}</dt>
+            <dd className="font-semibold text-ink sm:text-right">{value}</dd>
           </div>
         ))}
       </dl>
@@ -275,13 +277,13 @@ function RecentAlerts() {
       ) : alerts === null ? (
         <div className="space-y-2" aria-busy="true" aria-label="Loading alerts">
           {[0, 1].map((i) => (
-            <div key={i} className="h-12 animate-pulse rounded-xl bg-paper-deep" />
+            <div key={i} className="h-12 animate-pulse rounded-md bg-paper-deep" />
           ))}
         </div>
       ) : alerts.length === 0 ? (
-        <div className="flex flex-1 flex-col items-center justify-center rounded-2xl bg-paper-deep/60 px-5 py-8 text-center">
+        <div className="flex flex-1 flex-col items-center justify-center rounded-md border-2 border-dashed border-ink/50 bg-paper px-5 py-8 text-center">
           <BellOffIcon className="size-7 text-ink-muted" />
-          <p className="mt-3 font-medium text-ink">No alerts yet</p>
+          <p className="mt-3 font-bold text-ink">No alerts yet</p>
           <p className="mt-1 max-w-xs text-sm text-ink-soft">
             Emergency requests aren&apos;t live on MarutiX yet. Alerts you receive will appear here.
           </p>
@@ -291,7 +293,7 @@ function RecentAlerts() {
           {alerts.map((a) => (
             <li key={a.id} className="flex items-center justify-between gap-3 py-3">
               <span className="text-ink">{dateTime.format(new Date(a.createdAt))}</span>
-              <span className="rounded-full bg-paper-deep px-2.5 py-0.5 text-xs font-semibold capitalize text-ink-soft">{a.readAt ? "read" : a.deliveredAt ? "delivered" : a.status}</span>
+              <span className={`${badgeBase} bg-paper-deep text-ink`}>{a.readAt ? "read" : a.deliveredAt ? "delivered" : a.status}</span>
             </li>
           ))}
         </ul>

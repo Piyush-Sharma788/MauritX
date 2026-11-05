@@ -14,33 +14,26 @@ Phase 1 covers the project foundation, the landing page, mobile-number OTP sign-
 ## Prerequisites
 
 - Node.js 20.9+ (LTS recommended) and npm
-- MongoDB 7+ running locally, or a MongoDB Atlas connection string
+- MongoDB 7+ installed locally (`npm run dev` starts it for you), or a MongoDB Atlas connection string
 
 On macOS with Homebrew:
 
 ```bash
 brew tap mongodb/brew && brew install mongodb-community
-brew services start mongodb-community
 ```
 
 ## Run locally
 
 ```bash
 npm install
-cp .env.example .env.local
-```
-
-Fill in the three secrets in `.env.local`. Generate each one with:
-
-```bash
-openssl rand -base64 32
-```
-
-Do this for `AUTH_JWT_SECRET`, `OTP_HASH_SECRET` and `PII_ENCRYPTION_KEY`. Then start the app:
-
-```bash
 npm run dev
 ```
+
+That one command starts **everything**: MongoDB (if `MONGODB_URI` points at this machine and it isn't already running; data in `~/.marutix/mongodb`), the Next.js app, the jobs worker and the WhatsApp worker, with each line of output labelled `[web]`, `[jobs]`, `[whatsapp]`. When all of them are up it prints a summary, including any external credentials that are still missing. Ctrl+C stops all of them.
+
+On the first run, if there's no `.env.local`, it's created from `.env.example` with freshly generated secrets (`AUTH_JWT_SECRET`, `OTP_HASH_SECRET`, `PII_ENCRYPTION_KEY`, `WHATSAPP_WEB_WORKER_SECRET`). To create it by hand instead, copy `.env.example` and generate each secret with `openssl rand -base64 32`.
+
+The web port comes from `APP_BASE_URL`. If that port (or the worker's 3100) is taken, `npm run dev` stops and names the process holding it rather than silently moving to another port, which would break sign-in.
 
 Open **http://localhost:3000**. Use `localhost`, not `127.0.0.1`: the API rejects requests whose `Origin` doesn't match `APP_BASE_URL`.
 
@@ -72,12 +65,14 @@ The send payload follows Meta's copy-code template format: the code is passed as
 
 | Command | What it does |
 |---|---|
-| `npm run dev` | Start the dev server |
+| `npm run dev` | Start the whole development environment: MongoDB (if local), web app, jobs worker, WhatsApp worker |
+| `npm run dev:web` | Only the Next.js dev server (rarely needed) |
+| `npm run test:e2e` | End-to-end WhatsApp bot check against a real, isolated stack (stop `npm run dev` first). See docs/WHATSAPP_BOT_GUIDE.md |
 | `npm run build` / `npm start` | Production build and serve |
 | `npm run lint` | ESLint |
 | `npm run typecheck` | Generate Next route types, then run `tsc --noEmit` |
 | `npm test` | Unit tests. Integration tests are skipped unless `MONGODB_URI_TEST` is set |
-| `npm run whatsapp:worker` | Start the WhatsApp Web pilot worker (dev, reads `.env.local`) |
+| `npm run whatsapp:worker` / `npm run jobs:worker` | Run one worker on its own (`npm run dev` already starts both) |
 | `npm run admin:grant -- <coordinator\|super_admin> <phone>` | Give an existing account a staff role (signs them out everywhere) |
 | `npm run admin:revoke -- <phone>` | Remove staff access and the authenticator |
 | `npm run admin:mfa-reset -- <phone>` | Lost authenticator: remove 2FA, sign out everywhere; they set it up again |
@@ -171,15 +166,12 @@ tests/               unit + MongoDB integration tests
 
 1. **Configure.** In `.env.local`, set `WHATSAPP_WEB_WORKER_SECRET` (`openssl rand -base64 32`). Optionally set `WHATSAPP_WEB_TEST_RECIPIENTS=98XXXXXXXX` to a phone you control, so you can send test messages.
 2. **Check Chromium.** Puppeteer's Chrome is used from `~/.cache/puppeteer`. npm 11+ doesn't run install scripts by default, so if it's missing run `npx puppeteer browsers install chrome`. Alternatively, set `PUPPETEER_EXECUTABLE_PATH` to a local Chrome or Chromium.
-3. **Start both processes in separate terminals:**
+3. **Start everything:** `npm run dev` (starts the WhatsApp worker along with the app).
+4. **Make yourself an admin.** Sign in once at `/login`, then run (in a second terminal):
    ```bash
-   npm run dev
-   npm run whatsapp:worker
+   npm run admin:grant -- super_admin +91XXXXXXXXXX
    ```
-4. **Make yourself an admin.** Sign in once at `/login`, then run:
-   ```bash
-   npm run admin:grant -- +91XXXXXXXXXX
-   ```
+   Sign in again and set up two-factor authentication when asked.
 5. **Pair the number.** Open `/admin/whatsapp` (a link also appears on your dashboard) and press **Connect**. On the pilot phone, go to WhatsApp → Settings → Linked devices → Link a device, and scan the QR.
 6. **Test a send.** Use **Send a test message** to send to a number in `WHATSAPP_WEB_TEST_RECIPIENTS`, then watch the log move through queued → sent → delivered → read.
 
@@ -251,7 +243,7 @@ Website sign-in reuses the Phase 1 OTP flow. In production that requires the off
 4. On the tracking page the requester can see the status and history, report fulfilled or partially fulfilled, cancel, and create or turn off view-only family links (24 hours, 3 days or 7 days).
 
 ### Admin flow
-1. **Grant admin access.** Run `npm run admin:grant -- +91…`, then sign in.
+1. **Grant admin access.** Run `npm run admin:grant -- super_admin +91…`, then sign in.
 2. **Dashboard** at `/admin/requests`:
    - real counts (total, pending verification, active, partially fulfilled, fulfilled, cancelled and expired);
    - search by request ID (with or without `MX-`);
@@ -352,9 +344,9 @@ The design is in WHATSAPP_BOT.md §11 and SYSTEM_DESIGN.md §14.
 ### Processes to run
 | Process | Command | Notes |
 |---|---|---|
-| Web app | `npm run dev` / `npm start` | As before |
-| WhatsApp worker | `npm run whatsapp:worker` | Exactly one; drains the outbox |
-| **Jobs worker (new)** | `npm run jobs:worker` | Discovery, outreach email and donor waves. Safe to run more than one. Without it, activated requests wait (Operations shows queued jobs) |
+| Web app | `npm start` (in development, `npm run dev` starts all three) | As before |
+| WhatsApp worker | `npm run whatsapp:worker:prod` | Exactly one; drains the outbox (pilot provider only) |
+| **Jobs worker (new)** | `npm run jobs:worker:prod` | Discovery, outreach email and donor waves. Safe to run more than one. Without it, activated requests wait (Operations shows queued jobs) |
 
 ### What happens when an admin activates a request
 1. **Discovery.** It searches for hospitals and blood banks within `OUTREACH_RADIUS_KM`: institutions already in MarutiX, plus OpenStreetMap if `DISCOVERY_PROVIDER=openstreetmap`. The 10 best are ranked, blood banks first, then by distance.

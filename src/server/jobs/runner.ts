@@ -1,9 +1,10 @@
 import "server-only";
 import { logger } from "@/lib/logger";
 import { runDonorWave, scheduleFirstWave, startCoordination, PAUSED_DEFER_MS } from "@/server/coordination/automation";
+import { ensureDiscoverySchedule, runAreaRefresh, runDiscoverySweep } from "@/server/discovery/areas";
 import { discoverForRequest } from "@/server/discovery/service";
 import { claimNextJob, completeJob, deferJob, enqueueJob, failJob, type JobRecord } from "@/server/jobs/queue";
-import type { JobType } from "@/server/models/job";
+import { JOB_TYPES, type JobType } from "@/server/models/job";
 import { reportError } from "@/server/monitoring/report";
 import { runOutreach, sendOutreachEmail } from "@/server/outreach/service";
 
@@ -54,11 +55,54 @@ const HANDLERS: Record<JobType, Handler> = {
     const outcome = await runDonorWave(p.requestId, p.wave, now);
     return outcome === "deferred" ? { defer: new Date(now.getTime() + PAUSED_DEFER_MS) } : "done";
   },
+  // Background area discovery: derive areas, queue a few due ones (see discovery/areas.ts).
+  discovery_sweep: async (_job, now) => {
+    await runDiscoverySweep(now);
+    return "done";
+  },
+  // One area: throttling and source failures are recorded on the area and backed off there, not retried here.
+  discovery_area_refresh: async (job, now) => {
+    await runAreaRefresh(String((job.payload as { areaKey?: unknown }).areaKey ?? ""), now);
+    return "done";
+  },
 };
 
+const SCHEDULE_CHECK_MS = 10 * 60_000;
+let nextScheduleCheckAt = 0;
+
+/** Keeps the periodic discovery sweep queued (only with a real provider and DISCOVERY_AREA_REFRESH=true). */
+async function maybeEnsureSchedules(now: Date) {
+  if (Date.now() < nextScheduleCheckAt) return;
+  nextScheduleCheckAt = Date.now() + SCHEDULE_CHECK_MS;
+  try {
+    await ensureDiscoverySchedule(now);
+  } catch (error) {
+    logger.warn("jobs.schedule_failed", { errorName: error instanceof Error ? error.name : "UnknownError" });
+  }
+}
+
 /** Claims and runs one job. Returns false when nothing is due. */
-export async function runOneJob(workerId: string, now = new Date()): Promise<boolean> {
-  const job = await claimNextJob(workerId, now);
+/**
+ * Job lanes. The jobs worker runs one loop per lane, so slow external calls never hold
+ * up time-critical work for an open emergency.
+ * - urgent: coordination, donor waves, outreach email: seconds matter.
+ * - requestDiscovery: OpenStreetMap search for one emergency (can take a minute).
+ * - background: scheduled area discovery and refresh (best effort, can take minutes).
+ */
+export const JOB_LANES = {
+  urgent: JOB_TYPES.filter((t) => t !== "discover_institutions" && t !== "discovery_sweep" && t !== "discovery_area_refresh"),
+  requestDiscovery: ["discover_institutions"],
+  background: ["discovery_sweep", "discovery_area_refresh"],
+} as const satisfies Record<string, readonly JobType[]>;
+export type JobLane = keyof typeof JOB_LANES;
+
+/**
+ * Claims and runs one due job. `types` restricts which jobs this call may take, so the
+ * worker can run separate lanes and a slow discovery refresh never delays a donor wave.
+ */
+export async function runOneJob(workerId: string, now = new Date(), types?: readonly JobType[]): Promise<boolean> {
+  await maybeEnsureSchedules(now);
+  const job = await claimNextJob(workerId, now, types ? [...types] : undefined);
   if (!job) return false;
   try {
     const outcome = await HANDLERS[job.type](job, now);

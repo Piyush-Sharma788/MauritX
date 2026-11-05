@@ -154,7 +154,8 @@ describe.skipIf(!enabled)("Donor module (MongoDB)", () => {
     it("registers a new donor through a full conversation", async () => {
       const phone = randomPhone();
       await say(phone, "Hi");
-      expect(await lastReply(phone)).toMatch(/Would you like to register/);
+      // First contact: the menu for patients and donors alike. YES still means "register me".
+      expect(await lastReply(phone)).toMatch(/How can we help\? Reply with a number:[\s\S]*2\. I want to become a donor/);
 
       for (const [answer, expectNext] of [
         ["Yes", /What's your name/],
@@ -183,11 +184,9 @@ describe.skipIf(!enabled)("Donor module (MongoDB)", () => {
       expect(conversation?.status).toBe("completed");
       expect(decryptPii(conversation!.dataEncrypted)).toBe("{}"); // answers erased once finished
 
-      // Sending JOIN again doesn't create a duplicate.
+      // Sending JOIN again doesn't create a duplicate (notice and profile arrive as one message).
       await say(phone, "JOIN");
-      const [notice, status] = (await repliesTo(phone)).slice(-2).map((r) => r.body);
-      expect(notice).toMatch(/already registered/);
-      expect(status).toMatch(/Blood group: O\+/);
+      expect(await lastReply(phone)).toMatch(/already registered[\s\S]*Blood group: O\+/);
       expect(await DonorProfile.countDocuments({ userId: user!._id })).toBe(1);
     });
 
@@ -204,11 +203,21 @@ describe.skipIf(!enabled)("Donor module (MongoDB)", () => {
       // Two days later the donor writes again: progress is still there.
       const later = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
       await say(phone, "hello?", later);
-      const replies = await repliesTo(phone);
-      expect(replies.at(-2)?.body).toMatch(/Welcome back/);
-      expect(replies.at(-1)?.body).toMatch(/blood group/);
+      expect(await lastReply(phone)).toMatch(/^Welcome back[\s\S]*blood group/);
       const conversation = await WhatsAppConversation.findOne({ phoneLookup: phoneLookupToken(phone) }).lean();
       expect(conversation?.state).toBe("blood_group");
+    });
+
+    it("treats REGISTER at the first-contact menu as the donor option instead of repeating it", async () => {
+      const phone = randomPhone();
+      await say(phone, "Hi");
+      expect(await lastReply(phone)).toMatch(/How can we help/);
+      await say(phone, "REGISTER");
+      expect(await lastReply(phone)).toMatch(/What's your name/);
+      // Later in the flow, REGISTER still just re-shows the current question.
+      await say(phone, "Neha Gupta");
+      await say(phone, "register");
+      expect(await lastReply(phone)).toMatch(/already registering[\s\S]*blood group/);
     });
 
     it("processes each WhatsApp message only once", async () => {
@@ -216,7 +225,7 @@ describe.skipIf(!enabled)("Donor module (MongoDB)", () => {
       const message = { providerMessageId: `dup-${randomUUID()}`, fromE164: phone, input: { type: "text" as const, text: "JOIN" } };
       expect(await handleInboundMessage(message)).toBe("handled");
       expect(await handleInboundMessage(message)).toBe("duplicate");
-      expect((await repliesTo(phone)).length).toBe(2);
+      expect((await repliesTo(phone)).length).toBe(1); // intro + first question, merged
     });
 
     it("STOP mid-registration opts out immediately; only JOIN brings the bot back", async () => {
@@ -258,7 +267,7 @@ describe.skipIf(!enabled)("Donor module (MongoDB)", () => {
     it("captures the number from WhatsApp and shows the profile after website sign-in with that number", async () => {
       const phone = randomPhone();
       await say(phone, "REGISTER");
-      const intro = (await repliesTo(phone)).at(-2)?.body ?? "";
+      const intro = await lastReply(phone);
       expect(intro).toMatch(/We'll use this WhatsApp number \(\+91 7\dXXX XX\d{3}\)/);
       for (const t of ["Kiran Rao", "B-", "Pune", "Kothrud", "skip", "skip", "2", "no", "yes"]) await say(phone, t);
       expect(await lastReply(phone)).toMatch(/You're registered, Kiran/);
@@ -282,7 +291,7 @@ describe.skipIf(!enabled)("Donor module (MongoDB)", () => {
       await say(phone, "zz");
       expect(await lastReply(phone)).toMatch(/didn't recognise/);
       await say(phone, "AB+");
-      expect((await repliesTo(phone)).at(-2)?.body).toMatch(/Your details are updated/);
+      expect(await lastReply(phone)).toMatch(/Your details are updated[\s\S]*Blood group: AB\+/);
 
       await say(phone, "update");
       await say(phone, "3");
@@ -336,9 +345,9 @@ describe.skipIf(!enabled)("Donor module (MongoDB)", () => {
     it("keeps replies queued, then sends conversational replies before proactive messages", async () => {
       await NotificationEvent.deleteMany({});
       const phone = randomPhone();
-      await say(phone, "join"); // 2 bot replies queued while nothing sends
+      await say(phone, "join"); // 1 merged bot reply queued while nothing sends
       await queueAdminTestMessage({ phoneE164: "+919000000001", text: "pilot test", adminUserId: new Types.ObjectId(), idempotencyKey: randomUUID(), requestId: "t" });
-      expect(await NotificationEvent.countDocuments({ status: "queued" })).toBe(3);
+      expect(await NotificationEvent.countDocuments({ status: "queued" })).toBe(2);
 
       const sent: string[] = [];
       const provider: MessagingProvider = {
@@ -350,9 +359,9 @@ describe.skipIf(!enabled)("Donor module (MongoDB)", () => {
         },
       };
       const options = { maxMessagesPerHour: 30, maxRepliesPerHour: 300, testRecipients: getWhatsAppWebConfig().testRecipients };
-      for (let i = 0; i < 3; i++) await dispatchNext(provider, options);
-      expect(sent[0]).toMatch(/Welcome to MarutiX/);
-      expect(sent[2]).toBe("pilot test");
+      for (let i = 0; i < 2; i++) await dispatchNext(provider, options);
+      expect(sent[0]).toMatch(/Welcome to MarutiX/); // a text-only provider gets the image's caption as text
+      expect(sent[1]).toBe("pilot test");
     });
 
     it("caps proactive messages without blocking conversational replies", async () => {

@@ -5,10 +5,12 @@ import { apiRoute, ok, parseJsonBody } from "@/lib/api/handler";
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { sendAlertBatch } from "@/server/coordination/alerts";
 import { readPublicRequestId } from "@/server/requests/http";
+import { ADMIN_RATE_LIMITS, enforceRateLimit } from "@/server/services/rate-limit";
 
 /** POST /api/v1/admin/requests/:id/alerts: `{ matchingRunId }`. Queues the next small batch of alerts. Admin only; audited. 202. */
 export const POST = apiRoute(async (request, ctx, route) => {
   const admin = await requireAdmin("coordination.manage");
+  await enforceRateLimit(ADMIN_RATE_LIMITS.alerts, admin.id);
   const id = await readPublicRequestId(route);
   const body = await parseJsonBody(request, alertBatchSchema);
   return ok<AlertBatchResult>(ctx, await sendAlertBatch(id, body.matchingRunId, new Types.ObjectId(admin.id), ctx.requestId), 202);

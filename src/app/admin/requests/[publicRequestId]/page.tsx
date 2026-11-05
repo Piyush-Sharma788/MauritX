@@ -19,13 +19,14 @@ import { getCoordinationConfig } from "@/lib/coordination/config";
 import { getRequestCoordination } from "@/server/coordination/admin";
 import { listInstitutions } from "@/server/institutions/service";
 import { getAdminRequestDetail } from "@/server/requests/service";
+import { recordAudit } from "@/server/services/audit";
 
 export const metadata: Metadata = { title: "Request · Admin", robots: { index: false } };
 
 export default function AdminRequestDetailPage({ params }: PageProps<"/admin/requests/[publicRequestId]">) {
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
-      <Link href="/admin/requests" className="-ml-2 inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-sm font-medium text-ink-soft hover:bg-ink/5 hover:text-ink">
+      <Link href="/admin/requests" className="-ml-2 inline-flex items-center gap-1.5 rounded-md border-2 border-transparent px-2 py-1 text-sm font-semibold text-ink transition-colors hover:border-ink hover:bg-signal-300">
         <ArrowLeftIcon className="size-4" /> All requests
       </Link>
       <Suspense fallback={<div className="flex min-h-64 items-center justify-center text-ink-muted" role="status"><Spinner className="size-6" /><span className="sr-only">Loading</span></div>}>
@@ -37,8 +38,8 @@ export default function AdminRequestDetailPage({ params }: PageProps<"/admin/req
 
 function Card({ title, children, note }: { title: string; children: ReactNode; note?: ReactNode }) {
   return (
-    <section className="rounded-[var(--radius-card)] border border-line bg-surface p-6 shadow-soft">
-      <h2 className="font-semibold text-ink">{title}</h2>
+    <section className="rounded-[var(--radius-card)] border-2 border-ink bg-surface p-5 shadow-brut sm:p-6">
+      <h2 className="font-display text-lg font-extrabold tracking-[-0.02em] text-ink">{title}</h2>
       {note && <p className="mt-0.5 text-xs text-ink-muted">{note}</p>}
       <div className="mt-4">{children}</div>
     </section>
@@ -72,14 +73,26 @@ async function DetailContent({ params }: Pick<PageProps<"/admin/requests/[public
   }
 
   const [coordination, institutions] = await Promise.all([getRequestCoordination(r.publicRequestId), listInstitutions({ status: "verified" })]);
+  // Same rule as GET /api/v1/admin/requests/:id/coordination: showing donors' shared phone numbers is audit-logged.
+  const disclosed = coordination.responses.filter((x) => x.donorPhone).length;
+  if (disclosed > 0) {
+    await recordAudit({
+      action: "donor_contact.viewed_by_admin",
+      outcome: "success",
+      requestId: randomUUID(),
+      actorUserId: new Types.ObjectId(user.id),
+      resourceType: "emergency_request",
+      resourceId: `${r.publicRequestId}:${disclosed}`,
+    });
+  }
 
   return (
     <div className="mt-4 space-y-5">
-      <header className="flex flex-col gap-4 rounded-[var(--radius-card)] border border-line bg-surface p-6 shadow-soft sm:flex-row sm:items-start sm:justify-between sm:p-8">
+      <header className="flex flex-col gap-4 rounded-[var(--radius-card)] border-2 border-ink bg-surface p-6 shadow-brut sm:flex-row sm:items-start sm:justify-between sm:p-8">
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={r.status} className="text-sm" />
-            <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${r.priority === "critical" ? "bg-danger-50 text-danger-600" : "bg-paper-deep text-ink-soft"}`}>{PRIORITY_LABELS[r.priority].label}</span>
+            <span className={`rounded-sm border-2 border-ink px-1.5 py-px font-mono text-[0.66rem] font-bold uppercase tracking-[0.08em] ${r.priority === "critical" ? "bg-danger-50 text-danger-600" : "bg-paper-deep text-ink-soft"}`}>{PRIORITY_LABELS[r.priority].label}</span>
           </div>
           <h1 className="mt-3 font-mono text-2xl font-bold text-ink sm:text-3xl">{r.publicRequestId}</h1>
           <p className="mt-1 text-ink-soft">
@@ -88,7 +101,7 @@ async function DetailContent({ params }: Pick<PageProps<"/admin/requests/[public
           <p className="mt-1 text-xs text-ink-muted">Created {formatIST(r.createdAt)} · expires {formatIST(r.expiresAt)}</p>
         </div>
         {r.verifiedAt && (
-          <p className="inline-flex items-center gap-1.5 self-start rounded-full bg-success-50 px-3 py-1 text-xs font-semibold text-success-600">
+          <p className="inline-flex items-center gap-1.5 self-start rounded-sm border-2 border-ink bg-mint-400 px-2 py-0.5 font-mono text-[0.68rem] font-bold uppercase tracking-[0.08em] text-ink">
             <ShieldIcon className="size-3.5" /> Verified {formatIST(r.verifiedAt)}
           </p>
         )}
@@ -146,7 +159,7 @@ async function DetailContent({ params }: Pick<PageProps<"/admin/requests/[public
                 return (
                   <li key={l.id} className="flex items-center justify-between gap-3 py-2.5">
                     <span>
-                      <span className="font-medium text-ink">{l.scope === "manage" ? "Manage link" : "View-only link"}</span>
+                      <span className="font-bold text-ink">{l.scope === "manage" ? "Manage link" : "View-only link"}</span>
                       <span className="block text-xs text-ink-muted">by {l.createdBy} · {l.revoked ? "turned off" : live ? `expires ${formatIST(l.expiresAt)}` : "expired"}</span>
                     </span>
                     {live && <RevokeLinkButton publicRequestId={r.publicRequestId} linkId={l.id} />}

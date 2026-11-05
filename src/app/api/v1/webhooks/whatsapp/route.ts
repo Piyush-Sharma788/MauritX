@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { logger } from "@/lib/logger";
 import { getWhatsAppCloudConfig } from "@/lib/whatsapp/cloud-config";
-import { processCloudWebhook, verifySignature, verifySubscription, webhookPayloadSchema } from "@/server/messaging/cloud-webhook";
+import { processCloudWebhook, readRawBodyLimited, verifySignature, verifySubscription, webhookPayloadSchema } from "@/server/messaging/cloud-webhook";
 import { reportError } from "@/server/monitoring/report";
 
 const MAX_BODY_BYTES = 1024 * 1024;
@@ -32,8 +32,12 @@ export async function POST(request: NextRequest) {
 
   const declared = Number(request.headers.get("content-length") ?? "0");
   if (declared > MAX_BODY_BYTES) return plain("Too large", 413);
-  const raw = Buffer.from(await request.arrayBuffer());
-  if (raw.length > MAX_BODY_BYTES) return plain("Too large", 413);
+  // Streamed with a hard cap: a chunked body without Content-Length is never buffered past the limit.
+  const raw = await readRawBodyLimited(request, MAX_BODY_BYTES);
+  if (!raw) {
+    logger.warn("whatsapp_cloud.webhook_too_large", { requestId });
+    return plain("Too large", 413);
+  }
 
   if (!verifySignature(raw, request.headers.get("x-hub-signature-256"), config.appSecret)) {
     logger.warn("whatsapp_cloud.webhook_bad_signature", { requestId });

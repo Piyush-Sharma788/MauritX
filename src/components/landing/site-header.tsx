@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useId, useState } from "react";
 import { ButtonLink } from "@/components/ui/button";
-import { MenuIcon, XIcon } from "@/components/ui/icons";
+import { ArrowRightIcon, MenuIcon, XIcon } from "@/components/ui/icons";
 import { Logo } from "@/components/ui/logo";
 
 const NAV_LINKS = [
@@ -30,7 +30,7 @@ export function SiteHeader() {
   }, [open]);
 
   return (
-    <header className="sticky top-0 z-40 border-b border-line/70 bg-paper/80 backdrop-blur-xl supports-[backdrop-filter]:bg-paper/70">
+    <header className="sticky top-0 z-40 border-b-2 border-ink bg-paper">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6 lg:h-[4.5rem]">
         <Logo />
 
@@ -40,7 +40,7 @@ export function SiteHeader() {
               <li key={link.href}>
                 <Link
                   href={link.href}
-                  className="rounded-full px-3.5 py-2 text-[0.93rem] font-medium text-ink-soft transition hover:bg-ink/5 hover:text-ink"
+                  className="inline-flex min-h-11 items-center rounded-md border-2 border-transparent px-3 text-[0.93rem] font-semibold text-ink transition-colors hover:border-ink hover:bg-signal-300"
                 >
                   {link.label}
                 </Link>
@@ -54,13 +54,13 @@ export function SiteHeader() {
             <ButtonLink href="/login" variant="ghost">
               Sign in
             </ButtonLink>
-            <ButtonLink href="/request" className="h-10 px-4 text-sm">
+            <ButtonLink href="/request" className="px-4 text-sm">
               Request Blood
             </ButtonLink>
           </div>
           <button
             type="button"
-            className="inline-flex size-11 items-center justify-center rounded-full text-ink ring-1 ring-line-strong transition hover:bg-ink/5 lg:hidden"
+            className="inline-flex size-11 items-center justify-center rounded-md border-2 border-ink bg-surface text-ink shadow-brut-xs transition-colors hover:bg-signal-300 aria-expanded:bg-signal-300 lg:hidden"
             aria-expanded={open}
             aria-controls={menuId}
             aria-label={open ? "Close menu" : "Open menu"}
@@ -74,24 +74,25 @@ export function SiteHeader() {
       <div
         id={menuId}
         hidden={!open}
-        className="border-t border-line bg-paper px-4 pb-6 pt-3 shadow-soft sm:px-6 lg:hidden"
+        className="border-t-2 border-ink bg-paper px-4 pb-6 pt-3 sm:px-6 lg:hidden"
       >
         <nav aria-label="Mobile">
-          <ul className="flex flex-col">
+          <ul className="flex flex-col divide-y-2 divide-ink border-y-2 border-ink">
             {NAV_LINKS.map((link) => (
               <li key={link.href}>
                 <Link
                   href={link.href}
                   onClick={() => setOpen(false)}
-                  className="flex items-center justify-between rounded-xl px-3 py-3.5 text-base font-medium text-ink hover:bg-ink/5"
+                  className="flex min-h-13 items-center justify-between px-1 font-display text-xl font-extrabold tracking-[-0.03em] text-ink hover:bg-signal-300"
                 >
                   {link.label}
+                  <ArrowRightIcon className="size-5" />
                 </Link>
               </li>
             ))}
           </ul>
         </nav>
-        <div className="mt-4 grid grid-cols-2 gap-3">
+        <div className="mt-5 grid grid-cols-2 gap-3">
           <ButtonLink href="/login" variant="secondary" onClick={() => setOpen(false)}>
             Sign in
           </ButtonLink>

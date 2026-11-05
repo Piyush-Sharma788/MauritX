@@ -4,6 +4,7 @@ import { AppError } from "@/lib/api/errors";
 import { apiRoute, ok, parseJsonBody } from "@/lib/api/handler";
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { queueAdminTestMessage } from "@/server/messaging/queue";
+import { ADMIN_RATE_LIMITS, enforceRateLimit } from "@/server/services/rate-limit";
 
 /**
  * POST /api/v1/admin/whatsapp/send-message: queue a single test message.
@@ -12,6 +13,7 @@ import { queueAdminTestMessage } from "@/server/messaging/queue";
  */
 export const POST = apiRoute(async (request, ctx) => {
   const admin = await requireAdmin("whatsapp.manage");
+  await enforceRateLimit(ADMIN_RATE_LIMITS.testMessage, admin.id);
   const key = idempotencyKeySchema.safeParse(request.headers.get("idempotency-key") ?? undefined);
   if (!key.success) throw new AppError(400, "IDEMPOTENCY_KEY_REQUIRED", key.error.issues[0].message);
   const body = await parseJsonBody(request, sendTestMessageBodySchema);

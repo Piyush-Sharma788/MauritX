@@ -47,8 +47,8 @@ export function OutreachActions({ publicRequestId, outreachId, status, alertable
       {alertable && status === "failed" && <ActionButton label="Retry" className="h-8 px-3 text-xs" confirm="Send this outreach again?" action={() => coordinationApi.outreach(publicRequestId, outreachId, { action: "retry" })} />}
       {status !== "cancelled" && status !== "excluded" && <ActionButton label="Cancel" variant="ghost" className="h-8 px-3 text-xs" action={() => coordinationApi.outreach(publicRequestId, outreachId, { action: "cancel" })} />}
       {recording ? (
-        <span className="inline-flex flex-wrap items-center gap-2 rounded-xl bg-paper-deep/70 px-2 py-1.5">
-          <select aria-label="Response" value={response} onChange={(e) => setResponse(e.target.value as InstitutionResponse)} className="h-8 rounded-lg border border-line-strong bg-surface px-2 text-xs">
+        <span className="inline-flex flex-wrap items-center gap-2 rounded-md border-2 border-ink bg-paper px-2 py-1.5">
+          <select aria-label="Response" value={response} onChange={(e) => setResponse(e.target.value as InstitutionResponse)} className="h-8 rounded-md border-2 border-ink bg-surface px-2 text-xs">
             {INSTITUTION_RESPONSES.map((r) => <option key={r} value={r}>{INSTITUTION_RESPONSE_LABELS[r]}</option>)}
           </select>
           <Button className="h-8 px-3 text-xs" onClick={record} disabled={pending}>{pending && <Spinner className="size-3" />}Save</Button>

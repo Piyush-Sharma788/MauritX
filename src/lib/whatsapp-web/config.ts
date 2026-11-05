@@ -12,12 +12,15 @@ const schema = z.object({
   WHATSAPP_WEB_WORKER_SECRET: z
     .string({ error: "WHATSAPP_WEB_WORKER_SECRET is required for the WhatsApp Web pilot" })
     .min(32, "WHATSAPP_WEB_WORKER_SECRET must be at least 32 characters"),
-  WHATSAPP_WEB_SESSION_DIR: z.string().min(1).default(".data/whatsapp-session"),
+  WHATSAPP_WEB_SESSION_DIR: z.string().min(1).default("~/.marutix/whatsapp-session"),
   WHATSAPP_WEB_DEVICE_NAME: z.string().min(1).max(40).default("MarutiX Pilot"),
   WHATSAPP_WEB_TEST_RECIPIENTS: z.string().default(""),
   WHATSAPP_WEB_MAX_MESSAGES_PER_HOUR: z.coerce.number().int().min(1).max(200).default(30),
   WHATSAPP_WEB_MAX_REPLIES_PER_HOUR: z.coerce.number().int().min(1).max(1000).default(300),
+  // Gap before a proactive message (alerts, confirmations, tests): conservative, to protect the number.
   WHATSAPP_WEB_MIN_SEND_INTERVAL_MS: z.coerce.number().int().min(1000).max(60_000).default(4000),
+  // Gap between bot replies to someone who just wrote to us: short, so conversations feel live.
+  WHATSAPP_WEB_REPLY_INTERVAL_MS: z.coerce.number().int().min(250).max(10_000).default(1000),
   WHATSAPP_WEB_MESSAGE_TTL_MINUTES: z.coerce.number().int().min(1).max(24 * 60).default(15),
   WHATSAPP_WEB_NO_SANDBOX: z.enum(["true", "false"]).default("false"),
   PUPPETEER_EXECUTABLE_PATH: z.string().optional(),
@@ -33,6 +36,8 @@ export interface WhatsAppWebConfig {
   maxMessagesPerHour: number;
   maxRepliesPerHour: number;
   minSendIntervalMs: number;
+  /** Gap between conversational replies (never longer than minSendIntervalMs). */
+  replyIntervalMs: number;
   messageTtlMs: number;
   noSandbox: boolean;
   executablePath?: string;
@@ -65,6 +70,7 @@ export function getWhatsAppWebConfig(): WhatsAppWebConfig {
     maxMessagesPerHour: env.WHATSAPP_WEB_MAX_MESSAGES_PER_HOUR,
     maxRepliesPerHour: env.WHATSAPP_WEB_MAX_REPLIES_PER_HOUR,
     minSendIntervalMs: env.WHATSAPP_WEB_MIN_SEND_INTERVAL_MS,
+    replyIntervalMs: Math.min(env.WHATSAPP_WEB_REPLY_INTERVAL_MS, env.WHATSAPP_WEB_MIN_SEND_INTERVAL_MS),
     messageTtlMs: env.WHATSAPP_WEB_MESSAGE_TTL_MINUTES * 60_000,
     noSandbox: env.WHATSAPP_WEB_NO_SANDBOX === "true",
     executablePath: env.PUPPETEER_EXECUTABLE_PATH || undefined,

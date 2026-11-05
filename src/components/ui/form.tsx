@@ -1,10 +1,15 @@
 import type { ComponentProps, ReactNode } from "react";
 import { InfoIcon } from "@/components/ui/icons";
 
+/** Shared field look: 2px ink outline, sharp corners, a hard shadow that grows on focus. */
 export const inputClasses =
-  "h-12 w-full rounded-xl border bg-surface px-3.5 text-[1rem] text-ink shadow-soft outline-none transition placeholder:text-ink-muted/60 focus:border-brand-500 focus:ring-4 focus:ring-brand-100 disabled:opacity-60";
+  "h-12 w-full rounded-md border-2 bg-surface px-3.5 text-[1rem] font-medium text-ink shadow-brut-xs outline-none transition-[box-shadow,background-color] duration-150 placeholder:text-ink-muted/70 focus:bg-signal-50 focus:shadow-brut disabled:opacity-60";
 
-const borderFor = (error?: string) => (error ? "border-danger-600" : "border-line-strong");
+/** Same look for multi-line text. */
+export const textareaClasses =
+  "w-full rounded-md border-2 border-ink bg-surface px-3.5 py-2.5 text-[0.95rem] font-medium text-ink shadow-brut-xs outline-none transition-[box-shadow,background-color] duration-150 placeholder:text-ink-muted/70 focus:bg-signal-50 focus:shadow-brut disabled:opacity-60";
+
+const borderFor = (error?: string) => (error ? "border-danger-600" : "border-ink");
 
 export function Field({
   id,
@@ -23,9 +28,9 @@ export function Field({
 }) {
   return (
     <div>
-      <label htmlFor={id} className="flex items-baseline justify-between gap-2 text-sm font-semibold text-ink">
+      <label htmlFor={id} className="flex items-baseline justify-between gap-2 text-sm font-bold text-ink">
         {label}
-        {optional && <span className="text-xs font-normal text-ink-muted">Optional</span>}
+        {optional && <span className="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-ink-muted">Optional</span>}
       </label>
       <div className="mt-2">{children}</div>
       {hint && !error && (
@@ -34,7 +39,7 @@ export function Field({
         </p>
       )}
       {error && (
-        <p id={`${id}-error`} role="alert" className="mt-1.5 flex items-start gap-1.5 text-xs font-medium text-danger-600">
+        <p id={`${id}-error`} role="alert" className="mt-2 flex items-start gap-1.5 text-xs font-bold text-danger-600">
           <InfoIcon className="mt-px size-3.5 shrink-0" />
           {error}
         </p>
@@ -67,7 +72,7 @@ export function SelectInput({ error, className = "", id, children, ...props }: C
       >
         {children}
       </select>
-      <svg aria-hidden="true" viewBox="0 0 24 24" className="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-muted" fill="none" stroke="currentColor" strokeWidth={2}>
+      <svg aria-hidden="true" viewBox="0 0 24 24" className="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-ink" fill="none" stroke="currentColor" strokeWidth={2.5}>
         <path d="m6 9 6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     </div>
@@ -98,13 +103,15 @@ export function RadioCards<T extends string>({
         return (
           <label
             key={option.value}
-            className={`relative flex cursor-pointer flex-col justify-center rounded-xl border px-3.5 py-3 transition has-[:focus-visible]:ring-4 has-[:focus-visible]:ring-brand-100 ${
-              checked ? "border-brand-500 bg-brand-50 text-brand-700 shadow-soft" : `${error ? "border-danger-600" : "border-line-strong"} bg-surface text-ink hover:border-ink/30`
+            className={`relative flex min-h-12 cursor-pointer flex-col justify-center rounded-md border-2 px-3.5 py-3 transition-[transform,box-shadow,background-color] duration-150 has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ink ${
+              checked
+                ? "-translate-x-0.5 -translate-y-0.5 border-ink bg-brand-500 text-white shadow-brut"
+                : `${error ? "border-danger-600" : "border-ink"} bg-surface text-ink shadow-brut-xs hover:bg-signal-50`
             }`}
           >
             <input type="radio" name={name} value={option.value} checked={checked} onChange={() => onChange(option.value)} className="sr-only" />
-            <span className="text-[0.95rem] font-semibold">{option.label}</span>
-            {option.description && <span className={`mt-0.5 text-xs leading-snug ${checked ? "text-brand-700/80" : "text-ink-muted"}`}>{option.description}</span>}
+            <span className="text-[0.95rem] font-bold">{option.label}</span>
+            {option.description && <span className={`mt-0.5 text-xs leading-snug ${checked ? "text-white/90" : "text-ink-muted"}`}>{option.description}</span>}
           </label>
         );
       })}
@@ -114,13 +121,13 @@ export function RadioCards<T extends string>({
 
 export function Checkbox({ id, checked, onChange, children, error }: { id: string; checked: boolean; onChange: (v: boolean) => void; children: ReactNode; error?: string }) {
   return (
-    <label htmlFor={id} className={`flex cursor-pointer gap-3 rounded-xl border p-4 transition ${checked ? "border-brand-500 bg-brand-50/60" : error ? "border-danger-600" : "border-line-strong bg-surface"}`}>
+    <label htmlFor={id} className={`flex cursor-pointer gap-3 rounded-md border-2 p-4 transition-[background-color,box-shadow] duration-150 has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ink ${checked ? "border-ink bg-mint-50 shadow-brut-sm" : error ? "border-danger-600 bg-surface" : "border-ink bg-surface hover:bg-signal-50"}`}>
       <input
         id={id}
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        className="mt-0.5 size-5 shrink-0 accent-[var(--color-brand-500)]"
+        className="mt-0.5 size-5 shrink-0 accent-[var(--color-ink)] focus-visible:outline-none"
       />
       <span className="text-sm leading-relaxed text-ink-soft">{children}</span>
     </label>
@@ -137,9 +144,9 @@ export function Switch({ checked, onChange, label, disabled }: { checked: boolea
       aria-label={label}
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors disabled:opacity-60 ${checked ? "bg-success-600" : "bg-line-strong"}`}
+      className={`relative inline-flex h-8 w-14 shrink-0 items-center rounded-md border-2 border-ink shadow-brut-xs transition-colors disabled:opacity-60 ${checked ? "bg-mint-400" : "bg-paper-deep"}`}
     >
-      <span className={`inline-block size-5 rounded-full bg-white shadow transition-transform ${checked ? "translate-x-6" : "translate-x-1"}`} />
+      <span className={`inline-block size-5 rounded-sm border-2 border-ink bg-surface transition-transform duration-150 ${checked ? "translate-x-7" : "translate-x-1"}`} />
     </button>
   );
 }

@@ -18,7 +18,11 @@ export interface AiProvider {
 }
 
 export class AiProviderError extends Error {
-  constructor(readonly code: "REFUSED" | "TRUNCATED" | "NO_OUTPUT" | "TRANSPORT") {
+  constructor(
+    readonly code: "REFUSED" | "TRUNCATED" | "NO_OUTPUT" | "TRANSPORT",
+    /** HTTP status from the provider, when it answered (429, 5xx, ...). */
+    readonly status: number | null = null,
+  ) {
     super(`AI provider error: ${code}`);
     this.name = "AiProviderError";
   }

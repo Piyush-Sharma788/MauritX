@@ -1,10 +1,14 @@
 import "server-only";
 import type { Types } from "mongoose";
-import { CONVERSATIONAL_KINDS, type MessageKind, type MessageStatus } from "@/features/whatsapp/types";
+import { CONVERSATIONAL_KINDS, type MediaKey, type MessageKind, type MessageStatus } from "@/features/whatsapp/types";
 import { AppError } from "@/lib/api/errors";
 import { connectToDatabase } from "@/lib/db/mongoose";
 import { decryptPii, encryptPii, phoneLookupToken } from "@/lib/security/crypto";
 import { getWhatsAppWebConfig } from "@/lib/whatsapp-web/config";
+import { welcomeImageEnabled } from "@/lib/whatsapp/media-config";
+import { logger } from "@/lib/logger";
+import { incrementMetric } from "@/server/metrics/bot-metrics";
+import { currentReplyContext } from "@/server/messaging/reply-context";
 import { checkEligibility, type IneligibleReason } from "@/server/messaging/eligibility";
 import type { ProviderName } from "@/server/messaging/provider";
 import { getMessagingProviderName } from "@/lib/whatsapp/cloud-config";
@@ -13,6 +17,7 @@ import {
   emergencyRequestText,
   HELP_TEXT,
   OPT_OUT_CONFIRMATION_TEXT,
+  UNSUPPORTED_MEDIA_TEXT,
   type EmergencyRequestSummary,
 } from "@/server/messaging/templates";
 import { NotificationEvent } from "@/server/models/notification-event";
@@ -40,6 +45,8 @@ export interface EnqueueInput {
   ttlMs?: number;
   /** Values for this kind's approved Cloud API template (used outside the 24-hour window). */
   templateParams?: string[];
+  /** Send this configured image with `body` as its caption (falls back to text if the image can't go). */
+  mediaKey?: MediaKey;
   /** Record a `suppressed` event when ineligible (donor-facing kinds), instead of nothing. */
   recordSuppressed: boolean;
 }
@@ -100,6 +107,7 @@ export async function enqueueMessage(input: EnqueueInput, now = new Date()): Pro
       ...base,
       status: "queued",
       bodyEncrypted: encryptPii(input.body),
+      ...(input.mediaKey ? { mediaKey: input.mediaKey } : {}),
       ...(input.templateParams?.length ? { templateParamsEncrypted: encryptPii(JSON.stringify(input.templateParams)) } : {}),
     });
     return { outcome: "queued", messageId: doc._id.toString(), status: "queued" };
@@ -246,9 +254,33 @@ export async function queueSystemReply(
   );
 }
 
+/** WhatsApp shows captions up to 1024 characters; merged replies stay under this too. */
+export const MAX_MERGED_REPLY_LENGTH = 1000;
+
+/**
+ * Joins consecutive reply parts into as few messages as read well: parts are
+ * kept whole and separated by a blank line, and a message never grows past
+ * `maxLength`. Each WhatsApp message costs a send slot, so fewer parts arrive sooner.
+ */
+export function mergeReplies(parts: string[], maxLength = MAX_MERGED_REPLY_LENGTH): string[] {
+  const merged: string[] = [];
+  for (const part of parts.map((p) => p.trim()).filter(Boolean)) {
+    const last = merged.at(-1);
+    if (last !== undefined && last.length + 2 + part.length <= maxLength) merged[merged.length - 1] = `${last}\n\n${part}`;
+    else merged.push(part);
+  }
+  return merged;
+}
+
+/** Once per number, ever: the welcome image's idempotency key. */
+const welcomeKey = (phoneE164: string) => `welcome_image:${phoneLookupToken(phoneE164)}`;
+
 /**
  * Bot replies to one inbound message. The key ties each reply to the inbound
  * message, so reprocessing the same message can never send replies twice.
+ * Parts are merged where they read well (mergeReplies). On a number's first
+ * message the first reply carries the welcome image (see engine.ts), keyed per
+ * number so it is sent at most once ever.
  */
 export async function queueBotReplies(
   phoneE164: string,
@@ -258,18 +290,40 @@ export async function queueBotReplies(
   templateName: "bot_reply" | "bot_menu" = "bot_reply",
 ) {
   const results: EnqueueResult[] = [];
-  for (const [index, body] of replies.entries()) {
-    results.push(
-      await enqueueMessage({
-        kind: "bot_reply",
-        templateName,
-        phoneE164,
-        body,
-        idempotencyKey: `bot_reply:${inboundMessageId}:${index}`,
-        recipientUserId,
-        recordSuppressed: false,
-      }),
-    );
+  const context = currentReplyContext();
+  for (const [index, body] of mergeReplies(replies).entries()) {
+    const base = { kind: "bot_reply" as const, templateName, phoneE164, body, recipientUserId, recordSuppressed: false };
+    if (context?.attachWelcomeImage && context.inboundMessageId === inboundMessageId) {
+      context.attachWelcomeImage = false;
+      if (welcomeImageEnabled() && !(await NotificationEvent.exists({ idempotencyKey: welcomeKey(phoneE164) }))) {
+        const result = await enqueueMessage({ ...base, idempotencyKey: welcomeKey(phoneE164), mediaKey: "welcome" });
+        if (result.outcome === "queued") {
+          await incrementMetric("welcome_media_queued");
+          logger.info("whatsapp.welcome_image_queued", { messageId: result.messageId });
+        }
+        results.push(result);
+        continue;
+      }
+    }
+    results.push(await enqueueMessage({ ...base, idempotencyKey: `bot_reply:${inboundMessageId}:${index}` }));
   }
   return results;
+}
+
+/**
+ * The one-line answer to a photo, voice note, sticker or file: at most once
+ * per number per day, so a burst of media doesn't become a burst of replies.
+ */
+export async function queueUnsupportedReply(phoneE164: string, now = new Date()): Promise<EnqueueResult> {
+  return enqueueMessage(
+    {
+      kind: "bot_reply",
+      templateName: "bot_unsupported",
+      phoneE164,
+      body: UNSUPPORTED_MEDIA_TEXT,
+      idempotencyKey: `unsupported_reply:${phoneLookupToken(phoneE164)}:${istDay.format(now)}`,
+      recordSuppressed: false,
+    },
+    now,
+  );
 }

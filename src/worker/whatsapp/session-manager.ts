@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readlinkSync, rmSync, writeFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import path from "node:path";
@@ -8,17 +9,24 @@ import { logger } from "@/lib/logger";
 import { reportError } from "@/server/monitoring/report";
 import { maskPhone } from "@/lib/validation/phone";
 import type { WhatsAppWebConfig } from "@/lib/whatsapp-web/config";
-import type { InboundMessage } from "@/server/messaging/inbound";
-import { MessagingError, type DeliveryAck, type MessagingProvider } from "@/server/messaging/provider";
+import { MAX_INBOUND_TEXT, type InboundEvent } from "@/server/messaging/inbound";
+import { MessagingError, type DeliveryAck, type MessagingProvider, type OutboundImage } from "@/server/messaging/provider";
 import { writeConnection } from "@/server/whatsapp/connection-store";
+import { serializeMessageId, serializeWid } from "@/worker/whatsapp/wa-ids";
 
-const { Client, LocalAuth } = WAWebJS;
+const { Client, LocalAuth, MessageMedia } = WAWebJS;
 
 const CLIENT_ID = "marutix";
 const PAIRING_TIMEOUT_MS = 5 * 60_000;
 const MAX_RECONNECT_DELAY_MS = 5 * 60_000;
 const LOOKUP_TIMEOUT_MS = 15_000;
 const SEND_TIMEOUT_MS = 30_000;
+const MEDIA_SEND_TIMEOUT_MS = 60_000;
+
+/** Message types people send that the bot can't read: they get a one-line explanation. */
+const UNSUPPORTED_TYPES = new Set(["image", "video", "audio", "ptt", "ptv", "document", "sticker", "vcard", "multi_vcard", "poll_creation", "product", "order"]);
+/** Media types whose caption is read as text, if there is one. */
+const CAPTIONED_TYPES = new Set(["image", "video", "document"]);
 
 export class BusyError extends Error {
   constructor() {
@@ -28,7 +36,7 @@ export class BusyError extends Error {
 }
 
 export interface SessionCallbacks {
-  onInbound(message: InboundMessage): Promise<void>;
+  onInbound(message: InboundEvent): Promise<void>;
   onAck(providerMessageId: string, ack: DeliveryAck): Promise<void>;
 }
 
@@ -51,6 +59,12 @@ function maskAccountNumber(digits: string): string {
 /** "919876543210" -> "+919876543210" for Indian mobiles only; otherwise null. */
 function indianE164FromDigits(digits: string): string | null {
   return /^91[6-9]\d{9}$/.test(digits) ? `+${digits}` : null;
+}
+
+/** A short, number-free description of a library error for the logs. */
+function errorDetail(error: unknown): string {
+  const text = error instanceof Error ? error.message : String(error);
+  return text.replace(/\d{6,}/g, "<n>").slice(0, 160);
 }
 
 function isAlive(pid: number): boolean {
@@ -175,25 +189,66 @@ export class WhatsAppSessionManager implements MessagingProvider {
     await this.teardown();
   }
 
-  async sendText(phoneE164: string, body: string): Promise<{ providerMessageId: string }> {
-    const client = this.client;
-    if (!client || !this.isReady()) throw new MessagingError("NOT_CONNECTED", true);
-
+  /** The chat for a number. Nothing has been sent yet when this fails. */
+  private async chatIdFor(client: InstanceType<typeof Client>, phoneE164: string): Promise<string> {
     let numberId;
     try {
       numberId = await withTimeout(client.getNumberId(phoneE164.replace(/^\+/, "")), LOOKUP_TIMEOUT_MS, () => new MessagingError("SEND_TIMEOUT", true));
     } catch (error) {
       throw error instanceof MessagingError ? error : new MessagingError("SEND_FAILED", true);
     }
-    if (!numberId) throw new MessagingError("NOT_ON_WHATSAPP", false);
+    const chatId = serializeWid(numberId);
+    if (!chatId) throw new MessagingError("NOT_ON_WHATSAPP", false, true);
+    return chatId;
+  }
 
+  /**
+   * From here on the message may already be on its way: nothing is retried automatically,
+   * because a duplicate emergency alert is worse than one an admin re-sends by hand.
+   */
+  private async sendStarted(send: () => Promise<WAWebJS.Message>, timeoutMs: number): Promise<{ providerMessageId: string }> {
+    let message: WAWebJS.Message | undefined;
     try {
-      // A timeout here may still have delivered, so it is not retried (avoids duplicates).
-      const message = await withTimeout(client.sendMessage(numberId._serialized, body), SEND_TIMEOUT_MS, () => new MessagingError("SEND_TIMEOUT", false));
-      return { providerMessageId: message.id._serialized };
+      message = await withTimeout(send(), timeoutMs, () => new MessagingError("SEND_TIMEOUT", false, false));
     } catch (error) {
-      throw error instanceof MessagingError ? error : new MessagingError("SEND_FAILED", true);
+      if (error instanceof MessagingError) throw error;
+      logger.warn("whatsapp.send_error", { errorName: error instanceof Error ? error.name : "UnknownError", detail: errorDetail(error) });
+      throw new MessagingError("SEND_FAILED", false, false);
     }
+    const providerMessageId = serializeMessageId(message?.id);
+    if (providerMessageId) return { providerMessageId };
+    // WhatsApp accepted the send but returned no readable ID: record it as sent (it most
+    // likely was) rather than send it again. Delivery receipts can't be matched to it.
+    logger.warn("whatsapp.send_without_id", { returned: message ? "message_without_id" : "nothing" });
+    return { providerMessageId: `unknown:${randomUUID()}` };
+  }
+
+  async sendText(phoneE164: string, body: string): Promise<{ providerMessageId: string }> {
+    const client = this.client;
+    if (!client || !this.isReady()) throw new MessagingError("NOT_CONNECTED", true);
+    const chatId = await this.chatIdFor(client, phoneE164);
+    return this.sendStarted(() => client.sendMessage(chatId, body), SEND_TIMEOUT_MS);
+  }
+
+  /** Image files read once per worker (they're small and fixed). */
+  private readonly mediaCache = new Map<string, InstanceType<typeof MessageMedia>>();
+
+  async sendImage(phoneE164: string, image: OutboundImage, caption: string): Promise<{ providerMessageId: string }> {
+    const client = this.client;
+    if (!client || !this.isReady()) throw new MessagingError("NOT_CONNECTED", true);
+    let media = this.mediaCache.get(image.filePath);
+    if (!media) {
+      try {
+        media = MessageMedia.fromFilePath(image.filePath);
+        this.mediaCache.set(image.filePath, media);
+      } catch (error) {
+        logger.warn("whatsapp.media_unreadable", { key: image.key, errorName: error instanceof Error ? error.name : "UnknownError" });
+        throw new MessagingError("MEDIA_UNAVAILABLE", false, true);
+      }
+    }
+    const chatId = await this.chatIdFor(client, phoneE164);
+    const prepared = media;
+    return this.sendStarted(() => client.sendMessage(chatId, prepared, { caption }), MEDIA_SEND_TIMEOUT_MS);
   }
 
   /* ------------------------------ internals ---------------------------- */
@@ -258,9 +313,20 @@ export class WhatsAppSessionManager implements MessagingProvider {
     }
   }
 
+  /**
+   * After an unclean exit (crash, force-kill, power loss) Chromium restores its previous
+   * tabs on the next launch. Restored WhatsApp Web tabs then compete with the new one for
+   * the same session ("WhatsApp is open in another window") and the client never becomes
+   * ready. Forget the saved tabs; the login itself lives in IndexedDB/Local Storage.
+   */
+  private forgetRestoredTabs() {
+    rmSync(path.join(this.profileDir, "Default", "Sessions"), { recursive: true, force: true });
+  }
+
   private async start() {
     this.ensureSessionDir();
     await this.reapOrphanedBrowser();
+    this.forgetRestoredTabs();
     this.stopping = false;
     this.qr = null;
     await this.setState("connecting", { lastError: null });
@@ -380,35 +446,70 @@ export class WhatsAppSessionManager implements MessagingProvider {
     client.on("message_ack", (message: WAWebJS.Message, ack: number) => {
       const mapped = ACK_MAP[ack];
       if (!current() || !mapped || !message.fromMe) return;
-      void this.callbacks.onAck(message.id._serialized, mapped).catch((error: unknown) =>
+      const id = serializeMessageId(message.id);
+      if (!id) return;
+      void this.callbacks.onAck(id, mapped).catch((error: unknown) =>
         logger.error("whatsapp.ack_failed", { errorName: error instanceof Error ? error.name : "UnknownError" }),
       );
     });
   }
 
-  private async handleInbound(message: WAWebJS.Message) {
-    if (message.fromMe || message.isStatus || (message.type !== "chat" && message.type !== "location")) return;
-    const from = message.from ?? "";
-    if (!from.endsWith("@c.us") && !from.endsWith("@lid")) return; // groups, channels, broadcasts
-
-    let digits = from.endsWith("@c.us") ? from.split("@")[0] : "";
-    if (!digits) {
-      const contact = await message.getContact();
-      digits = (contact?.number ?? "").replace(/\D/g, "");
+  /**
+   * The sender's phone number. WhatsApp increasingly identifies people by a private
+   * "linked ID" (…@lid) instead of their number; ask WhatsApp to map it back.
+   */
+  private async senderDigits(client: InstanceType<typeof Client>, from: string, message: WAWebJS.Message): Promise<string> {
+    if (from.endsWith("@c.us")) return from.split("@")[0];
+    try {
+      const [mapped] = await withTimeout(client.getContactLidAndPhone([from]), LOOKUP_TIMEOUT_MS, () => new Error("lid lookup timeout"));
+      const pn = mapped?.pn ?? "";
+      if (pn.endsWith("@c.us")) return pn.split("@")[0];
+    } catch (error) {
+      logger.warn("whatsapp.lid_lookup_failed", { errorName: error instanceof Error ? error.name : "UnknownError", detail: errorDetail(error) });
     }
-    const e164 = indianE164FromDigits(digits);
-    if (!e164) return;
-    const providerMessageId = message.id?._serialized;
-    if (!providerMessageId) return;
+    try {
+      const contact = await message.getContact();
+      return (contact?.number ?? "").replace(/\D/g, "");
+    } catch {
+      return "";
+    }
+  }
 
-    if (message.type === "location") {
+  private async handleInbound(message: WAWebJS.Message) {
+    // Our own messages and status updates aren't messages to the bot.
+    if (message.fromMe || message.isStatus) return;
+    const from = typeof message.from === "string" ? message.from : (serializeWid(message.from) ?? "");
+    // Every drop below is logged (without the number), so a message never disappears silently.
+    const dropped = (reason: string, extra: Record<string, string> = {}) => logger.info("whatsapp.inbound_dropped", { reason, type: String(message.type).slice(0, 30), ...extra });
+    if (!from.endsWith("@c.us") && !from.endsWith("@lid")) return dropped(from.endsWith("@g.us") ? "group_chat" : "not_a_person"); // groups, channels, broadcasts
+    const client = this.client;
+    if (!client) return dropped("client_stopped");
+
+    const type = String(message.type);
+    const caption = CAPTIONED_TYPES.has(type) ? (message.body ?? "").trim() : "";
+    if (type !== "chat" && type !== "location" && !UNSUPPORTED_TYPES.has(type)) return dropped("system_message_type");
+
+    const providerMessageId = serializeMessageId(message.id);
+    if (!providerMessageId) return dropped("unreadable_message_id", { sender: from.endsWith("@lid") ? "lid" : "phone" });
+    const digits = await this.senderDigits(client, from, message);
+    const e164 = indianE164FromDigits(digits);
+    if (!e164) return dropped(digits ? "not_an_indian_mobile" : "sender_number_unknown", { sender: from.endsWith("@lid") ? "lid" : "phone" });
+
+    if (type === "location") {
       const latitude = Number(message.location?.latitude);
       const longitude = Number(message.location?.longitude);
-      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return dropped("invalid_location");
       await this.callbacks.onInbound({ providerMessageId, fromE164: e164, input: { type: "location", latitude, longitude } });
       return;
     }
-    await this.callbacks.onInbound({ providerMessageId, fromE164: e164, input: { type: "text", text: (message.body ?? "").slice(0, 300) } });
+    if (UNSUPPORTED_TYPES.has(type) && !caption) {
+      await this.callbacks.onInbound({ providerMessageId, fromE164: e164, input: { type: "unsupported", mediaType: type } });
+      return;
+    }
+    // A photo with a caption: the caption is what we can read.
+    const text = type === "chat" ? (message.body ?? "") : caption;
+    if (text.length > MAX_INBOUND_TEXT) logger.info("whatsapp.inbound_truncated", { length: text.length });
+    await this.callbacks.onInbound({ providerMessageId, fromE164: e164, input: { type: "text", text: text.slice(0, MAX_INBOUND_TEXT) } });
   }
 
   private async onPairingTimeout(client: InstanceType<typeof Client>) {

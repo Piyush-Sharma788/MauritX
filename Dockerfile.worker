@@ -19,6 +19,8 @@ COPY tsconfig.json ./
 COPY src ./src
 # Operator scripts (admin roles, MFA reset, restore verification) run in this image too.
 COPY scripts ./scripts
+# The WhatsApp welcome image the workers send on a person's first message (WHATSAPP_WELCOME_IMAGE_PATH).
+COPY public/whatsapp ./public/whatsapp
 
 # Session files live on a mounted volume, owned by the unprivileged user.
 RUN mkdir -p /app/.data && chown -R node:node /app/.data

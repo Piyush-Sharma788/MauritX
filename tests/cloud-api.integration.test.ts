@@ -48,7 +48,12 @@ const MIN = 60_000;
 /** A Graph API stand-in: records each request and answers from a script. */
 function mockGraph(answer: (body: Record<string, unknown>) => Response | Promise<Response> = () => ok()) {
   const calls: Record<string, unknown>[] = [];
-  vi.stubGlobal("fetch", vi.fn(async (_url: string, init: RequestInit) => {
+  vi.stubGlobal("fetch", vi.fn(async (url: string, init: RequestInit) => {
+    if (init.body instanceof FormData) {
+      // A media upload (POST /{phone-number-id}/media).
+      calls.push({ upload: String(url).endsWith("/media"), type: init.body.get("type"), messaging_product: init.body.get("messaging_product") });
+      return new Response(JSON.stringify({ id: "media-welcome-1" }), { status: 200 });
+    }
     const body = JSON.parse(String(init.body)) as Record<string, unknown>;
     calls.push(body);
     return answer(body);
@@ -153,14 +158,17 @@ describe.skipIf(!enabled)("WhatsApp Cloud API, OTP tracking and sessions (MongoD
       expect((await POST(webhookRequest(payload))).status).toBe(200); // Meta redelivers
       expect(await WhatsAppConversation.countDocuments({ phoneLookup: phoneLookupToken(phone), status: "active" })).toBe(1);
       const replies = await NotificationEvent.find({ recipientLookup: phoneLookupToken(phone) }).lean();
-      expect(replies.length).toBe(2); // intro + first question, once
-      expect(replies.every((r) => r.provider === "whatsapp_cloud")).toBe(true);
+      // Intro and first question merged into one message, once; on a first contact it carries the welcome image.
+      expect(replies.length).toBe(1);
+      expect(replies[0]).toMatchObject({ provider: "whatsapp_cloud", mediaKey: "welcome", idempotencyKey: `welcome_image:${phoneLookupToken(phone)}` });
 
       const calls = mockGraph();
       await drain(provider);
+      // The image is uploaded once, then sent by media ID with the reply as its caption.
       expect(calls).toHaveLength(2);
-      expect(calls.every((c) => c.type === "text" && c.to === phone.slice(1))).toBe(true);
-      expect(await NotificationEvent.countDocuments({ recipientLookup: phoneLookupToken(phone), status: "sent", bodyEncrypted: { $exists: false } })).toBe(2);
+      expect(calls[0]).toMatchObject({ upload: true, type: "image/png", messaging_product: "whatsapp" });
+      expect(calls[1]).toMatchObject({ type: "image", to: phone.slice(1), image: { id: "media-welcome-1", caption: expect.stringMatching(/register you as a voluntary blood donor[\s\S]*What's your name/) } });
+      expect(await NotificationEvent.countDocuments({ recipientLookup: phoneLookupToken(phone), status: "sent", mediaOutcome: "image", bodyEncrypted: { $exists: false } })).toBe(1);
     });
 
     it("honours STOP immediately", async () => {

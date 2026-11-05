@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useId, useRef, useState, type ReactNode } from "react";
 import { LocationPicker } from "@/components/donor/location-picker";
 import { StatusBadge, formatIST } from "@/components/requests/status";
-import { Button, Spinner } from "@/components/ui/button";
+import { Button, Spinner, buttonClasses } from "@/components/ui/button";
+import { Notice } from "@/components/ui/primitives";
 import { Checkbox, Field, RadioCards, TextInput } from "@/components/ui/form";
 import { AlertIcon, ArrowLeftIcon, ArrowRightIcon, CheckIcon, ChatIcon, InfoIcon, PhoneIcon } from "@/components/ui/icons";
 import { BLOOD_GROUP_LABELS, BLOOD_GROUPS, type BloodGroup } from "@/features/donors/schemas";
@@ -197,21 +198,22 @@ export function RequestForm() {
   return (
     <div ref={topRef} className="scroll-mt-24">
       {/* Progress */}
-      <div className="sticky top-16 z-20 -mx-4 border-b border-line bg-paper/95 px-4 py-3 backdrop-blur sm:static sm:mx-0 sm:rounded-2xl sm:border sm:bg-surface sm:px-5 sm:shadow-soft lg:top-[4.5rem]">
-        <div className="flex items-center justify-between text-sm">
-          <p className="font-semibold text-ink">
-            Step {step + 1} of {STEPS.length} · <span className="text-ink-soft">{STEPS[step].title}</span>
+      <div className="sticky top-[66px] z-20 -mx-4 border-y-2 border-ink bg-paper px-4 py-3 sm:static sm:mx-0 sm:rounded-md sm:border-2 sm:bg-surface sm:px-5 sm:shadow-brut-sm">
+        <div className="flex items-center justify-between gap-3 text-sm">
+          <p className="min-w-0 font-bold text-ink">
+            <span className="mr-2 inline-flex rounded-sm border-2 border-ink bg-signal-300 px-1.5 font-mono text-xs">{String(step + 1).padStart(2, "0")}/{String(STEPS.length).padStart(2, "0")}</span>
+            {STEPS[step].title}
           </p>
-          <p className="text-xs text-ink-muted">About 2 minutes</p>
+          <p className="shrink-0 font-mono text-[0.66rem] font-bold uppercase tracking-[0.1em] text-ink-muted">~2 min</p>
         </div>
-        <div className="mt-2.5 grid grid-cols-4 gap-1.5" aria-hidden="true">
+        <div className="mt-3 grid grid-cols-4 gap-1.5" aria-hidden="true">
           {STEPS.map((s, i) => (
-            <span key={s.key} className={`h-1.5 rounded-full transition-colors ${i <= step ? "bg-brand-500" : "bg-line"}`} />
+            <span key={s.key} className={`h-2.5 rounded-sm border-2 border-ink transition-colors duration-300 ${i < step ? "bg-ink" : i === step ? "bg-brand-500" : "bg-surface"}`} />
           ))}
         </div>
       </div>
 
-      <div className="mt-6 rounded-[var(--radius-card)] border border-line bg-surface p-5 shadow-soft sm:p-8">
+      <div className="mt-6 rounded-[var(--radius-card)] border-2 border-ink bg-surface p-5 shadow-brut-lg sm:p-8">
         {step === 0 && (
           <fieldset className="space-y-5">
             <legend className="sr-only">Patient and contact</legend>
@@ -225,8 +227,8 @@ export function RequestForm() {
               <TextInput id={f("contact")} autoComplete="name" value={form.contactName} maxLength={60} onChange={(e) => set("contactName", e.target.value)} error={errors.contactName} />
             </Field>
             <Field id={f("phone")} label="Contact person's mobile number" hint="Never shown publicly. MarutiX may call to verify the request." error={errors.contactPhone}>
-              <div className={`flex h-12 items-center overflow-hidden rounded-xl border bg-surface shadow-soft focus-within:border-brand-500 focus-within:ring-4 focus-within:ring-brand-100 ${errors.contactPhone ? "border-danger-600" : "border-line-strong"}`}>
-                <span className="flex h-full items-center border-r border-line bg-paper-deep/70 px-3.5 font-semibold text-ink" aria-hidden="true">{INDIA_COUNTRY_CODE}</span>
+              <div className={`flex h-12 items-center overflow-hidden rounded-md border-2 bg-surface shadow-brut-xs transition-[box-shadow,background-color] focus-within:bg-signal-50 focus-within:shadow-brut ${errors.contactPhone ? "border-danger-600" : "border-ink"}`}>
+                <span className="flex h-full items-center border-r-2 border-ink bg-signal-300 px-3.5 font-mono font-bold text-ink" aria-hidden="true">{INDIA_COUNTRY_CODE}</span>
                 <input
                   id={f("phone")}
                   type="tel"
@@ -247,16 +249,16 @@ export function RequestForm() {
           <fieldset className="space-y-6">
             <legend className="sr-only">Blood requirement</legend>
             <div>
-              <p className="text-sm font-semibold text-ink">Blood group</p>
+              <p className="text-sm font-bold text-ink">Blood group</p>
               <div role="radiogroup" aria-label="Blood group" className="mt-2 grid grid-cols-4 gap-2">
                 {BLOOD_GROUPS.map((group) => {
                   const checked = form.bloodGroup === group;
                   return (
                     <label
                       key={group}
-                      className={`flex h-12 cursor-pointer items-center justify-center rounded-xl border font-display text-base font-bold transition has-[:focus-visible]:ring-4 has-[:focus-visible]:ring-brand-100 ${
-                        group === "unknown" ? "col-span-4 text-sm font-semibold" : ""
-                      } ${checked ? "border-brand-500 bg-brand-500 text-white shadow-soft" : `${errors.bloodGroup ? "border-danger-600" : "border-line-strong"} bg-surface text-ink hover:border-ink/30`}`}
+                      className={`flex h-13 cursor-pointer items-center justify-center rounded-md border-2 font-display text-lg font-extrabold transition-[transform,box-shadow,background-color] duration-150 has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ink ${
+                        group === "unknown" ? "col-span-4 font-sans text-sm font-bold" : ""
+                      } ${checked ? "-translate-x-0.5 -translate-y-0.5 border-ink bg-brand-500 text-white shadow-brut" : `${errors.bloodGroup ? "border-danger-600" : "border-ink"} bg-surface text-ink shadow-brut-xs hover:bg-signal-50`}`}
                     >
                       <input type="radio" name="bloodGroup" checked={checked} onChange={() => set("bloodGroup", group)} className="sr-only" />
                       {group === "unknown" ? "Not sure yet" : BLOOD_GROUP_LABELS[group]}
@@ -268,7 +270,7 @@ export function RequestForm() {
             </div>
 
             <div>
-              <p className="text-sm font-semibold text-ink">Component</p>
+              <p className="text-sm font-bold text-ink">Component</p>
               <p className="mt-0.5 text-xs text-ink-muted">As written by the doctor or blood bank. If unsure, ask the hospital.</p>
               <div className="mt-2">
                 <RadioCards name="component" value={form.component} onChange={(v) => set("component", v)} error={errors.component} options={COMPONENTS.map((c) => ({ value: c, label: COMPONENT_LABELS[c] }))} />
@@ -277,17 +279,17 @@ export function RequestForm() {
             </div>
 
             <div>
-              <p id={f("units-label")} className="text-sm font-semibold text-ink">Units needed</p>
-              <div className="mt-2 inline-flex items-center overflow-hidden rounded-xl border border-line-strong bg-surface shadow-soft" role="group" aria-labelledby={f("units-label")}>
-                <button type="button" aria-label="Fewer units" onClick={() => set("unitsRequested", Math.max(1, form.unitsRequested - 1))} className="h-12 w-12 text-xl font-semibold text-ink hover:bg-paper-deep">−</button>
-                <output aria-live="polite" className="w-14 text-center font-display text-xl font-bold text-ink">{form.unitsRequested}</output>
-                <button type="button" aria-label="More units" onClick={() => set("unitsRequested", Math.min(20, form.unitsRequested + 1))} className="h-12 w-12 text-xl font-semibold text-ink hover:bg-paper-deep">+</button>
+              <p id={f("units-label")} className="text-sm font-bold text-ink">Units needed</p>
+              <div className="mt-2 inline-flex items-center overflow-hidden rounded-md border-2 border-ink bg-surface shadow-brut-sm" role="group" aria-labelledby={f("units-label")}>
+                <button type="button" aria-label="Fewer units" onClick={() => set("unitsRequested", Math.max(1, form.unitsRequested - 1))} className="h-12 w-12 border-r-2 border-ink text-xl font-bold text-ink transition-colors hover:bg-signal-300 active:bg-signal-400">−</button>
+                <output aria-live="polite" className="w-16 text-center font-display text-2xl font-extrabold tabular-nums text-ink">{form.unitsRequested}</output>
+                <button type="button" aria-label="More units" onClick={() => set("unitsRequested", Math.min(20, form.unitsRequested + 1))} className="h-12 w-12 border-l-2 border-ink text-xl font-bold text-ink transition-colors hover:bg-signal-300 active:bg-signal-400">+</button>
               </div>
               {errors.unitsRequested && <p role="alert" className="mt-1.5 text-xs font-medium text-danger-600">{errors.unitsRequested}</p>}
             </div>
 
             <div>
-              <p className="text-sm font-semibold text-ink">How urgent is it?</p>
+              <p className="text-sm font-bold text-ink">How urgent is it?</p>
               <div className="mt-2">
                 <RadioCards
                   name="priority"
@@ -308,7 +310,7 @@ export function RequestForm() {
               <TextInput id={f("by")} type="datetime-local" min={hoursFromNow(-1)} value={form.requiredByLocal} onChange={(e) => set("requiredByLocal", e.target.value)} error={errors.requiredBy} />
               <div className="mt-2 flex flex-wrap gap-2">
                 {[["In 2 hours", 2], ["In 6 hours", 6], ["In 24 hours", 24]].map(([label, h]) => (
-                  <button key={label} type="button" onClick={() => set("requiredByLocal", hoursFromNow(Number(h)))} className="rounded-full border border-line-strong px-3 py-1 text-xs font-medium text-ink-soft hover:border-ink/30 hover:text-ink">
+                  <button key={label} type="button" onClick={() => set("requiredByLocal", hoursFromNow(Number(h)))} className="inline-flex min-h-10 items-center rounded-sm border-2 border-ink bg-surface px-3 font-mono text-xs font-bold uppercase tracking-[0.06em] text-ink shadow-brut-xs transition-colors hover:bg-signal-300">
                     {label}
                   </button>
                 ))}
@@ -338,8 +340,8 @@ export function RequestForm() {
               <TextInput id={f("hphone")} type="tel" inputMode="tel" value={form.hospitalPhone} maxLength={20} onChange={(e) => set("hospitalPhone", e.target.value)} error={errors.hospitalPhone} />
             </Field>
             <div>
-              <p className="flex items-baseline justify-between text-sm font-semibold text-ink">
-                Your current location <span className="text-xs font-normal text-ink-muted">Optional</span>
+              <p className="flex items-baseline justify-between text-sm font-bold text-ink">
+                Your current location <span className="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-ink-muted">Optional</span>
               </p>
               <div className="mt-2">
                 <LocationPicker
@@ -382,25 +384,23 @@ export function RequestForm() {
             <Checkbox id={f("consent")} checked={form.consent} onChange={(v) => set("consent", v)} error={errors.consent}>
               <strong className="font-semibold text-ink">I confirm these details are accurate.</strong> MarutiX may contact me and the hospital to verify this request, and may share
               only the blood need, hospital and area (never the patient&apos;s name or my number) with people who can help. See the{" "}
-              <Link href="/privacy" target="_blank" className="font-medium text-brand-600 underline underline-offset-2">privacy notice</Link>.
+              <Link href="/privacy" target="_blank" className="font-bold text-ink underline decoration-brand-500 decoration-2 underline-offset-2">privacy notice</Link>.
             </Checkbox>
             {errors.consent && <p role="alert" className="text-xs font-medium text-danger-600">{errors.consent}</p>}
 
-            <p className="flex gap-2.5 rounded-xl border border-warning-200 bg-warning-50 px-4 py-3 text-sm leading-relaxed text-warning-800">
-              <AlertIcon className="mt-0.5 size-4.5 shrink-0" />
+            <Notice tone="warn" as="p">
               MarutiX doesn&apos;t guarantee blood availability. Blood screening, compatibility and transfusion are decided only by the hospital&apos;s licensed blood centre. Keep working with the hospital while this request is verified.
-            </p>
+            </Notice>
           </div>
         )}
 
         {formError && (
-          <p role="alert" className="mt-6 flex gap-2 rounded-xl bg-danger-50 px-4 py-3 text-sm text-danger-600">
-            <InfoIcon className="mt-px size-4 shrink-0" />
+          <Notice tone="danger" role="alert" className="mt-6">
             {formError}
-          </p>
+          </Notice>
         )}
 
-        <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
+        <div className="mt-8 flex flex-col-reverse gap-3 border-t-2 border-ink pt-6 sm:flex-row sm:justify-between">
           {step > 0 ? (
             <Button type="button" variant="ghost" onClick={back} disabled={pending}>
               <ArrowLeftIcon className="size-4" /> Back
@@ -426,12 +426,12 @@ export function RequestForm() {
 
 function ReviewSection({ title, onEdit, children }: { title: string; onEdit: () => void; children: ReactNode }) {
   return (
-    <section className="rounded-2xl border border-line p-4 sm:p-5">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-ink">{title}</h3>
-        <button type="button" onClick={onEdit} className="text-sm font-semibold text-brand-600 hover:text-brand-700">Edit</button>
+    <section className="overflow-hidden rounded-md border-2 border-ink">
+      <div className="flex items-center justify-between border-b-2 border-ink bg-paper-deep px-4 py-1.5 sm:px-5">
+        <h3 className="eyebrow text-ink">{title}</h3>
+        <button type="button" onClick={onEdit} className="inline-flex min-h-10 items-center px-2 text-sm font-bold text-ink underline decoration-brand-500 decoration-2 underline-offset-4 hover:decoration-4">Edit</button>
       </div>
-      <dl className="mt-3 space-y-2 text-sm">{children}</dl>
+      <dl className="space-y-2 p-4 text-sm sm:p-5">{children}</dl>
     </section>
   );
 }
@@ -440,7 +440,7 @@ function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-0.5 sm:flex-row sm:justify-between sm:gap-4">
       <dt className="text-ink-muted">{label}</dt>
-      <dd className="font-medium text-ink sm:text-right">{value}</dd>
+      <dd className="break-words font-semibold text-ink sm:text-right">{value}</dd>
     </div>
   );
 }
@@ -467,20 +467,20 @@ function Confirmation({ result, onNew, topRef }: { result: CreateRequestResponse
 
   return (
     <div ref={topRef} className="scroll-mt-24 space-y-5">
-      <section className="rounded-[var(--radius-card)] border border-line bg-surface p-6 text-center shadow-soft sm:p-10" role="status">
-        <span className="mx-auto flex size-16 items-center justify-center rounded-full bg-success-50 text-success-600">
-          <CheckIcon className="size-8" />
+      <section className="relative rounded-[var(--radius-card)] border-2 border-ink bg-surface p-6 text-center shadow-brut-lg sm:p-10" role="status">
+        <span className="animate-pop mx-auto flex size-16 items-center justify-center rounded-md border-2 border-ink bg-mint-400 text-ink shadow-brut-sm [--pop-rotate:-6deg]">
+          <CheckIcon className="size-8" strokeWidth={3} />
         </span>
-        <h2 className="mt-5 font-display text-3xl font-bold tracking-[-0.03em] text-ink">Request received</h2>
+        <h2 className="mt-5 font-display text-4xl font-extrabold tracking-[-0.045em] text-ink">Request received</h2>
         <p className="mt-2 text-ink-soft">Your request ID</p>
         <button
           type="button"
           onClick={() => copy(result.publicRequestId, "id")}
-          className="mt-1 inline-flex items-center gap-2 rounded-xl bg-paper-deep px-4 py-2 font-display text-2xl font-bold tracking-wider text-ink hover:bg-line"
+          className="brut-press mt-2 inline-flex max-w-full items-center gap-3 rounded-md border-2 border-ink bg-signal-300 px-4 py-2 font-mono text-xl font-bold tracking-wider text-ink sm:text-2xl"
           aria-label={`Copy request ID ${result.publicRequestId}`}
         >
           {result.publicRequestId}
-          <span className="text-xs font-semibold tracking-normal text-brand-600">{copied === "id" ? "Copied" : "Copy"}</span>
+          <span className="rounded-sm bg-ink px-1.5 py-0.5 font-mono text-[0.65rem] font-bold uppercase tracking-[0.1em] text-white">{copied === "id" ? "Copied" : "Copy"}</span>
         </button>
         <div className="mt-4 flex justify-center">
           <StatusBadge status={result.status} />
@@ -491,18 +491,18 @@ function Confirmation({ result, onNew, topRef }: { result: CreateRequestResponse
         {result.replayed && <p className="mt-2 text-xs text-ink-muted">This request was already submitted; you&apos;re seeing the same confirmation.</p>}
       </section>
 
-      <section className="rounded-[var(--radius-card)] border border-brand-200 bg-brand-50/60 p-5 sm:p-6">
-        <h3 className="font-semibold text-ink">Save your private tracking link</h3>
+      <section className="rounded-[var(--radius-card)] border-2 border-ink bg-brand-50 p-5 shadow-brut sm:p-6">
+        <h3 className="font-display text-xl font-extrabold tracking-[-0.02em] text-ink">Save your private tracking link</h3>
         <p className="mt-1 text-sm leading-relaxed text-ink-soft">
           It shows the latest status and lets you update or cancel this request. Anyone with it can manage the request, so share it only with people you trust.
           It works until {formatIST(result.manageLinkExpiresAt)}.
         </p>
         <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-          <input readOnly value={result.manageUrl} aria-label="Private tracking link" onFocus={(e) => e.currentTarget.select()} className="h-11 min-w-0 flex-1 rounded-xl border border-line-strong bg-surface px-3 font-mono text-xs text-ink" />
-          <Button variant="secondary" onClick={() => copy(result.manageUrl, "link")} className="h-11">
+          <input readOnly value={result.manageUrl} aria-label="Private tracking link" onFocus={(e) => e.currentTarget.select()} className="h-11 min-w-0 flex-1 rounded-md border-2 border-ink bg-surface px-3 font-mono text-xs text-ink" />
+          <Button variant="secondary" onClick={() => copy(result.manageUrl, "link")}>
             {copied === "link" ? "Copied" : "Copy link"}
           </Button>
-          <a href={result.manageUrl} className="inline-flex h-11 items-center justify-center rounded-full bg-brand-500 px-5 text-sm font-semibold text-white hover:bg-brand-600">
+          <a href={result.manageUrl} className={buttonClasses({ className: "text-sm" })}>
             Open tracking page
           </a>
         </div>
@@ -513,14 +513,14 @@ function Confirmation({ result, onNew, topRef }: { result: CreateRequestResponse
         )}
       </section>
 
-      <section className="rounded-[var(--radius-card)] border border-line bg-surface p-5 sm:p-6">
-        <h3 className="font-semibold text-ink">While we verify</h3>
+      <section className="rounded-[var(--radius-card)] border-2 border-ink bg-surface p-5 shadow-brut sm:p-6">
+        <h3 className="font-display text-xl font-extrabold tracking-[-0.02em] text-ink">While we verify</h3>
         <ul className="mt-3 space-y-2.5 text-sm text-ink-soft">
-          <li className="flex gap-2.5"><PhoneIcon className="mt-0.5 size-4 shrink-0 text-brand-500" /><span>Keep talking to the hospital&apos;s blood bank. They decide what&apos;s needed and test compatibility.</span></li>
-          <li className="flex gap-2.5"><InfoIcon className="mt-0.5 size-4 shrink-0 text-brand-500" /><span>Check stock at government blood centres on <a href="https://eraktkosh.mohfw.gov.in/" target="_blank" rel="noopener noreferrer" className="font-medium text-brand-600 underline underline-offset-2">e-RaktKosh</a>.</span></li>
-          <li className="flex gap-2.5"><AlertIcon className="mt-0.5 size-4 shrink-0 text-brand-500" /><span>If life is at risk, call <a href="tel:112" className="font-semibold text-ink underline">112</a>.</span></li>
+          <li className="flex gap-2.5"><PhoneIcon className="mt-0.5 size-4 shrink-0 text-brand-600" /><span>Keep talking to the hospital&apos;s blood bank. They decide what&apos;s needed and test compatibility.</span></li>
+          <li className="flex gap-2.5"><InfoIcon className="mt-0.5 size-4 shrink-0 text-brand-600" /><span>Check stock at government blood centres on <a href="https://eraktkosh.mohfw.gov.in/" target="_blank" rel="noopener noreferrer" className="font-bold text-ink underline decoration-brand-500 decoration-2 underline-offset-2">e-RaktKosh</a>.</span></li>
+          <li className="flex gap-2.5"><AlertIcon className="mt-0.5 size-4 shrink-0 text-brand-600" /><span>If life is at risk, call <a href="tel:112" className="font-semibold text-ink underline">112</a>.</span></li>
         </ul>
-        <Button variant="ghost" onClick={onNew} className="mt-5 px-0 text-sm hover:bg-transparent">
+        <Button variant="ghost" onClick={onNew} className="mt-5 text-sm">
           Submit a different request
         </Button>
       </section>

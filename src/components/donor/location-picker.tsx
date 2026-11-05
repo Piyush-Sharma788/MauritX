@@ -65,10 +65,10 @@ export function LocationPicker({
   }
 
   return (
-    <div className="rounded-xl border border-line-strong bg-surface p-4">
+    <div className="rounded-md border-2 border-dashed border-ink bg-paper p-4">
       {value ? (
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="flex items-center gap-2 text-sm font-medium text-success-600">
+          <p className="flex items-center gap-2 text-sm font-bold text-success-600">
             <CheckIcon className="size-4" /> {addedLabel}
           </p>
           <div className="flex gap-2">
@@ -83,7 +83,7 @@ export function LocationPicker({
       ) : (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="flex gap-2.5 text-sm leading-relaxed text-ink-soft">
-            <MapPinIcon className="mt-0.5 size-4.5 shrink-0 text-brand-500" />
+            <MapPinIcon className="mt-0.5 size-4.5 shrink-0 text-brand-600" />
             {description}
           </p>
           <Button type="button" variant="secondary" className="h-10 shrink-0 px-4 text-sm" onClick={locate} disabled={pending}>

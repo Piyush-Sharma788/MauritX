@@ -1,77 +1,238 @@
 @import "tailwindcss";
 
 /*
- * MarutiX design tokens. One warm, clinical-but-human palette:
- * paper (warm off-white), ink (aubergine-black), crimson brand, and a
- * restrained set of semantic colours.
+ * MarutiX design system — "premium neo-brutalism".
+ *
+ * Warm paper, aubergine ink and crimson brand, with two bold accents:
+ * signal yellow (attention / highlight) and mint (success / live).
+ * Everything solid is outlined in ink (2–3px), shadows are hard offsets
+ * (never blurred), corners stay sharp (≤6px). Motion is short and physical:
+ * things "press" into their shadow. All motion is removed under
+ * prefers-reduced-motion.
+ *
+ * Primitives that consume these tokens live in src/components/ui/
+ * (button.tsx, form.tsx, primitives.tsx).
  */
 @theme {
   --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
   --font-display: var(--font-bricolage), var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
   --font-deva: var(--font-noto-devanagari), ui-sans-serif, system-ui, sans-serif;
 
-  --color-paper: #fbf8f5;
-  --color-paper-deep: #f4eee8;
-  --color-surface: #ffffff;
-  --color-line: #ebe2da;
-  --color-line-strong: #d9ccc1;
+  /* Surfaces */
+  --color-paper: #f7f1e7;
+  --color-paper-deep: #ede4d5;
+  --color-surface: #fffdf9;
+  --color-line: #d8ccbb;
+  --color-line-strong: #1d1418;
 
+  /* Ink (AA on paper and surface at every step) */
   --color-ink: #1d1418;
-  --color-ink-soft: #4f444a;
-  --color-ink-muted: #7a6d73;
+  --color-ink-soft: #463b40;
+  --color-ink-muted: #675a60;
 
-  --color-brand-50: #fdf2f3;
-  --color-brand-100: #fbe1e4;
-  --color-brand-200: #f6c2c9;
+  /* Crimson brand */
+  --color-brand-50: #fdf0f1;
+  --color-brand-100: #fbdfe3;
+  --color-brand-200: #f6bcc5;
   --color-brand-400: #e35a6d;
   --color-brand-500: #d2283f;
   --color-brand-600: #b81c33;
   --color-brand-700: #94162a;
   --color-brand-900: #4a0c17;
 
-  --color-success-50: #eefaf3;
-  --color-success-600: #18794e;
-  --color-warning-50: #fff8eb;
-  --color-warning-200: #f6dca5;
-  --color-warning-800: #7a4b06;
-  --color-danger-50: #fdf1f1;
-  --color-danger-600: #c22a2a;
+  /* Accent: signal yellow (always paired with ink text) */
+  --color-signal-50: #fff9db;
+  --color-signal-100: #fff1a8;
+  --color-signal-300: #ffd93d;
+  --color-signal-400: #fcc419;
+  --color-signal-800: #5c4300;
 
-  --radius-card: 1.25rem;
-  --shadow-soft: 0 1px 2px rgb(29 20 24 / 0.04), 0 8px 24px -12px rgb(29 20 24 / 0.12);
-  --shadow-lift: 0 2px 4px rgb(29 20 24 / 0.04), 0 24px 48px -24px rgb(148 22 42 / 0.28);
+  /* Accent: mint (always paired with ink text) */
+  --color-mint-50: #e6faf0;
+  --color-mint-100: #c4f2db;
+  --color-mint-300: #74e0ad;
+  --color-mint-400: #3fcf8e;
+  --color-mint-800: #0b5236;
 
-  --animate-rise: rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
-  --animate-pulse-ring: pulse-ring 3.6s cubic-bezier(0.22, 1, 0.36, 1) infinite;
-  --animate-float: float 6s ease-in-out infinite;
+  /* Semantic */
+  --color-success-50: #e6faf0;
+  --color-success-600: #11704a;
+  --color-warning-50: #fff9db;
+  --color-warning-200: #f5d36b;
+  --color-warning-800: #634500;
+  --color-danger-50: #fdeeee;
+  --color-danger-600: #be2626;
+
+  /* Shape: sharp. Tailwind's radius scale is clamped so nothing goes soft. */
+  --radius-xs: 2px;
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 4px;
+  --radius-xl: 5px;
+  --radius-2xl: 6px;
+  --radius-3xl: 6px;
+  --radius-card: 6px;
+
+  /* Hard offset shadows */
+  --shadow-brut-xs: 2px 2px 0 0 var(--color-ink);
+  --shadow-brut-sm: 3px 3px 0 0 var(--color-ink);
+  --shadow-brut: 4px 4px 0 0 var(--color-ink);
+  --shadow-brut-lg: 6px 6px 0 0 var(--color-ink);
+  --shadow-brut-xl: 10px 10px 0 0 var(--color-ink);
+  --shadow-brut-brand: 6px 6px 0 0 var(--color-brand-500);
+  --shadow-brut-signal: 6px 6px 0 0 var(--color-signal-300);
+  /* Legacy names kept so nothing renders soft. */
+  --shadow-soft: var(--shadow-brut-sm);
+  --shadow-lift: var(--shadow-brut-lg);
+
+  --animate-rise: rise 0.55s cubic-bezier(0.2, 0.9, 0.3, 1.15) both;
+  --animate-pop: pop 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.4) both;
+  --animate-pulse-ring: pulse-ring 2.4s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+  --animate-float: float 5s ease-in-out infinite;
   --animate-shake: shake 0.36s ease-in-out;
+  --animate-marquee: marquee 38s linear infinite;
+  --animate-wiggle: wiggle 3.2s ease-in-out infinite;
+  --animate-blink: blink 1.2s steps(2, start) infinite;
 }
 
 @keyframes rise {
-  from { opacity: 0; transform: translateY(14px); }
+  from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
 }
+@keyframes pop {
+  0% { opacity: 0; transform: scale(0.85) rotate(var(--pop-rotate, 0deg)); }
+  100% { opacity: 1; transform: scale(1) rotate(var(--pop-rotate, 0deg)); }
+}
 @keyframes pulse-ring {
-  0% { transform: scale(0.6); opacity: 0.55; }
-  80%, 100% { transform: scale(1.35); opacity: 0; }
+  0% { transform: scale(0.7); opacity: 0.6; }
+  80%, 100% { transform: scale(1.45); opacity: 0; }
 }
 @keyframes float {
   0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-6px); }
+  50% { transform: translateY(-5px); }
 }
 @keyframes shake {
   0%, 100% { transform: translateX(0); }
   25% { transform: translateX(-5px); }
   75% { transform: translateX(5px); }
 }
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+@keyframes wiggle {
+  0%, 100% { transform: rotate(var(--wiggle-from, -4deg)); }
+  50% { transform: rotate(var(--wiggle-to, 2deg)); }
+}
+@keyframes blink {
+  to { visibility: hidden; }
+}
+
+/* ---- Design-system utilities ------------------------------------------ */
+
+/** Solid ink-outlined block with a hard shadow. The base of every card. */
+@utility brut-card {
+  background-color: var(--color-surface);
+  border: 2px solid var(--color-ink);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-brut);
+}
+
+/** Interactive block: lifts toward the pointer, presses on click. */
+@utility brut-lift {
+  transition: transform 140ms ease-out, box-shadow 140ms ease-out;
+  &:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: var(--shadow-brut-lg);
+  }
+  &:active {
+    transform: translate(2px, 2px);
+    box-shadow: var(--shadow-brut-xs);
+  }
+}
+
+/** Button-like: sits on a 4px shadow, sinks into it on hover/press. */
+@utility brut-press {
+  box-shadow: var(--shadow-brut);
+  transition: transform 120ms ease-out, box-shadow 120ms ease-out, background-color 120ms ease-out, color 120ms ease-out;
+  &:hover {
+    transform: translate(2px, 2px);
+    box-shadow: var(--shadow-brut-xs);
+  }
+  &:active {
+    transform: translate(4px, 4px);
+    box-shadow: 0 0 0 0 var(--color-ink);
+  }
+}
+
+/** Smaller press for compact controls (3px shadow). */
+@utility brut-press-sm {
+  box-shadow: var(--shadow-brut-xs);
+  transition: transform 120ms ease-out, box-shadow 120ms ease-out, background-color 120ms ease-out, color 120ms ease-out;
+  &:hover {
+    transform: translate(1px, 1px);
+    box-shadow: 1px 1px 0 0 var(--color-ink);
+  }
+  &:active {
+    transform: translate(2px, 2px);
+    box-shadow: 0 0 0 0 var(--color-ink);
+  }
+}
+
+/** Mono, uppercase kicker label above headings. */
+@utility eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/** Faint drafting grid for hero/visual blocks. */
+@utility bg-grid {
+  background-image:
+    linear-gradient(to right, rgb(29 20 24 / 0.07) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(29 20 24 / 0.07) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/** Halftone dots for decorative fills. */
+@utility bg-dots {
+  background-image: radial-gradient(rgb(29 20 24 / 0.16) 1.2px, transparent 1.2px);
+  background-size: 14px 14px;
+}
+
+/** Diagonal warning stripes (ink on yellow). */
+@utility bg-stripes {
+  background-image: repeating-linear-gradient(-45deg, var(--color-ink) 0 10px, var(--color-signal-300) 10px 20px);
+}
+
+/** Highlighter marker behind inline text. */
+@utility marker {
+  background-image: linear-gradient(transparent 58%, var(--color-signal-300) 58%, var(--color-signal-300) 92%, transparent 92%);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+/** Dark sections: switch the focus ring to signal yellow so it stays visible. */
+@utility on-dark {
+  --focus-ring: var(--color-signal-300);
+  color-scheme: dark;
+}
+
+/* ---- Base ---------------------------------------------------------------- */
 
 :root {
   color-scheme: light;
+  --focus-ring: var(--color-ink);
 }
 
 html {
   scroll-behavior: smooth;
   -webkit-tap-highlight-color: transparent;
+  overflow-x: clip;
 }
 
 body {
@@ -79,16 +240,29 @@ body {
   color: var(--color-ink);
   font-family: var(--font-sans);
   text-rendering: optimizeLegibility;
+  overflow-x: clip;
 }
 
 ::selection {
-  background: var(--color-brand-100);
-  color: var(--color-brand-900);
+  background: var(--color-signal-300);
+  color: var(--color-ink);
 }
 
 :focus-visible {
-  outline: 2px solid var(--color-brand-500);
+  outline: 3px solid var(--focus-ring);
   outline-offset: 3px;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline-offset: 2px;
+}
+
+/* Native datetime/date inputs inherit the ink colour. */
+input[type="datetime-local"],
+input[type="date"] {
+  color-scheme: light;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -96,6 +270,10 @@ body {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
     transition-duration: 0.01ms !important;
+  }
+  .motion-reduce-static {
+    transform: none !important;
   }
 }

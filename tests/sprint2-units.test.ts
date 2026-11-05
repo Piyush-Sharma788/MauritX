@@ -119,6 +119,11 @@ describe("redaction", () => {
     expect(redactText(keep)).toBe(keep);
   });
 
+  it("keeps request IDs intact even when they contain long digit runs, while still redacting a phone next to them", () => {
+    expect(redactText("requestId c06e1234-5678-41c6-bb43-2a6d8e61d275")).toBe("requestId c06e1234-5678-41c6-bb43-2a6d8e61d275");
+    expect(redactText("12345678-1234-4123-8123-123456789012 for 9876543210")).toBe("12345678-1234-4123-8123-123456789012 for [phone]");
+  });
+
   it("is applied by the logger to every string field", () => {
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     logger.error("test.event", { errorMessage: "provider said +919876543210 is invalid, code 123456", count: 3 });

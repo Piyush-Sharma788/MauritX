@@ -2,7 +2,7 @@ import "server-only";
 import { Types } from "mongoose";
 import type { z } from "zod";
 import type { addContactSchema, channelUpdateSchema, ChannelStatus, ContactStatus, createInstitutionSchema, InstitutionStatus, ReviewStatus } from "@/features/coordination/schemas";
-import type { InstitutionDetail, InstitutionSummary } from "@/features/coordination/types";
+import type { ChannelDisplayStatus, ChannelProvenanceView, InstitutionDetailWithSources, InstitutionSummaryWithSources } from "@/features/institutions/types";
 import { OPEN_STATUSES } from "@/features/requests/schemas";
 import { AppError } from "@/lib/api/errors";
 import { connectToDatabase } from "@/lib/db/mongoose";
@@ -33,7 +33,34 @@ async function loadInstitution(id: string): Promise<InstitutionRecord> {
   return doc;
 }
 
-async function toSummary(doc: InstitutionRecord): Promise<InstitutionSummary> {
+type ChannelRecord = InstitutionRecord["contactChannels"][number] & { _id: Types.ObjectId };
+
+/** One status for display: the admin's decision first, then automatic signals. */
+export function channelDisplayStatus(c: { status: ChannelStatus; staleSince?: Date | null }): ChannelDisplayStatus {
+  if (c.status === "verified" || c.status === "invalid" || c.status === "opted_out") return c.status;
+  return c.staleSince ? "stale" : "unverified";
+}
+
+function channelView(c: ChannelRecord): ChannelProvenanceView {
+  const display = channelDisplayStatus(c);
+  return {
+    id: c._id.toString(),
+    type: c.type,
+    value: c.value,
+    status: c.status,
+    displayStatus: display,
+    source: c.source,
+    sourceUrl: c.sourceUrl ?? null,
+    retrievedAt: c.retrievedAt.toISOString(),
+    lastSeenAt: iso(c.lastSeenAt),
+    staleSince: iso(c.staleSince),
+    confidence: c.confidence ?? null,
+    validation: c.validation ? { state: c.validation.state, reason: c.validation.reason ?? null, checkedAt: c.validation.checkedAt.toISOString() } : null,
+    usableForOutreach: c.type === "email" && (display === "verified" || display === "unverified"),
+  };
+}
+
+async function toSummary(doc: InstitutionRecord): Promise<InstitutionSummaryWithSources> {
   return {
     id: doc._id.toString(),
     type: doc.type,
@@ -47,10 +74,14 @@ async function toSummary(doc: InstitutionRecord): Promise<InstitutionSummary> {
     reviewStatus: doc.review?.status ?? "approved",
     capability: doc.capability ?? "hospital",
     contactChannels: (doc.contactChannels ?? []).filter((c) => c.status !== "invalid").length,
+    staleSince: iso(doc.staleSince),
+    mergedInto: doc.mergedInto?.toString() ?? null,
+    unverifiedChannels: (doc.contactChannels ?? []).filter((c) => c.status === "unverified" && !c.staleSince).length,
+    invalidChannels: (doc.contactChannels ?? []).filter((c) => c.status === "invalid").length,
   };
 }
 
-export async function createInstitution(input: z.output<typeof createInstitutionSchema>, adminUserId: Types.ObjectId, requestId: string): Promise<InstitutionSummary> {
+export async function createInstitution(input: z.output<typeof createInstitutionSchema>, adminUserId: Types.ObjectId, requestId: string): Promise<InstitutionSummaryWithSources> {
   await connectToDatabase();
   const doc = await Institution.create({
     type: input.type,
@@ -76,7 +107,7 @@ export async function createInstitution(input: z.output<typeof createInstitution
   return toSummary(doc.toObject() as InstitutionRecord);
 }
 
-export async function listInstitutions(filter: { status?: InstitutionStatus; review?: ReviewStatus } = {}): Promise<InstitutionSummary[]> {
+export async function listInstitutions(filter: { status?: InstitutionStatus; review?: ReviewStatus } = {}): Promise<InstitutionSummaryWithSources[]> {
   await connectToDatabase();
   const query: Record<string, unknown> = {};
   if (filter.status) query.verificationStatus = filter.status;
@@ -85,7 +116,7 @@ export async function listInstitutions(filter: { status?: InstitutionStatus; rev
   return Promise.all(docs.map(toSummary));
 }
 
-export async function getInstitutionDetail(id: string): Promise<InstitutionDetail> {
+export async function getInstitutionDetail(id: string): Promise<InstitutionDetailWithSources> {
   await connectToDatabase();
   const doc = await loadInstitution(id);
   const [contacts, reports, requests] = await Promise.all([
@@ -124,8 +155,24 @@ export async function getInstitutionDetail(id: string): Promise<InstitutionDetai
     review: { status: doc.review?.status ?? "approved", reviewedAt: iso(doc.review?.reviewedAt), note: doc.review?.note ?? null },
     discoveredAt: iso(doc.discoveredAt),
     lastSeenAt: iso(doc.lastSeenAt),
-    channels: (doc.contactChannels ?? []).map((c) => ({ id: c._id.toString(), type: c.type, value: c.value, status: c.status, source: c.source, sourceUrl: c.sourceUrl ?? null, retrievedAt: c.retrievedAt.toISOString() })),
+    channels: (doc.contactChannels ?? []).map((c) => channelView(c as ChannelRecord)),
     openRequests: requests.map((r) => ({ publicRequestId: r.publicRequestId, status: r.status, bloodGroup: r.bloodGroup, acknowledgedAt: iso(r.institutionAcknowledgedAt) })),
+    staleSince: iso(doc.staleSince),
+    mergedInto: doc.mergedInto?.toString() ?? null,
+    openingHours: doc.openingHours ?? null,
+    fieldSources: (doc.fieldSources ?? []).map((f) => ({
+      field: f.field,
+      value: f.value ?? null,
+      source: f.source,
+      sourceUrl: f.sourceUrl ?? null,
+      retrievedAt: f.retrievedAt.toISOString(),
+      lastSeenAt: iso(f.lastSeenAt),
+      confidence: f.confidence ?? null,
+      pendingValue: f.pendingValue ?? null,
+    })),
+    sourceRecords: (doc.sourceRecords ?? []).map((r) => ({ ref: r.ref, provider: r.provider, url: r.url ?? null, firstSeenAt: r.firstSeenAt.toISOString(), lastSeenAt: r.lastSeenAt.toISOString(), staleSince: iso(r.staleSince) })),
+    enrichedAt: iso(doc.enrichedAt),
+    validatedAt: iso(doc.validatedAt),
   };
 }
 
@@ -218,6 +265,8 @@ export async function upsertChannel(id: string, channelId: string | null, input:
           "contactChannels.$.statusChangedBy": adminUserId,
           ...(changed ? { "contactChannels.$.source": "admin", "contactChannels.$.retrievedAt": now, "contactChannels.$.sourceUrl": null } : {}),
         },
+        // An admin's new value replaces whatever the source or AI said about the old one.
+        ...(changed ? { $unset: { "contactChannels.$.staleSince": 1, "contactChannels.$.validation": 1, "contactChannels.$.confidence": 1 } } : {}),
       },
     );
   } else {

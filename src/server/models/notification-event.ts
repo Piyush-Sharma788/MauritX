@@ -1,5 +1,5 @@
 import { Schema, Types, model, models, type InferSchemaType, type Model } from "mongoose";
-import { MESSAGE_KINDS, MESSAGE_STATUSES } from "@/features/whatsapp/types";
+import { MEDIA_KEYS, MESSAGE_KINDS, MESSAGE_STATUSES } from "@/features/whatsapp/types";
 
 /**
  * `notification_events` (DATABASE_SCHEMA.md §6), also used as the outbox the
@@ -23,6 +23,10 @@ const notificationEventSchema = new Schema(
     bodyEncrypted: { type: String },
     // Cloud API template values, encrypted and erased with the body.
     templateParamsEncrypted: { type: String },
+    // An image sent with the body as its caption (a configured asset key, never a path or URL).
+    mediaKey: { type: String, enum: MEDIA_KEYS },
+    // What actually went out for a media message: the image, or the caption as text after a safe fallback.
+    mediaOutcome: { type: String, enum: ["image", "text_fallback"] },
     status: { type: String, enum: MESSAGE_STATUSES, required: true, default: "queued" },
     failureCode: { type: String },
     providerMessageId: { type: String },

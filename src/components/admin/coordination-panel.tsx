@@ -33,7 +33,7 @@ const when = (iso: string) => `${fmt.format(new Date(iso))} IST`;
 function Section({ title, children, note }: { title: string; children: React.ReactNode; note?: React.ReactNode }) {
   return (
     <div className="border-t border-line pt-5 first:border-t-0 first:pt-0">
-      <h3 className="text-sm font-semibold text-ink">{title}</h3>
+      <h3 className="text-sm font-bold text-ink">{title}</h3>
       {note && <p className="mt-0.5 text-xs text-ink-muted">{note}</p>}
       <div className="mt-3">{children}</div>
     </div>
@@ -88,8 +88,8 @@ export function CoordinationPanel({
           ["Interested", summary.interested],
           ["Donations confirmed", summary.donationsConfirmed],
         ].map(([label, value]) => (
-          <div key={label} className="rounded-xl bg-paper-deep/60 px-2 py-2">
-            <p className="font-display text-lg font-bold text-ink tabular-nums">{value}</p>
+          <div key={label} className="rounded-md border-2 border-ink bg-paper px-2 py-2">
+            <p className="font-display text-lg font-extrabold text-ink tabular-nums">{value}</p>
             <p className="text-ink-muted">{label}</p>
           </div>
         ))}
@@ -117,7 +117,7 @@ export function CoordinationPanel({
         note="Deterministic and explainable. This finds people to contact, not medically approved donors: the blood centre decides eligibility and compatibility."
       >
         {!summary.alertable ? (
-          <p className="flex gap-2 rounded-xl bg-warning-50 px-3 py-2 text-sm text-warning-800"><InfoIcon className="mt-0.5 size-4 shrink-0" />Donor search and alerts open once the request is verified and marked active.</p>
+          <p className="flex gap-2 rounded-md bg-warning-50 px-3 py-2 text-sm text-warning-800"><InfoIcon className="mt-0.5 size-4 shrink-0" />Donor search and alerts open once the request is verified and marked active.</p>
         ) : (
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm text-ink-soft">Within</span>
@@ -127,7 +127,7 @@ export function CoordinationPanel({
                 type="button"
                 onClick={() => setRadius(r)}
                 aria-pressed={radius === r}
-                className={`h-9 rounded-full px-3.5 text-sm font-semibold ring-1 transition ${radius === r ? "bg-ink text-white ring-ink" : "bg-surface text-ink ring-line-strong hover:bg-paper-deep"}`}
+                className={`inline-flex min-h-10 items-center rounded-md border-2 border-ink px-3.5 text-sm font-bold transition-colors ${radius === r ? "bg-ink text-white shadow-[3px_3px_0_0_var(--color-brand-500)]" : "bg-surface text-ink hover:bg-signal-300"}`}
               >
                 {r} km
               </button>
@@ -138,19 +138,19 @@ export function CoordinationPanel({
         {error && <p role="alert" className="mt-2 flex gap-1.5 text-sm text-danger-600"><InfoIcon className="mt-0.5 size-4 shrink-0" />{error}</p>}
 
         {latestRun && (
-          <div className="mt-4 rounded-2xl border border-line">
+          <div className="mt-4 rounded-md border-2 border-ink">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3 text-xs text-ink-muted">
               <span>
                 {latestRun.trigger === "automatic" ? "Automatic search" : "Search"} {when(latestRun.createdAt)} · {latestRun.basis === "distance" ? `within ${latestRun.radiusKm} km of the ${latestRun.originSource === "institution" ? "linked institution" : latestRun.originSource === "geocoded_address" ? "hospital address (geocoded, approximate)" : "requester's shared location"}` : "same city (no location on the request)"} · {latestRun.scanned} profiles checked · groups {latestRun.eligibleGroups.join(", ") || "none"}
               </span>
-              <span className="rounded-full bg-warning-50 px-2 py-0.5 font-semibold text-warning-800">Policy {latestRun.policyVersion}: {latestRun.policyReviewStatus.replace(/_/g, " ")}</span>
+              <span className="rounded-sm border-2 border-ink bg-signal-100 px-1.5 py-px font-mono text-[0.66rem] font-bold uppercase tracking-[0.06em] text-ink">Policy {latestRun.policyVersion}: {latestRun.policyReviewStatus.replace(/_/g, " ")}</span>
             </div>
             {latestRun.candidates.length === 0 ? (
               <p className="px-4 py-6 text-center text-sm text-ink-muted">No potential donors match. Try a wider radius, and keep working directly with the hospital&apos;s blood bank.</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[36rem] text-left text-sm">
-                  <thead className="text-xs uppercase tracking-wide text-ink-muted">
+                  <thead className="border-b-2 border-ink bg-paper-deep font-mono text-[0.66rem] uppercase tracking-[0.1em] text-ink">
                     <tr>{["#", "Donor", "Distance", "Why", "Alert", "Reply"].map((h) => <th key={h} scope="col" className="px-4 py-2 font-semibold">{h}</th>)}</tr>
                   </thead>
                   <tbody className="divide-y divide-line">
@@ -204,7 +204,7 @@ export function CoordinationPanel({
             {responses.map((r) => (
               <li key={r.id} className="flex flex-wrap items-start justify-between gap-3 py-3">
                 <span>
-                  <span className="font-medium text-ink">{r.donorFirstName}</span>{" "}
+                  <span className="font-bold text-ink">{r.donorFirstName}</span>{" "}
                   <span className="text-xs text-ink-muted">· {r.response === "interested" ? "interested" : "unavailable"} · {when(r.respondedAt)}</span>
                   <span className="block text-xs text-ink-muted">
                     {r.donorPhone ? <a href={`tel:${r.donorPhone}`} className="font-semibold text-brand-600">{r.donorPhone}</a> : r.contactSharing === "declined" ? "Chose not to share contact" : "Contact sharing not answered"}

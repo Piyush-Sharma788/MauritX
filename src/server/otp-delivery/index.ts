@@ -4,7 +4,9 @@ import { getEnv } from "@/lib/env";
 import { getSmsConfig } from "@/lib/sms/config";
 import { twilioSmsOtpProvider } from "@/server/otp-delivery/sms";
 import { maskPhone } from "@/lib/validation/phone";
+import { logger } from "@/lib/logger";
 import { sendTemplateMessage } from "@/lib/whatsapp/client";
+import { whatsappWorker } from "@/lib/whatsapp-web/worker-client";
 
 export interface OtpDeliveryInput {
   phoneE164: string;
@@ -15,7 +17,8 @@ export interface OtpDeliveryInput {
 
 export interface OtpDeliveryProvider {
   channel: OtpDeliveryChannel;
-  send(input: OtpDeliveryInput): Promise<{ providerMessageId?: string }>;
+  /** `channel` is set when the code went out another way than this provider's default. */
+  send(input: OtpDeliveryInput): Promise<{ providerMessageId?: string; channel?: OtpDeliveryChannel }>;
 }
 
 /**
@@ -102,6 +105,34 @@ export function getSmsOtpOption(): SmsOtpOption | null {
   return { provider: twilioSmsOtpProvider(config), perPhoneDaily: config.perPhoneDaily, dailyCap: config.dailyCap };
 }
 
+/**
+ * DEVELOPMENT ONLY (OTP_PROVIDER=whatsapp_web): sends the code from the phone linked to the
+ * WhatsApp Web pilot worker. The official channel (an approved authentication template)
+ * stays mandatory in production; config validation refuses this provider there.
+ * Until a phone is linked (an admin has to sign in to link one), the code is printed in the
+ * terminal like the development provider, and the sign-in screen says so.
+ */
+export function whatsAppWebDevOtpProvider(): OtpDeliveryProvider {
+  const fallback = developmentProvider();
+  return {
+    channel: "whatsapp",
+    async send(input) {
+      if (process.env.NODE_ENV === "production") throw new Error("OTP_PROVIDER=whatsapp_web is disabled in production");
+      const result = await whatsappWorker.sendOtp({ phone: input.phoneE164, code: input.code, minutes: input.expiresInMinutes });
+      if (result.ok) return { providerMessageId: result.providerMessageId };
+      if (result.reason === "not_connected" || result.reason === "unavailable") {
+        logger.warn("otp.whatsapp_web_fallback", { requestId: input.requestId, reason: result.reason });
+        await fallback.send(input);
+        return { channel: "development" };
+      }
+      throw new Error(`WhatsApp Web sign-in code not sent: ${result.reason}`);
+    },
+  };
+}
+
 export function getOtpDeliveryProvider(): OtpDeliveryProvider {
-  return getEnv().otpProvider === "whatsapp" ? whatsAppOtpProvider() : developmentProvider();
+  const provider = getEnv().otpProvider;
+  if (provider === "whatsapp") return whatsAppOtpProvider();
+  if (provider === "whatsapp_web") return whatsAppWebDevOtpProvider();
+  return developmentProvider();
 }

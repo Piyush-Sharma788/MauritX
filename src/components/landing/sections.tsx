@@ -22,11 +22,14 @@ function SectionHeading({ eyebrow, title, intro, tone = "light" }: {
   const dark = tone === "dark";
   return (
     <div className="max-w-2xl">
-      <p className={`text-xs font-semibold uppercase tracking-[0.16em] ${dark ? "text-brand-200" : "text-brand-600"}`}>{eyebrow}</p>
-      <h2 className={`mt-3 font-display text-3xl font-bold tracking-[-0.035em] sm:text-[2.6rem] sm:leading-[1.08] ${dark ? "text-white" : "text-ink"}`}>
+      <p className={`eyebrow inline-flex items-center gap-2 rounded-sm border-2 px-2 py-1 ${dark ? "border-signal-300 text-signal-300" : "border-ink bg-surface text-ink"}`}>
+        <span aria-hidden="true" className={`size-2 ${dark ? "bg-signal-300" : "bg-brand-500"}`} />
+        {eyebrow}
+      </p>
+      <h2 className={`mt-5 text-balance font-display text-[2.1rem] font-extrabold leading-[1.02] tracking-[-0.045em] sm:text-[3.1rem] ${dark ? "text-white" : "text-ink"}`}>
         {title}
       </h2>
-      {intro && <p className={`mt-4 text-lg leading-relaxed ${dark ? "text-white/70" : "text-ink-soft"}`}>{intro}</p>}
+      {intro && <p className={`mt-5 text-lg leading-relaxed ${dark ? "text-white/80" : "text-ink-soft"}`}>{intro}</p>}
     </div>
   );
 }
@@ -78,29 +81,29 @@ export function HowItWorks() {
             title="One calm, guided path when every minute counts."
             intro="MarutiX handles the coordination: who to reach, in what order and with whose consent. That leaves families and donors free to focus on what matters."
           />
-          <div className="w-full rounded-2xl border border-line bg-surface p-5 shadow-soft lg:max-w-sm">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-muted">Rolling out in phases</p>
-            <ol className="mt-3 space-y-2.5">
+          <div className="w-full overflow-hidden rounded-md border-2 border-ink bg-surface shadow-brut lg:max-w-sm">
+            <p className="eyebrow border-b-2 border-ink bg-ink px-4 py-2 text-white">Rolling out in phases</p>
+            <ol className="divide-y-2 divide-ink/10 px-4 py-1">
               {ROLLOUT.map((item, i) => (
-                <li key={item.label} className="flex items-center justify-between gap-3 text-sm">
-                  <span className="flex items-center gap-2.5 text-ink">
+                <li key={item.label} className="flex items-center justify-between gap-3 py-2.5 text-sm">
+                  <span className="flex items-center gap-2.5 font-medium text-ink">
                     <span
-                      className={`flex size-5 items-center justify-center rounded-full text-[0.65rem] font-bold ${
-                        item.live ? "bg-success-600 text-white" : "bg-paper-deep text-ink-muted"
+                      className={`flex size-6 shrink-0 items-center justify-center rounded-sm border-2 border-ink font-mono text-[0.7rem] font-bold ${
+                        item.live ? "bg-mint-400 text-ink" : "bg-paper-deep text-ink"
                       }`}
                     >
-                      {item.live ? <CheckIcon className="size-3" /> : i + 1}
+                      {item.live ? <CheckIcon className="size-3.5" strokeWidth={3} /> : i + 1}
                     </span>
                     {item.label}
                   </span>
-                  <span className={`shrink-0 text-xs font-medium ${item.live ? "text-success-600" : "text-ink-muted"}`}>{item.state}</span>
+                  <span className={`shrink-0 rounded-sm border-2 border-ink px-1.5 font-mono text-[0.62rem] font-bold uppercase tracking-[0.08em] ${item.live ? "bg-mint-100 text-mint-800" : "bg-paper-deep text-ink-soft"}`}>{item.state}</span>
                 </li>
               ))}
             </ol>
           </div>
         </div>
 
-        <div className="mt-14 grid gap-5 lg:grid-cols-2">
+        <div className="mt-14 grid gap-6 lg:grid-cols-2 lg:gap-8">
           <StepCard label="For families & caregivers" steps={FAMILY_STEPS} accent />
           <StepCard label="For voluntary donors" steps={DONOR_STEPS} />
         </div>
@@ -111,24 +114,23 @@ export function HowItWorks() {
 
 function StepCard({ label, steps, accent = false }: { label: string; steps: { title: string; body: string }[]; accent?: boolean }) {
   return (
-    <article
-      className={`relative overflow-hidden rounded-[var(--radius-card)] border p-6 sm:p-8 ${
-        accent ? "border-brand-100 bg-gradient-to-br from-brand-50 via-surface to-surface" : "border-line bg-surface"
-      }`}
-    >
-      <h3 className="text-sm font-semibold text-ink">{label}</h3>
-      <ol className="mt-6 space-y-6">
+    <article className={`brut-lift relative overflow-hidden rounded-md border-2 border-ink shadow-brut ${accent ? "bg-brand-50" : "bg-surface"}`}>
+      <h3 className={`flex items-center justify-between border-b-2 border-ink px-6 py-3 font-display text-lg font-extrabold tracking-[-0.02em] sm:px-8 ${accent ? "bg-brand-500 text-white" : "bg-ink text-white"}`}>
+        {label}
+        <span aria-hidden="true" className="font-mono text-xs font-bold tracking-[0.12em] opacity-80">{String(steps.length).padStart(2, "0")} STEPS</span>
+      </h3>
+      <ol className="space-y-6 p-6 sm:p-8">
         {steps.map((step, i) => (
           <li key={step.title} className="flex gap-4">
             <span
-              className={`flex size-9 shrink-0 items-center justify-center rounded-full font-display text-sm font-bold ${
-                accent ? "bg-brand-500 text-white" : "bg-ink text-white"
+              className={`flex size-10 shrink-0 items-center justify-center rounded-sm border-2 border-ink font-mono text-sm font-bold shadow-brut-xs ${
+                accent ? "bg-signal-300 text-ink" : "bg-mint-300 text-ink"
               }`}
             >
-              {i + 1}
+              {String(i + 1).padStart(2, "0")}
             </span>
             <div>
-              <p className="font-semibold text-ink">{step.title}</p>
+              <p className="font-bold text-ink">{step.title}</p>
               <p className="mt-1 text-[0.95rem] leading-relaxed text-ink-soft">{step.body}</p>
             </div>
           </li>
@@ -177,7 +179,7 @@ const COMMITMENTS = [
 
 export function TrustSafety() {
   return (
-    <section id="safety" className="scroll-mt-20 bg-ink py-20 text-white sm:py-28">
+    <section id="safety" className="on-dark scroll-mt-20 border-y-2 border-ink bg-ink py-20 text-white sm:py-28">
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
         <SectionHeading
           tone="dark"
@@ -185,14 +187,17 @@ export function TrustSafety() {
           title="Built for trust, not just speed."
           intro="An emergency is exactly when people need to know their information is safe and that the decisions stay with professionals. These commitments shape every feature we ship."
         />
-        <ul className="mt-14 grid gap-px overflow-hidden rounded-[var(--radius-card)] bg-white/10 sm:grid-cols-2 lg:grid-cols-3">
-          {COMMITMENTS.map(({ icon: Icon, title, body }) => (
-            <li key={title} className="bg-ink p-6 transition-colors hover:bg-white/[0.03] sm:p-8">
-              <span className="flex size-11 items-center justify-center rounded-2xl bg-brand-500/15 text-brand-200 ring-1 ring-brand-400/25">
-                <Icon className="size-5" />
-              </span>
-              <h3 className="mt-5 font-semibold text-white">{title}</h3>
-              <p className="mt-2 text-[0.95rem] leading-relaxed text-white/65">{body}</p>
+        <ul className="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 lg:gap-5">
+          {COMMITMENTS.map(({ icon: Icon, title, body }, i) => (
+            <li key={title} className="group rounded-md border-2 border-white/90 bg-ink p-6 shadow-[6px_6px_0_0_var(--color-brand-500)] transition-transform duration-150 hover:-translate-x-0.5 hover:-translate-y-0.5 sm:p-7">
+              <div className="flex items-center justify-between">
+                <span className="flex size-12 items-center justify-center rounded-sm border-2 border-white bg-signal-300 text-ink transition-transform duration-200 group-hover:-rotate-6">
+                  <Icon className="size-6" />
+                </span>
+                <span aria-hidden="true" className="font-mono text-xs font-bold text-white/40">{String(i + 1).padStart(2, "0")}</span>
+              </div>
+              <h3 className="mt-5 font-display text-xl font-extrabold tracking-[-0.02em] text-white">{title}</h3>
+              <p className="mt-2 text-[0.95rem] leading-relaxed text-white/80">{body}</p>
             </li>
           ))}
         </ul>
@@ -223,7 +228,8 @@ export function DonorBand() {
   return (
     <section id="donors" className="scroll-mt-20 py-20 sm:py-28">
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
-        <div className="grid gap-10 overflow-hidden rounded-[2rem] border border-line bg-surface p-6 shadow-soft sm:p-10 lg:grid-cols-[1fr_1.1fr] lg:gap-14 lg:p-14">
+        <div className="relative grid gap-10 rounded-md border-[3px] border-ink bg-surface p-6 shadow-brut-xl sm:p-10 lg:grid-cols-[1fr_1.1fr] lg:gap-14 lg:p-14">
+          <span aria-hidden="true" className="absolute -top-4 right-6 rotate-3 rounded-sm border-2 border-ink bg-mint-300 px-3 py-1 font-mono text-xs font-bold uppercase tracking-[0.12em] text-ink shadow-brut-xs sm:right-10">~2 min on WhatsApp</span>
           <div className="flex flex-col justify-center">
             <SectionHeading
               eyebrow="For donors"
@@ -235,7 +241,7 @@ export function DonorBand() {
                 Become a Donor
                 <ArrowRightIcon className="size-4.5 transition-transform group-hover:translate-x-0.5" />
               </BecomeDonorButton>
-              <ButtonLink href="/donate" size="lg" variant="ghost">
+              <ButtonLink href="/donate" size="lg" variant="ghost" className="whitespace-normal text-center">
                 On a computer? Scan a QR code
               </ButtonLink>
             </div>
@@ -253,17 +259,17 @@ export function DonorBand() {
 
 function ChecklistCard({ title, items, positive = false }: { title: string; items: string[]; positive?: boolean }) {
   return (
-    <div className={`rounded-2xl p-5 sm:p-6 ${positive ? "bg-success-50" : "bg-paper-deep"}`}>
-      <h3 className="text-sm font-semibold text-ink">{title}</h3>
+    <div className={`rounded-md border-2 border-ink p-5 sm:p-6 ${positive ? "bg-mint-50" : "bg-paper-deep"}`}>
+      <h3 className="font-display text-lg font-extrabold tracking-[-0.02em] text-ink">{title}</h3>
       <ul className="mt-4 space-y-3">
         {items.map((item) => (
-          <li key={item} className="flex gap-2.5 text-[0.93rem] leading-snug text-ink-soft">
+          <li key={item} className="flex gap-2.5 text-[0.93rem] leading-snug text-ink">
             <span
-              className={`mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full ${
-                positive ? "bg-success-600 text-white" : "bg-ink/10 text-ink-soft"
+              className={`mt-px flex size-5 shrink-0 items-center justify-center rounded-sm border-2 border-ink ${
+                positive ? "bg-mint-400 text-ink" : "bg-brand-500 text-white"
               }`}
             >
-              {positive ? <CheckIcon className="size-3" /> : <XIcon className="size-3" />}
+              {positive ? <CheckIcon className="size-3" strokeWidth={3.5} /> : <XIcon className="size-3" strokeWidth={3.5} />}
             </span>
             {item}
           </li>
@@ -307,22 +313,22 @@ const FAQS = [
 
 export function Faq() {
   return (
-    <section id="faq" className="scroll-mt-20 border-t border-line py-20 sm:py-28">
+    <section id="faq" className="scroll-mt-20 border-t-2 border-ink bg-paper-deep py-20 sm:py-28">
       <div className="mx-auto grid max-w-6xl gap-10 px-4 sm:px-6 lg:grid-cols-[0.8fr_1.2fr] lg:gap-16">
         <SectionHeading eyebrow="FAQ" title="Questions people ask us." intro="Can't find what you need? In an emergency, always speak to the treating hospital first." />
-        <div className="divide-y divide-line rounded-[var(--radius-card)] border border-line bg-surface">
+        <div className="space-y-3">
           {FAQS.map((item) => (
-            <details key={item.q} className="group px-5 py-1 sm:px-6 [&_summary::-webkit-details-marker]:hidden">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 rounded-lg py-4 font-semibold text-ink">
+            <details key={item.q} className="group rounded-md border-2 border-ink bg-surface shadow-brut-sm transition-shadow open:shadow-brut [&_summary::-webkit-details-marker]:hidden">
+              <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-4 rounded-md px-5 py-3 font-bold text-ink transition-colors hover:bg-signal-50 group-open:border-b-2 group-open:border-ink sm:px-6">
                 {item.q}
-                <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-paper-deep text-ink-soft transition-transform duration-200 group-open:rotate-45">
-                  <XIcon className="size-3.5 rotate-45" />
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-sm border-2 border-ink bg-signal-300 text-ink transition-transform duration-200 group-open:rotate-45 group-open:bg-brand-500 group-open:text-white">
+                  <XIcon className="size-4 rotate-45" strokeWidth={3} />
                 </span>
               </summary>
-              <div className="pb-5 pr-8 text-[0.95rem] leading-relaxed text-ink-soft">
+              <div className="px-5 pb-5 pt-4 text-[0.95rem] leading-relaxed text-ink-soft sm:px-6">
                 <p>{item.a}</p>
                 {item.link && (
-                  <Link href={item.link.href} className="mt-3 inline-flex items-center gap-1.5 font-semibold text-brand-600 hover:text-brand-700">
+                  <Link href={item.link.href} className="mt-3 inline-flex min-h-11 items-center gap-1.5 font-bold text-ink underline decoration-brand-500 decoration-2 underline-offset-4 hover:decoration-4">
                     {item.link.label}
                     <ArrowRightIcon className="size-4" />
                   </Link>

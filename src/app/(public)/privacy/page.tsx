@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Badge, PageHeader } from "@/components/ui/primitives";
 import { PRIVACY_NOTICE_VERSION } from "@/features/legal";
 
 export const metadata: Metadata = {
@@ -78,27 +79,53 @@ const SECTIONS = [
 
 export default function PrivacyPage() {
   return (
-    <div className="mx-auto max-w-3xl px-4 py-14 sm:px-6 sm:py-20">
-      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand-600">Privacy notice</p>
-      <h1 className="mt-3 font-display text-4xl font-bold tracking-[-0.04em] text-ink sm:text-5xl">Your number, handled with care.</h1>
-      <p className="mt-5 text-lg leading-relaxed text-ink-soft">
-        This notice covers signing in, donor registration and emergency blood requests during early access.
-      </p>
-      <p className="mt-4 inline-flex rounded-full bg-paper-deep px-3 py-1 text-xs font-medium text-ink-soft">
-        Version {PRIVACY_NOTICE_VERSION} · Draft pending legal review
-      </p>
+    <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16">
+      <div className="max-w-3xl">
+        <PageHeader
+          size="lg"
+          eyebrow="Privacy notice"
+          title="Your number, handled with care."
+          description="This notice covers signing in, donor registration and emergency blood requests during early access."
+        />
+        <p className="mt-5">
+          <Badge tone="warn">Version {PRIVACY_NOTICE_VERSION} · Draft pending legal review</Badge>
+        </p>
+      </div>
 
-      <div className="mt-10 space-y-5">
-        {SECTIONS.map((section) => (
-          <section key={section.title} className="rounded-[var(--radius-card)] border border-line bg-surface p-6 shadow-soft">
-            <h2 className="text-lg font-semibold text-ink">{section.title}</h2>
-            <ul className="mt-3 list-disc space-y-2 pl-5 leading-relaxed text-ink-soft marker:text-brand-400">
-              {section.body.map((line) => (
-                <li key={line}>{line}</li>
+      <div className="mt-12 grid gap-10 lg:grid-cols-[15rem_minmax(0,1fr)]">
+        <nav aria-label="On this page" className="hidden lg:block">
+          <div className="sticky top-24 rounded-md border-2 border-ink bg-surface shadow-brut-sm">
+            <p className="eyebrow border-b-2 border-ink bg-ink px-3 py-2 text-white">On this page</p>
+            <ol className="p-2 text-sm">
+              {SECTIONS.map((section, i) => (
+                <li key={section.title}>
+                  <a href={`#s${i + 1}`} className="flex gap-2 rounded-sm px-2 py-1.5 font-medium text-ink hover:bg-signal-300">
+                    <span className="font-mono text-xs font-bold text-ink-muted">{String(i + 1).padStart(2, "0")}</span>
+                    {section.title}
+                  </a>
+                </li>
               ))}
-            </ul>
-          </section>
-        ))}
+            </ol>
+          </div>
+        </nav>
+        <div className="max-w-3xl space-y-6">
+          {SECTIONS.map((section, i) => (
+            <section id={`s${i + 1}`} key={section.title} className="scroll-mt-24 rounded-[var(--radius-card)] border-2 border-ink bg-surface p-6 shadow-brut sm:p-7">
+              <h2 className="flex items-baseline gap-3 font-display text-xl font-extrabold tracking-[-0.025em] text-ink sm:text-2xl">
+                <span className="font-mono text-sm font-bold text-brand-600">{String(i + 1).padStart(2, "0")}</span>
+                {section.title}
+              </h2>
+              <ul className="mt-4 space-y-2.5 leading-relaxed text-ink-soft">
+                {section.body.map((line) => (
+                  <li key={line} className="flex gap-3">
+                    <span aria-hidden="true" className="mt-2.5 size-1.5 shrink-0 bg-brand-500" />
+                    <span>{line}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+        </div>
       </div>
     </div>
   );

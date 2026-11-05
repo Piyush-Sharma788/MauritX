@@ -1,6 +1,6 @@
 import { Schema, model, models, type InferSchemaType, type Model } from "mongoose";
 
-export const JOB_TYPES = ["coordinate_request", "discover_institutions", "institution_outreach", "send_outreach_email", "donor_wave"] as const;
+export const JOB_TYPES = ["coordinate_request", "discover_institutions", "institution_outreach", "send_outreach_email", "donor_wave", "discovery_sweep", "discovery_area_refresh"] as const;
 export type JobType = (typeof JOB_TYPES)[number];
 export const JOB_STATUSES = ["queued", "running", "succeeded", "dead", "cancelled"] as const;
 

@@ -23,8 +23,14 @@ const RULES: [RegExp, string | ((match: string) => string)][] = [
   [/(?<!\d)\d{6}(?!\d)/g, "[code]"],
 ];
 
+const UUID_ANYWHERE = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
+
 export function redactText(text: string, maxLength = 500): string {
-  let out = text;
+  // Request IDs (UUIDs) must survive intact so logs can be matched to what users see:
+  // set them aside before the digit rules run, then put them back.
+  const kept: string[] = [];
+  let out = text.replace(UUID_ANYWHERE, (m) => `\u0000${kept.push(m) - 1}\u0000`);
   for (const [pattern, replacement] of RULES) out = out.replace(pattern, replacement as string);
+  out = out.replace(/\u0000(\d+)\u0000/g, (_, i: string) => kept[Number(i)] ?? "");
   return out.length > maxLength ? `${out.slice(0, maxLength)}…` : out;
 }

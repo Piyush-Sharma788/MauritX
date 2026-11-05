@@ -5,6 +5,7 @@ import { PRIVACY_NOTICE_VERSION } from "@/features/legal";
 import { BLOOD_GROUP_LABELS, donorRegistrationSchema } from "@/features/donors/schemas";
 import { AppError } from "@/lib/api/errors";
 import { connectToDatabase } from "@/lib/db/mongoose";
+import { logger } from "@/lib/logger";
 import { phoneLookupToken } from "@/lib/security/crypto";
 import { maskPhone } from "@/lib/validation/phone";
 import {
@@ -16,11 +17,13 @@ import {
   type CompletedOnboarding,
   type OnboardingData,
 } from "@/server/conversations/onboarding-machine";
+import { showMainMenu } from "@/server/conversations/main-menu";
 import { beginConversation, isDonorFlow, loadConversation, saveConversation, toSnapshot } from "@/server/conversations/store";
 import { changeNotifications, getDonorOverview, registerDonor, setAvailability, updateDonorProfile } from "@/server/donors/service";
 import { isOptedOut } from "@/server/messaging/eligibility";
 import { liftOptOut } from "@/server/messaging/opt-out";
 import { queueBotReplies } from "@/server/messaging/queue";
+import { currentReplyContext } from "@/server/messaging/reply-context";
 import { HELP_TEXT } from "@/server/messaging/templates";
 import { OPEN_STATUSES } from "@/features/requests/schemas";
 import { DonorProfile } from "@/server/models/donor-profile";
@@ -46,8 +49,36 @@ export interface InboundMessage {
 
 export type BotAction = "onboarding" | "registered" | "updating" | "updated" | "command" | "menu" | "welcome" | "ignored";
 
-/** REGISTER is the primary keyword; the others are common alternatives. START also re-opens a stopped number. */
-const REGISTER_WORDS = new Set(["REGISTER", "JOIN", "START", "SIGN UP", "SIGNUP", "DONATE", "DONOR"]);
+/** REGISTER is the primary keyword; the others are common alternatives. They also re-open a stopped number. */
+export const REGISTER_WORDS = new Set(["REGISTER", "JOIN", "SIGN UP", "SIGNUP", "DONATE", "DONOR"]);
+/** "Resume messages" after STOP (the opt-out confirmation tells everyone to reply START). Never starts registration. */
+export const START_WORDS = new Set(["START", "UNSTOP", "RESUBSCRIBE"]);
+
+export const RESUBSCRIBED_TEXT = "You're subscribed to MarutiX messages again. ✅";
+
+/**
+ * START for a registered donor: confirm and show their profile. Alerts stay off if STOP
+ * turned them off: withdrawn consent is only restored by the donor's own explicit choice.
+ * Returns false for anyone who isn't a registered donor (the caller shows the menu).
+ */
+export async function replyToDonorStart(msg: InboundMessage, resubscribed: boolean): Promise<boolean> {
+  const user = await User.findOne({ phoneLookup: phoneLookupToken(msg.fromE164) }, { _id: 1 }).lean();
+  if (!user || !(await DonorProfile.exists({ userId: user._id }))) return false;
+  const status = (await getDonorOverview(user._id)).profile?.notifications.status;
+  const alertsOff = status !== "active" && status !== "paused";
+  await reply(
+    msg,
+    [
+      [
+        resubscribed ? RESUBSCRIBED_TEXT : "You're already subscribed to MarutiX messages. ✅",
+        alertsOff ? "Emergency alerts are still off. To turn them back on, reply UPDATE and choose 7." : null,
+      ].filter(Boolean).join("\n"),
+      await statusText(user._id),
+    ],
+    user._id,
+  );
+  return true;
+}
 const keywordOf = (input: BotInput) => (input.type === "text" ? input.text.trim().toUpperCase().replace(/\s+/g, " ") : "");
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -55,8 +86,19 @@ const WELCOME_BACK = "Welcome back! Let's continue where you left off.";
 const NOT_REGISTERED = "You're not registered as a donor yet. Reply REGISTER to register. It takes about 2 minutes.\nNeed blood for a patient? Reply REQUEST.";
 
 function registrationIntro(phoneE164: string) {
-  return `Welcome to MarutiX 🩸 Let's register you as a voluntary blood donor. It takes about 2 minutes.\nWe'll use this WhatsApp number (${maskPhone(phoneE164)}), so you don't need to type it.`;
+  // On a number's first-ever message this is the welcome (and the image caption); after the
+  // menu, which already said welcome, it just continues.
+  const opening = currentReplyContext()?.attachWelcomeImage
+    ? "Welcome to MarutiX 🩸 Let's register you as a voluntary blood donor."
+    : "Let's register you as a voluntary blood donor 🩸";
+  return `${opening} It takes about 2 minutes.\nWe'll use this WhatsApp number (${maskPhone(phoneE164)}), so you don't need to type it.`;
 }
+
+/** No reply on purpose: logged with the reason (never the number). */
+const ignored = (reason: string): BotAction => {
+  logger.info("whatsapp.inbound_ignored", { reason });
+  return "ignored";
+};
 
 function completionText(data: CompletedOnboarding): string {
   return [
@@ -164,8 +206,11 @@ async function applyUpdate(userId: Types.ObjectId, changes: OnboardingData): Pro
   return ["Done. Your details are updated. ✅", await statusText(userId)];
 }
 
-/** Handles one inbound message from a number that isn't opted out (or is sending REGISTER/START). */
-export async function handleBotMessage(msg: InboundMessage, now = new Date()): Promise<BotAction> {
+/**
+ * Handles one inbound message from a number that isn't opted out (or is sending REGISTER/START).
+ * `greeting`: the text was a greeting ("hi", "namaste"), which always gets the menu.
+ */
+export async function handleBotMessage(msg: InboundMessage, now = new Date(), options: { greeting?: boolean } = {}): Promise<BotAction> {
   await connectToDatabase();
   const phoneLookup = phoneLookupToken(msg.fromE164);
   const keyword = keywordOf(msg.input);
@@ -174,14 +219,21 @@ export async function handleBotMessage(msg: InboundMessage, now = new Date()): P
   // 1. A donor conversation is in progress: the state machine handles it.
   if (conversation?.status === "active" && isDonorFlow(conversation.flow)) {
     const snapshot = toSnapshot(conversation);
+    let input = msg.input;
     if (snapshot.flow === "donor_onboarding" && REGISTER_WORDS.has(keyword)) {
-      await reply(msg, ["You're already registering. Let's continue.", promptFor(snapshot)]);
-      await saveConversation(conversation, { snapshot, status: "active", now });
-      return "onboarding";
+      // At the opening "Would you like to register? YES/NO", REGISTER is the answer yes,
+      // not a reason to ask the same question again.
+      if (snapshot.state === "await_start") {
+        input = { type: "text", text: "YES" };
+      } else {
+        await reply(msg, ["You're already registering. Let's continue.", promptFor(snapshot)]);
+        await saveConversation(conversation, { snapshot, status: "active", now });
+        return "onboarding";
+      }
     }
     // A long gap: greet before re-asking, so the donor knows where they are.
     const resumed = conversation.lastInboundAt && now.getTime() - conversation.lastInboundAt.getTime() > 60 * 60 * 1000;
-    const outcome = advance(snapshot, msg.input);
+    const outcome = advance(snapshot, input);
     const updating = snapshot.flow === "donor_update";
 
     if (outcome.type === "continue") {
@@ -230,7 +282,7 @@ export async function handleBotMessage(msg: InboundMessage, now = new Date()): P
   }
 
   // Everyone else who opted out hears nothing until they send REGISTER or START.
-  if (await isOptedOut(phoneLookup)) return "ignored";
+  if (await isOptedOut(phoneLookup)) return ignored("opted_out");
 
   if (keyword === "HELP") {
     await reply(msg, [HELP_TEXT], user?._id);
@@ -274,14 +326,14 @@ export async function handleBotMessage(msg: InboundMessage, now = new Date()): P
   }
 
   if (profile && user) {
-    if (await menuSentRecently(phoneLookup, now)) return "ignored";
+    if (await menuSentRecently(phoneLookup, now)) return ignored("menu_sent_recently");
     await reply(msg, [HELP_TEXT], user._id, "bot_menu");
     return "menu";
   }
 
   // Someone with an open blood request (e.g. replying to their confirmation) shouldn't get the donor pitch.
   if (await EmergencyRequest.exists({ contactPhoneLookup: phoneLookup, status: { $in: OPEN_STATUSES } })) {
-    if (await menuSentRecently(phoneLookup, now)) return "ignored";
+    if (await menuSentRecently(phoneLookup, now)) return ignored("menu_sent_recently");
     await reply(
       msg,
       [
@@ -293,12 +345,14 @@ export async function handleBotMessage(msg: InboundMessage, now = new Date()): P
     return "menu";
   }
 
-  // Unknown number: offer registration, but not again within a day of them declining.
-  if (conversation?.status === "cancelled" && conversation.cancelledAt && now.getTime() - conversation.cancelledAt.getTime() < DAY_MS) {
-    return "ignored";
+  // Unknown number: the welcome menu (patients and donors alike). Unprompted, it's sent at most
+  // once a day, and not within a day of them declining; a greeting always gets it.
+  if (!options.greeting) {
+    if (conversation?.status === "cancelled" && conversation.cancelledAt && now.getTime() - conversation.cancelledAt.getTime() < DAY_MS) {
+      return ignored("declined_recently");
+    }
+    if (await menuSentRecently(phoneLookup, now)) return ignored("menu_sent_recently");
   }
-  const snapshot = startSnapshot(false);
-  await beginConversation({ phoneLookup, snapshot, userId: user?._id, now });
-  await reply(msg, [promptFor(snapshot)]);
+  await showMainMenu(msg, now, { welcome: true, userId: user?._id });
   return "welcome";
 }

@@ -61,17 +61,17 @@ async function OperationsContent() {
           title="WhatsApp connection"
           id="wa"
           note="Pilot via whatsapp-web.js. Delivery is never guaranteed; only acknowledged deliveries are counted."
-          actions={<Link href="/admin/whatsapp" className="rounded-full px-3 py-1.5 text-sm font-semibold text-brand-600 hover:bg-brand-50">QR, reconnect & logout →</Link>}
+          actions={<Link href="/admin/whatsapp" className="inline-flex min-h-10 items-center rounded-md border-2 border-ink bg-surface px-3 text-sm font-bold text-ink shadow-brut-xs transition-colors hover:bg-signal-300">QR, reconnect & logout →</Link>}
         >
           <div className="flex flex-wrap items-center gap-2">
             <Pill tone={waTone}>{wa.workerOnline ? STATE_LABEL[wa.state] : "Worker offline"}</Pill>
             {wa.account && <span className="text-sm text-ink-soft">{wa.account.maskedNumber}{wa.account.pushName ? ` · ${wa.account.pushName}` : ""}</span>}
           </div>
           <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
-            <div><dt className="text-xs text-ink-muted">Last connected</dt><dd className="font-medium text-ink">{wa.lastReadyAt ? formatIST(wa.lastReadyAt) : "Never"}</dd></div>
-            <div><dt className="text-xs text-ink-muted">Last disconnect</dt><dd className="font-medium text-ink">{wa.lastDisconnectedAt ? `${formatIST(wa.lastDisconnectedAt)}${wa.lastDisconnectReason ? ` (${wa.lastDisconnectReason})` : ""}` : "None"}</dd></div>
+            <div><dt className="text-xs text-ink-muted">Last connected</dt><dd className="font-bold text-ink">{wa.lastReadyAt ? formatIST(wa.lastReadyAt) : "Never"}</dd></div>
+            <div><dt className="text-xs text-ink-muted">Last disconnect</dt><dd className="font-bold text-ink">{wa.lastDisconnectedAt ? `${formatIST(wa.lastDisconnectedAt)}${wa.lastDisconnectReason ? ` (${wa.lastDisconnectReason})` : ""}` : "None"}</dd></div>
           </dl>
-          {wa.lastError && <p className="mt-3 rounded-xl bg-danger-50 px-3 py-2 text-xs text-danger-600">{wa.lastError}</p>}
+          {wa.lastError && <p className="mt-3 rounded-md bg-danger-50 px-3 py-2 text-xs text-danger-600">{wa.lastError}</p>}
         </Card>
 
         <Card title="Bot controls" id="controls" note="STOP is always honoured, even with the bot switched off. Changes are audit-logged.">
@@ -110,7 +110,7 @@ async function OperationsContent() {
             <Stat label="Suppressed, 24 h" value={o.queue.suppressed24h} hint="consent / limits" />
           </div>
         </Card>
-        <Card title="Institutions" id="inst" actions={<Link href="/admin/institutions" className="rounded-full px-3 py-1.5 text-sm font-semibold text-brand-600 hover:bg-brand-50">Manage →</Link>}>
+        <Card title="Institutions" id="inst" actions={<Link href="/admin/institutions" className="inline-flex min-h-10 items-center rounded-md border-2 border-ink bg-surface px-3 text-sm font-bold text-ink shadow-brut-xs transition-colors hover:bg-signal-300">Manage →</Link>}>
           <div className="grid grid-cols-2 gap-3">
             <Stat label="Verified" value={o.institutions.verified} tone="good" />
             <Stat label="Awaiting verification" value={o.institutions.pending} tone={o.institutions.pending ? "warn" : "neutral"} />
@@ -128,7 +128,7 @@ async function OperationsContent() {
           <ul className="mt-4 divide-y divide-line text-sm">
             {dead.map((j) => (
               <li key={j.id} className="flex flex-wrap items-center justify-between gap-3 py-2.5">
-                <span><span className="font-medium text-ink">{j.type.replace(/_/g, " ")}</span><span className="block text-xs text-ink-muted">{j.attempts} attempts{j.finishedAt ? ` · ${formatIST(j.finishedAt)}` : ""} · {j.lastError ?? "no error recorded"}</span></span>
+                <span><span className="font-bold text-ink">{j.type.replace(/_/g, " ")}</span><span className="block text-xs text-ink-muted">{j.attempts} attempts{j.finishedAt ? ` · ${formatIST(j.finishedAt)}` : ""} · {j.lastError ?? "no error recorded"}</span></span>
                 {canRetryJobs && <RetryJobButton jobId={j.id} />}
               </li>
             ))}
@@ -147,7 +147,7 @@ async function OperationsContent() {
                 <li key={e.fingerprint} className="py-2.5">
                   <span className="flex flex-wrap items-center gap-2">
                     <Pill tone="bad">{e.source.replace(/_/g, " ")}</Pill>
-                    <span className="font-medium text-ink">{e.event}</span>
+                    <span className="font-bold text-ink">{e.event}</span>
                     <span className="text-xs text-ink-muted">{e.count}× · last {formatIST(e.lastSeenAt)}</span>
                   </span>
                   <span className="mt-0.5 block break-words text-xs text-ink-muted">{e.errorName}{e.message ? `: ${e.message}` : ""}{e.where ? ` · ${e.where}` : ""}</span>
@@ -181,7 +181,7 @@ async function OperationsContent() {
               {failed.map((m) => (
                 <li key={m.id} className="flex flex-wrap items-center justify-between gap-3 py-2.5">
                   <span>
-                    <span className="font-medium text-ink">{m.kind.replace(/_/g, " ")}</span>
+                    <span className="font-bold text-ink">{m.kind.replace(/_/g, " ")}</span>
                     <span className="block text-xs text-ink-muted">
                       {m.recipient} · {m.failureCode ?? "unknown"} · {m.attempts} attempt{m.attempts === 1 ? "" : "s"}{m.failedAt ? ` · ${formatIST(m.failedAt)}` : ""}{m.requestPublicId ? ` · ${m.requestPublicId}` : ""}
                     </span>
@@ -201,7 +201,7 @@ async function OperationsContent() {
               {conversations.map((c) => (
                 <li key={c.id} className="flex items-center justify-between gap-3 py-2.5">
                   <span>
-                    <span className="font-medium text-ink">{FLOW_LABEL[c.flow] ?? c.flow}</span>
+                    <span className="font-bold text-ink">{FLOW_LABEL[c.flow] ?? c.flow}</span>
                     <span className="block text-xs text-ink-muted">{c.maskedPhone} · step “{c.state.replace(/_/g, " ")}” · {formatIST(c.updatedAt)}</span>
                   </span>
                   <Pill tone={c.status === "active" ? "brand" : c.status === "completed" ? "good" : "neutral"}>{c.status}</Pill>
@@ -209,7 +209,7 @@ async function OperationsContent() {
               ))}
             </ul>
           )}
-          {can(user.role, "audit.read") && <p className="mt-3 text-xs"><Link href="/admin/audit" className="font-semibold text-brand-600 hover:text-brand-700">Audit history →</Link></p>}
+          {can(user.role, "audit.read") && <p className="mt-3 text-xs"><Link href="/admin/audit" className="font-bold text-brand-700 underline decoration-2 underline-offset-4 hover:text-brand-600">Audit history →</Link></p>}
         </Card>
       </div>
     </div>

@@ -53,17 +53,17 @@ function describe(status: WhatsAppStatusResponse | null): Display {
 }
 
 const TONE_CLASSES: Record<Display["tone"], string> = {
-  success: "bg-success-50 text-success-600 ring-success-600/20",
-  progress: "bg-warning-50 text-warning-800 ring-warning-200",
-  idle: "bg-paper-deep text-ink-soft ring-line-strong",
-  danger: "bg-danger-50 text-danger-600 ring-danger-600/20",
+  success: "bg-mint-400 text-ink",
+  progress: "bg-signal-300 text-ink",
+  idle: "bg-paper-deep text-ink",
+  danger: "bg-brand-500 text-white",
 };
 
 const DOT_CLASSES: Record<Display["tone"], string> = {
-  success: "bg-success-600",
-  progress: "bg-warning-800 animate-pulse",
+  success: "bg-ink",
+  progress: "bg-ink animate-pulse",
   idle: "bg-ink-muted",
-  danger: "bg-danger-600",
+  danger: "bg-white",
 };
 
 /** canManage: pairing, connect/disconnect and test sends (super admin). Coordinators get the read-only view. */
@@ -139,7 +139,7 @@ export function WhatsAppPanel({ canManage }: { canManage: boolean }) {
 
   return (
     <div className="space-y-5">
-      <aside className="flex gap-3 rounded-2xl border border-warning-200 bg-warning-50 p-4 text-sm leading-relaxed text-warning-800 sm:p-5">
+      <aside className="flex gap-3 rounded-md border-2 border-ink bg-signal-50 p-4 text-sm leading-relaxed text-warning-800 sm:p-5">
         <AlertIcon className="mt-0.5 size-5 shrink-0" />
         <div>
           <p>
@@ -158,20 +158,20 @@ export function WhatsAppPanel({ canManage }: { canManage: boolean }) {
 
       <div className="grid gap-5 lg:grid-cols-[1.15fr_0.85fr]">
         {/* Connection */}
-        <section aria-labelledby="wa-connection" className="rounded-[var(--radius-card)] border border-line bg-surface p-6 shadow-soft sm:p-7">
+        <section aria-labelledby="wa-connection" className="rounded-[var(--radius-card)] border-2 border-ink bg-surface p-6 shadow-brut sm:p-7">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="flex items-center gap-3">
-              <span className="flex size-10 items-center justify-center rounded-2xl bg-brand-50 text-brand-600">
+              <span className="flex size-10 items-center justify-center rounded-sm border-2 border-ink bg-signal-300 text-ink">
                 <ChatIcon className="size-5" />
               </span>
-              <h2 id="wa-connection" className="font-semibold text-ink">
+              <h2 id="wa-connection" className="font-bold text-ink">
                 Connection
               </h2>
             </div>
             <span
               role="status"
               aria-live="polite"
-              className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-semibold ring-1 ${TONE_CLASSES[display.tone]}`}
+              className={`inline-flex items-center gap-2 rounded-sm border-2 border-ink px-2.5 py-1 font-mono text-xs font-bold uppercase tracking-[0.08em] shadow-brut-xs ${TONE_CLASSES[display.tone]}`}
             >
               <span className={`size-2 rounded-full ${DOT_CLASSES[display.tone]}`} />
               {display.label}
@@ -217,7 +217,7 @@ export function WhatsAppPanel({ canManage }: { canManage: boolean }) {
           )}
 
           {confirmLogout && (
-            <div className="mt-4 rounded-2xl border border-danger-600/20 bg-danger-50 p-4 text-sm text-danger-600" role="alertdialog" aria-labelledby="wa-logout-title">
+            <div className="mt-4 rounded-md border-2 border-ink bg-danger-50 p-4 text-sm text-danger-600" role="alertdialog" aria-labelledby="wa-logout-title">
               <p id="wa-logout-title" className="font-semibold">Disconnect WhatsApp?</p>
               <p className="mt-1 leading-relaxed">
                 This unlinks the device from the phone and deletes the saved session on the server. Queued messages wait
@@ -239,11 +239,11 @@ export function WhatsAppPanel({ canManage }: { canManage: boolean }) {
         </section>
 
         {/* Pairing */}
-        <section aria-labelledby="wa-pairing" className="flex flex-col rounded-[var(--radius-card)] border border-line bg-surface p-6 shadow-soft sm:p-7">
-          <h2 id="wa-pairing" className="font-semibold text-ink">
+        <section aria-labelledby="wa-pairing" className="flex flex-col rounded-[var(--radius-card)] border-2 border-ink bg-surface p-6 shadow-brut sm:p-7">
+          <h2 id="wa-pairing" className="font-bold text-ink">
             Pairing
           </h2>
-          <div className="mt-4 flex flex-1 flex-col items-center justify-center rounded-2xl bg-paper-deep/60 p-5 text-center">
+          <div className="mt-4 flex flex-1 flex-col items-center justify-center rounded-md border-2 border-dashed border-ink/50 bg-paper bg-dots p-5 text-center">
             {!online ? (
               <>
                 <InfoIcon className="size-7 text-ink-muted" />
@@ -261,7 +261,7 @@ export function WhatsAppPanel({ canManage }: { canManage: boolean }) {
                   <img
                     src={`data:image/svg+xml;utf8,${encodeURIComponent(visibleQr.svg)}`}
                     alt="WhatsApp pairing QR code"
-                    className="aspect-square w-full max-w-64 rounded-xl bg-white p-2"
+                    className="aspect-square w-full max-w-64 rounded-md bg-white p-2"
                   />
                   <p className="mt-4 text-sm leading-relaxed text-ink-soft">
                     On the pilot phone, open WhatsApp → <strong>Settings</strong> → <strong>Linked devices</strong> →{" "}
@@ -273,7 +273,7 @@ export function WhatsAppPanel({ canManage }: { canManage: boolean }) {
               )
             ) : status?.state === "connected" ? (
               <>
-                <span className="flex size-12 items-center justify-center rounded-full bg-success-50 text-success-600">
+                <span className="flex size-12 items-center justify-center rounded-md border-2 border-ink bg-mint-400 text-ink shadow-brut-xs">
                   <CheckIcon className="size-6" />
                 </span>
                 <p className="mt-3 font-medium text-ink">Paired</p>
@@ -311,9 +311,9 @@ function Row({ label, value }: { label: string; value: string }) {
 }
 
 function Notice({ tone, children }: { tone: "danger" | "success"; children: React.ReactNode }) {
-  const classes = tone === "danger" ? "bg-danger-50 text-danger-600" : "bg-success-50 text-success-600";
+  const classes = tone === "danger" ? "border-danger-600 bg-danger-50 text-danger-600" : "border-ink bg-mint-50 text-ink";
   return (
-    <p role={tone === "danger" ? "alert" : "status"} className={`mt-4 flex gap-2 rounded-xl px-3.5 py-3 text-sm leading-snug ${classes}`}>
+    <p role={tone === "danger" ? "alert" : "status"} className={`mt-4 flex gap-2 rounded-md border-2 px-3.5 py-3 text-sm font-semibold leading-snug ${classes}`}>
       {tone === "danger" ? <InfoIcon className="mt-px size-4 shrink-0" /> : <CheckIcon className="mt-px size-4 shrink-0" />}
       {children}
     </p>
@@ -342,12 +342,12 @@ function TestMessageForm({ disabled, onQueued }: { disabled: boolean; onQueued: 
   }
 
   return (
-    <section aria-labelledby="wa-test" className="rounded-[var(--radius-card)] border border-line bg-surface p-6 shadow-soft sm:p-7">
+    <section aria-labelledby="wa-test" className="rounded-[var(--radius-card)] border-2 border-ink bg-surface p-6 shadow-brut sm:p-7">
       <div className="flex items-center gap-3">
-        <span className="flex size-10 items-center justify-center rounded-2xl bg-brand-50 text-brand-600">
+        <span className="flex size-10 items-center justify-center rounded-sm border-2 border-ink bg-signal-300 text-ink">
           <PhoneIcon className="size-5" />
         </span>
-        <h2 id="wa-test" className="font-semibold text-ink">
+        <h2 id="wa-test" className="font-bold text-ink">
           Send a test message
         </h2>
       </div>
@@ -357,11 +357,11 @@ function TestMessageForm({ disabled, onQueued }: { disabled: boolean; onQueued: 
       </p>
       <form onSubmit={submit} noValidate className="mt-5 grid gap-4 md:grid-cols-[minmax(0,18rem)_minmax(0,1fr)]">
         <div>
-          <label htmlFor={ids.phone} className="text-sm font-semibold text-ink">
+          <label htmlFor={ids.phone} className="text-sm font-bold text-ink">
             Recipient
           </label>
-          <div className="mt-2 flex h-12 items-center overflow-hidden rounded-xl border border-line-strong bg-surface focus-within:border-brand-500 focus-within:ring-4 focus-within:ring-brand-100">
-            <span className="flex h-full items-center border-r border-line bg-paper-deep/70 px-3 text-sm font-semibold text-ink">{INDIA_COUNTRY_CODE}</span>
+          <div className="mt-2 flex h-12 items-center overflow-hidden rounded-md border-2 border-ink bg-surface shadow-brut-xs transition-[box-shadow,background-color] focus-within:bg-signal-50 focus-within:shadow-brut">
+            <span className="flex h-full items-center border-r-2 border-ink bg-signal-300 px-3 font-mono text-sm font-bold text-ink">{INDIA_COUNTRY_CODE}</span>
             <input
               id={ids.phone}
               type="tel"
@@ -386,7 +386,7 @@ function TestMessageForm({ disabled, onQueued }: { disabled: boolean; onQueued: 
             rows={3}
             value={text}
             onChange={(e) => setText(e.target.value)}
-            className="mt-2 w-full resize-y rounded-xl border border-line-strong bg-surface px-3 py-2.5 text-ink outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-100"
+            className="mt-2 w-full resize-y rounded-md border-2 border-ink bg-surface px-3 py-2.5 text-ink outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-100"
           />
         </div>
         <div className="md:col-span-2">
@@ -404,10 +404,10 @@ function TestMessageForm({ disabled, onQueued }: { disabled: boolean; onQueued: 
 
 const STATUS_STYLES: Record<MessageStatus, string> = {
   queued: "bg-paper-deep text-ink-soft",
-  sending: "bg-warning-50 text-warning-800",
-  sent: "bg-brand-50 text-brand-700",
-  delivered: "bg-success-50 text-success-600",
-  read: "bg-success-50 text-success-600",
+  sending: "bg-signal-300 text-ink",
+  sent: "bg-surface text-ink",
+  delivered: "bg-mint-100 text-mint-800",
+  read: "bg-mint-400 text-ink",
   failed: "bg-danger-50 text-danger-600",
   suppressed: "bg-paper-deep text-ink-muted",
 };
@@ -426,9 +426,9 @@ const KIND_LABELS: Record<MessageLogEntry["kind"], string> = {
 
 function MessageLog({ messages, onRefresh }: { messages: MessageLogEntry[]; onRefresh: () => Promise<void> }) {
   return (
-    <section aria-labelledby="wa-log" className="rounded-[var(--radius-card)] border border-line bg-surface shadow-soft">
+    <section aria-labelledby="wa-log" className="rounded-[var(--radius-card)] border-2 border-ink bg-surface shadow-brut">
       <div className="flex items-center justify-between gap-3 p-6 pb-4 sm:px-7">
-        <h2 id="wa-log" className="font-semibold text-ink">
+        <h2 id="wa-log" className="font-bold text-ink">
           Recent messages
         </h2>
         <Button variant="ghost" onClick={() => void onRefresh()} className="h-9 px-3 text-sm">
@@ -440,7 +440,7 @@ function MessageLog({ messages, onRefresh }: { messages: MessageLogEntry[]; onRe
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[40rem] text-left text-sm">
-            <thead className="border-y border-line bg-paper-deep/50 text-xs uppercase tracking-wide text-ink-muted">
+            <thead className="border-y-2 border-ink bg-ink font-mono text-[0.66rem] uppercase tracking-[0.1em] text-white">
               <tr>
                 <th scope="col" className="px-6 py-2.5 font-semibold sm:px-7">Queued</th>
                 <th scope="col" className="px-3 py-2.5 font-semibold">Recipient</th>
@@ -456,7 +456,7 @@ function MessageLog({ messages, onRefresh }: { messages: MessageLogEntry[]; onRe
                   <td className="whitespace-nowrap px-3 py-3 font-medium text-ink">{m.recipient}</td>
                   <td className="whitespace-nowrap px-3 py-3 text-ink-soft">{KIND_LABELS[m.kind]}</td>
                   <td className="px-3 py-3">
-                    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_STYLES[m.status]}`}>
+                    <span className={`inline-flex items-center gap-1 rounded-sm border-2 border-ink px-1.5 py-px font-mono text-[0.66rem] font-bold uppercase tracking-[0.08em] ${STATUS_STYLES[m.status]}`}>
                       {m.status === "failed" && <XIcon className="size-3" />}
                       {m.status}
                     </span>

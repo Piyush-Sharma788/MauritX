@@ -137,10 +137,10 @@ export function PhoneLoginFlow() {
 
       {step.name === "success" ? (
         <div className="flex flex-col items-center py-10 text-center" role="status">
-          <span className="flex size-16 items-center justify-center rounded-full bg-success-50 text-success-600">
-            <CheckIcon className="size-8" />
+          <span className="animate-pop flex size-16 items-center justify-center rounded-md border-2 border-ink bg-mint-400 text-ink shadow-brut-sm [--pop-rotate:-6deg]">
+            <CheckIcon className="size-8" strokeWidth={3} />
           </span>
-          <h1 className="mt-5 font-display text-2xl font-bold tracking-tight text-ink">You&apos;re verified</h1>
+          <h1 className="mt-5 font-display text-2xl font-extrabold tracking-[-0.035em] text-ink">You&apos;re verified</h1>
           <p className="mt-2 flex items-center gap-2 text-ink-soft">
             <Spinner /> Taking you to your dashboard…
           </p>
@@ -151,13 +151,13 @@ export function PhoneLoginFlow() {
             <button
               type="button"
               onClick={changeNumber}
-              className="-ml-2 mb-4 inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-sm font-medium text-ink-soft hover:bg-ink/5 hover:text-ink"
+              className="-ml-2 mb-4 inline-flex items-center gap-1.5 rounded-md border-2 border-transparent px-2 py-1 text-sm font-semibold text-ink transition-colors hover:border-ink hover:bg-signal-300"
             >
               <ArrowLeftIcon className="size-4" /> Change number
             </button>
           )}
 
-          <h1 className="font-display text-[1.9rem] font-bold leading-tight tracking-[-0.035em] text-ink">{heading}</h1>
+          <h1 className="font-display text-[2.1rem] font-extrabold leading-[1.02] tracking-[-0.045em] text-ink">{heading}</h1>
 
           {step.name === "phone" ? (
             <p className="mt-2 leading-relaxed text-ink-soft">
@@ -177,7 +177,7 @@ export function PhoneLoginFlow() {
           )}
 
           {step.name === "otp" && step.delivery.channel === "development" && (
-            <div className="mt-5 flex gap-3 rounded-2xl border border-warning-200 bg-warning-50 p-4 text-sm leading-relaxed text-warning-800" role="note">
+            <div className="mt-5 flex gap-3 rounded-md border-2 border-ink bg-signal-50 p-4 text-sm leading-relaxed text-ink shadow-brut-xs" role="note">
               <AlertIcon className="mt-0.5 size-5 shrink-0" />
               <p>
                 <strong className="font-semibold">Development mode.</strong> This code was <strong>not</strong> sent via
@@ -188,15 +188,15 @@ export function PhoneLoginFlow() {
 
           {step.name === "phone" ? (
             <form onSubmit={sendCode} noValidate className="mt-7">
-              <label htmlFor={ids.phone} className="text-sm font-semibold text-ink">
+              <label htmlFor={ids.phone} className="text-sm font-bold text-ink">
                 Mobile number
               </label>
               <div
-                className={`mt-2 flex h-14 items-center overflow-hidden rounded-2xl border bg-surface shadow-soft transition focus-within:border-brand-500 focus-within:ring-4 focus-within:ring-brand-100 ${
-                  error ? "border-danger-600" : "border-line-strong"
+                className={`mt-2 flex h-14 items-center overflow-hidden rounded-md border-2 bg-surface shadow-brut-sm transition-[box-shadow,background-color] focus-within:bg-signal-50 focus-within:shadow-brut ${
+                  error ? "border-danger-600" : "border-ink"
                 }`}
               >
-                <span className="flex h-full items-center gap-2 border-r border-line bg-paper-deep/70 px-4 text-[1.05rem] font-semibold text-ink" aria-hidden="true">
+                <span className="flex h-full items-center gap-2 border-r-2 border-ink bg-signal-300 px-4 font-mono text-[1.05rem] font-bold text-ink" aria-hidden="true">
                   <span className="text-lg leading-none">🇮🇳</span>
                   {INDIA_COUNTRY_CODE}
                 </span>
@@ -217,7 +217,7 @@ export function PhoneLoginFlow() {
                     setError(null);
                   }}
                   disabled={pending === "send"}
-                  className="h-full min-w-0 flex-1 bg-transparent px-4 text-[1.15rem] font-medium tracking-wide text-ink outline-none placeholder:text-ink-muted/60"
+                  className="h-full min-w-0 flex-1 bg-transparent px-4 font-mono text-[1.15rem] font-semibold tracking-wide text-ink outline-none placeholder:text-ink-muted/60"
                 />
                 {isValidIndianMobile(digits) && (
                   <CheckIcon className="mr-4 size-5 shrink-0 text-success-600" aria-hidden="true" />
@@ -243,7 +243,7 @@ export function PhoneLoginFlow() {
 
               <p className="mt-5 text-center text-xs leading-relaxed text-ink-muted">
                 By continuing, you agree to receive a one-time code on WhatsApp and to our{" "}
-                <Link href="/privacy" className="font-medium text-ink-soft underline underline-offset-2 hover:text-brand-600">
+                <Link href="/privacy" className="font-semibold text-ink underline decoration-brand-500 underline-offset-2">
                   privacy notice
                 </Link>
                 .
@@ -305,7 +305,7 @@ export function PhoneLoginFlow() {
                       type="button"
                       onClick={() => void resendCode(step.delivery.channel === "sms" ? "sms" : "whatsapp")}
                       disabled={pending === "resend"}
-                      className="inline-flex items-center gap-1.5 rounded-md font-semibold text-brand-600 hover:text-brand-700 disabled:opacity-60"
+                      className="inline-flex min-h-11 items-center gap-1.5 rounded-sm font-bold text-ink underline decoration-brand-500 decoration-2 underline-offset-4 hover:decoration-4 disabled:opacity-60"
                     >
                       {pending === "resend" && <Spinner className="size-3.5" />}
                       Resend code
@@ -317,7 +317,7 @@ export function PhoneLoginFlow() {
                           type="button"
                           onClick={() => void resendCode("sms")}
                           disabled={pending === "resend"}
-                          className="rounded-md font-semibold text-brand-600 hover:text-brand-700 disabled:opacity-60"
+                          className="inline-flex min-h-11 items-center rounded-sm font-bold text-ink underline decoration-brand-500 decoration-2 underline-offset-4 hover:decoration-4 disabled:opacity-60"
                         >
                           Send by SMS instead
                         </button>
@@ -337,7 +337,7 @@ export function PhoneLoginFlow() {
 function FormError({ message }: { message: string | null }) {
   if (!message) return null;
   return (
-    <p role="alert" className="mt-4 flex gap-2 rounded-xl bg-danger-50 px-3.5 py-3 text-sm leading-snug text-danger-600">
+    <p role="alert" className="mt-4 flex gap-2 rounded-md border-2 border-danger-600 bg-danger-50 px-3.5 py-3 text-sm font-semibold leading-snug text-danger-600">
       <InfoIcon className="mt-px size-4 shrink-0" />
       {message}
     </p>

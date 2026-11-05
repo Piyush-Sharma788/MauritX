@@ -1,6 +1,17 @@
 import { Schema, model, models, type InferSchemaType, type Model } from "mongoose";
 
-export const BOT_METRICS = ["inbound_processed", "inbound_dropped_disabled", "bot_errors", "ai_calls", "ai_errors", "ai_rejected_output"] as const;
+export const BOT_METRICS = [
+  "inbound_processed",
+  "inbound_dropped_disabled",
+  "inbound_unsupported",
+  "inbound_dropped_empty",
+  "bot_errors",
+  "ai_calls",
+  "ai_errors",
+  "ai_rejected_output",
+  "welcome_media_queued",
+  "media_fallback_text",
+] as const;
 export type BotMetricName = (typeof BOT_METRICS)[number];
 
 /**

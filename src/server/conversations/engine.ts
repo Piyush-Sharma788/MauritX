@@ -9,13 +9,18 @@ import { phoneLookupToken } from "@/lib/security/crypto";
 import { interpretMessage, safeSuggestedReply } from "@/server/ai/interpret";
 import type { AiMessageContext } from "@/server/ai/provider";
 import type { Interpretation } from "@/server/ai/schema";
-import { handleBotMessage, type InboundMessage } from "@/server/conversations/bot";
+import { handleBotMessage, REGISTER_WORDS, replyToDonorStart, RESUBSCRIBED_TEXT, START_WORDS, type InboundMessage } from "@/server/conversations/bot";
+import { closeMainMenu, isMenuConversation, menuNotUnderstood, showMainMenu } from "@/server/conversations/main-menu";
+import { MENU_DECLINED_TEXT, MENU_WORDS, parseMenuChoice, type MenuChoice } from "@/server/conversations/menu";
 import { requiredByInRange, type RequestDraft } from "@/server/conversations/request-machine";
-import { ConversationConflictError, isDonorFlow, loadConversation, saveConversation } from "@/server/conversations/store";
+import { beginConversation, ConversationConflictError, isDonorFlow, loadConversation, saveConversation, type ConversationRecord } from "@/server/conversations/store";
 import { continueDonorResponse, findAlertContext, handleAlertReply, parseAlertReply } from "@/server/coordination/responses";
 import { handleInstitutionCommand } from "@/server/institutions/whatsapp";
-import { verifiedInstitutionContact } from "@/server/messaging/eligibility";
+import { isOptedOut, verifiedInstitutionContact } from "@/server/messaging/eligibility";
+import { liftOptOut } from "@/server/messaging/opt-out";
 import { queueBotReplies } from "@/server/messaging/queue";
+import { runWithReplyContext, currentReplyContext } from "@/server/messaging/reply-context";
+import { HELP_TEXT } from "@/server/messaging/templates";
 import { DonorProfile } from "@/server/models/donor-profile";
 import { EmergencyRequest } from "@/server/models/emergency-request";
 import { User } from "@/server/models/user";
@@ -26,6 +31,11 @@ import { recordAudit } from "@/server/services/audit";
  * The WhatsApp conversation engine. Every inbound message (after dedupe,
  * rate limiting and STOP, see messaging/inbound.ts) comes here and is routed:
  *
+ * 0. After STOP only REGISTER/START/JOIN get through. MENU opens the
+ *    first-contact menu from anywhere; BACK at a flow's first question
+ *    returns to it. While the menu is open, its options (1-4, the command
+ *    words, YES/NO, Hindi) pick a flow; a numbered reply to a fresh
+ *    emergency alert still counts as the alert reply.
  * 1. An active flow (request, cancellation, alert reply, donor registration
  *    or update) continues. REQUEST is the one command that interrupts any
  *    flow, because an emergency outranks everything else.
@@ -47,10 +57,13 @@ export type Route =
   | "alert_reply"
   | "donor"
   | "ai"
-  | "keywords";
+  | "keywords"
+  | "menu"
+  | "ignored";
 
 const REQUEST_WORDS = new Set(["REQUEST", "NEED BLOOD", "BLOOD REQUEST", "EMERGENCY", "NEW REQUEST"]);
-const DONOR_WORDS = new Set(["REGISTER", "JOIN", "START", "SIGN UP", "SIGNUP", "DONATE", "DONOR", "HELP", "STATUS", "PROFILE", "MY PROFILE", "UPDATE", "EDIT", "PAUSE", "RESUME"]);
+const DONOR_WORDS = new Set(["REGISTER", "JOIN", "SIGN UP", "SIGNUP", "DONATE", "DONOR", "HELP", "STATUS", "PROFILE", "MY PROFILE", "UPDATE", "EDIT", "PAUSE", "RESUME"]);
+const BACK_WORDS = new Set(["BACK", "PREVIOUS"]);
 const keywordOf = (msg: InboundMessage) => (msg.input.type === "text" ? msg.input.text.trim().toUpperCase().replace(/\s+/g, " ") : "");
 const firstWord = (k: string) => k.split(" ")[0];
 
@@ -151,6 +164,8 @@ async function actOnInterpretation(msg: InboundMessage, interpretation: Interpre
       await handleBotMessage(withText(msg, "HELP"), now);
       return route;
     case "greeting":
+      // The menu (or the donor's command list) answers greetings; see route().
+      return null;
     case "other": {
       if (source !== "ai") return null;
       const suggestion = safeSuggestedReply(interpretation);
@@ -161,14 +176,98 @@ async function actOnInterpretation(msg: InboundMessage, interpretation: Interpre
   }
 }
 
+/** A menu option, chosen by number, word or Hindi equivalent. */
+async function handleMenuChoice(choice: MenuChoice, menu: ConversationRecord, msg: InboundMessage, now: Date): Promise<Route> {
+  switch (choice) {
+    case "request":
+      await startRequestConversation(msg, {}, now);
+      return "request";
+    case "donor":
+      // Same as REGISTER: starts registration, or shows the profile of someone already registered.
+      await handleBotMessage(withText(msg, "REGISTER"), now);
+      return "donor";
+    case "track":
+      await closeMainMenu(menu, "completed", now);
+      await trackRequests(msg, null, now);
+      return "track";
+    case "help":
+      await closeMainMenu(menu, "completed", now);
+      await queueBotReplies(msg.fromE164, msg.providerMessageId, [HELP_TEXT]);
+      return "menu";
+    case "decline":
+      await closeMainMenu(menu, "cancelled", now);
+      await queueBotReplies(msg.fromE164, msg.providerMessageId, [MENU_DECLINED_TEXT]);
+      return "menu";
+  }
+}
+
+/** Ends the menu if it's still the open conversation (a read-only command answered it). */
+async function leaveMenu(phoneLookup: string, now: Date) {
+  const current = await loadConversation(phoneLookup);
+  if (current && isMenuConversation(current)) await closeMainMenu(current, "completed", now);
+}
+
 async function route(msg: InboundMessage, now: Date): Promise<Route> {
   await connectToDatabase();
   const keyword = keywordOf(msg);
   const lookup = phoneLookupToken(msg.fromE164);
-  const conversation = await loadConversation(lookup);
+
+  // 0. START resumes messages for anyone (the STOP confirmation tells everyone to reply START).
+  //    It never starts donor registration: a patient's family must not be pushed into it.
+  if (START_WORDS.has(keyword)) {
+    const resubscribed = await liftOptOut(msg.fromE164, "whatsapp_join");
+    if (await replyToDonorStart(msg, resubscribed)) return "donor";
+    const existing = await loadConversation(lookup);
+    // A brand-new number's first "START" gets the full welcome (and image), like any first message.
+    const firstContact = currentReplyContext()?.attachWelcomeImage === true;
+    await showMainMenu(msg, now, { welcome: firstContact, lead: resubscribed ? RESUBSCRIBED_TEXT : undefined, userId: existing?.userId ?? undefined });
+    return "menu";
+  }
+
+  // After STOP the bot stays silent until START, or REGISTER/JOIN (which also lift the opt-out).
+  if (!REGISTER_WORDS.has(keyword) && (await isOptedOut(lookup))) {
+    logger.info("whatsapp.inbound_ignored", { reason: "opted_out" });
+    return "ignored";
+  }
+
+  let conversation = await loadConversation(lookup);
+  if (conversation?.status === "active" && conversation.flow === "donor_onboarding" && conversation.state === "await_start") {
+    // Saved before the menu existed ("Would you like to register? YES/NO"): it is the menu now.
+    await beginConversation({ phoneLookup: lookup, snapshot: { flow: "main_menu", state: "choose", history: [], data: { invalid: 0 } }, userId: conversation.userId ?? undefined, now });
+    conversation = await loadConversation(lookup);
+  }
+  const menu = isMenuConversation(conversation) ? conversation : null;
+
+  // MENU from anywhere; BACK while the menu is open (there's nothing further back) shows it again.
+  if (MENU_WORDS.has(keyword) || (menu && (keyword === "BACK" || keyword === "GO BACK"))) {
+    const setAside = conversation?.status === "active" && !menu;
+    await showMainMenu(msg, now, { lead: setAside ? "Your earlier conversation was set aside." : undefined, userId: conversation?.userId ?? undefined });
+    return "menu";
+  }
+  if (
+    BACK_WORDS.has(keyword) &&
+    conversation?.status === "active" &&
+    (conversation.flow === "emergency_request" || conversation.flow === "donor_onboarding") &&
+    conversation.history.length === 0
+  ) {
+    // BACK at the first question goes back to where the person chose this.
+    const lead = conversation.flow === "emergency_request" ? "OK, the request was stopped. Nothing was submitted." : "OK, registration stopped. Nothing was saved.";
+    await showMainMenu(msg, now, { lead, userId: conversation.userId ?? undefined });
+    return "menu";
+  }
+
+  if (menu && msg.input.type === "text") {
+    const choice = parseMenuChoice(msg.input.text);
+    if (choice) {
+      // A numbered answer to an emergency alert the donor just got outranks the menu.
+      const alertReply = parseAlertReply(msg.input.text);
+      if (alertReply && /^[1-4]$/.test(msg.input.text.trim()) && (await handleAlertReply(msg, alertReply, null, now))) return "alert_reply";
+      return handleMenuChoice(choice, menu, msg, now);
+    }
+  }
 
   // 1. Active flows.
-  if (conversation?.status === "active") {
+  if (conversation?.status === "active" && !menu) {
     if (REQUEST_WORDS.has(keyword) && conversation.flow !== "emergency_request") {
       await startRequestConversation(msg, {}, now, "Starting an emergency blood request. (Your earlier conversation was set aside; you can restart it later.)");
       return "request";
@@ -204,10 +303,12 @@ async function route(msg: InboundMessage, now: Date): Promise<Route> {
     return "request";
   }
   if (firstWord(keyword) === "TRACK") {
+    if (menu) await leaveMenu(lookup, now);
     await trackRequests(msg, findRequestId(keyword), now);
     return "track";
   }
   if (firstWord(keyword) === "CANCEL") {
+    if (menu) await leaveMenu(lookup, now);
     await startCancel(msg, findRequestId(keyword), now);
     return "cancel";
   }
@@ -218,27 +319,61 @@ async function route(msg: InboundMessage, now: Date): Promise<Route> {
     if (alertReply && (await handleAlertReply(msg, alertReply, findRequestId(msg.input.text), now))) return "alert_reply";
   }
 
+  // 4a. A bare 1–4 as a number's very first message (from the welcome image, a poster or a
+  //     forwarded message) is a menu choice: act on it instead of showing the menu first.
+  if (msg.input.type === "text" && /^[1-4]$/.test(msg.input.text.trim()) && currentReplyContext()?.attachWelcomeImage && conversation?.status !== "active") {
+    const choice = parseMenuChoice(msg.input.text);
+    if (choice) {
+      await beginConversation({ phoneLookup: lookup, snapshot: { flow: "main_menu", state: "choose", history: [], data: { invalid: 0 } }, now });
+      const opened = await loadConversation(lookup);
+      if (opened) return handleMenuChoice(choice, opened, msg, now);
+    }
+  }
+
   // 5. Donor commands, and location shares, go to the donor bot.
+  if (menu && msg.input.type !== "text") {
+    await menuNotUnderstood(menu, msg, now, "Thanks. First, please choose an option: reply 1, 2, 3 or 4.");
+    return "menu";
+  }
   if (DONOR_WORDS.has(keyword) || msg.input.type !== "text") {
+    if (menu) await leaveMenu(lookup, now);
     await handleBotMessage(msg, now);
     return "donor";
   }
 
   // 6. Free text.
   const { interpretation, source } = await interpretMessage(msg.input.text, await senderContext(msg.fromE164, now), lookup, now);
+  const greeting = interpretation.intent === "greeting";
+  if (menu && greeting) {
+    await showMainMenu(msg, now, { userId: menu.userId ?? undefined });
+    return "menu";
+  }
   const handled = await actOnInterpretation(msg, interpretation, source, now);
-  if (handled) return handled;
-  await handleBotMessage(msg, now);
+  if (handled) {
+    if (menu) await leaveMenu(lookup, now);
+    return handled;
+  }
+  if (menu) {
+    await menuNotUnderstood(menu, msg, now);
+    return "menu";
+  }
+  await handleBotMessage(msg, now, { greeting });
   return "donor";
 }
 
-/** Routes one inbound message, retrying once if another message for the same number raced it. */
-export async function processConversation(msg: InboundMessage, now = new Date()): Promise<Route> {
-  try {
-    return await route(msg, now);
-  } catch (error) {
-    if (!(error instanceof ConversationConflictError)) throw error;
-    logger.warn("bot.conversation_conflict_retry");
-    return route(msg, now);
-  }
+/**
+ * Routes one inbound message, retrying once if another message for the same
+ * number raced it. `firstContact` (a number's first-ever message, see
+ * inbound.ts) attaches the welcome image to the first reply.
+ */
+export async function processConversation(msg: InboundMessage, now = new Date(), options: { firstContact?: boolean } = {}): Promise<Route> {
+  return runWithReplyContext({ inboundMessageId: msg.providerMessageId, attachWelcomeImage: Boolean(options.firstContact) }, async () => {
+    try {
+      return await route(msg, now);
+    } catch (error) {
+      if (!(error instanceof ConversationConflictError)) throw error;
+      logger.warn("bot.conversation_conflict_retry");
+      return route(msg, now);
+    }
+  });
 }

@@ -4,6 +4,7 @@ import { logger } from "@/lib/logger";
 import { reportError } from "@/server/monitoring/report";
 import { safeEqual } from "@/lib/security/crypto";
 import type { WhatsAppWebConfig } from "@/lib/whatsapp-web/config";
+import { MessagingError } from "@/server/messaging/provider";
 import { BusyError, type WhatsAppSessionManager } from "@/worker/whatsapp/session-manager";
 
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
@@ -55,6 +56,27 @@ export function startControlServer(config: WhatsAppWebConfig, manager: WhatsAppS
           const body = await readJson(req);
           await manager.connect({ restart: body.restart === true });
           return send(res, 202, { state: manager.connectionState });
+        }
+        case "POST /send-otp": {
+          // Development only (OTP_PROVIDER=whatsapp_web; the web app refuses it in production).
+          // The code is never logged.
+          const body = await readJson(req);
+          const phone = typeof body.phone === "string" ? body.phone : "";
+          const code = typeof body.code === "string" ? body.code : "";
+          const minutes = Number(body.minutes);
+          if (!/^\+91[6-9]\d{9}$/.test(phone) || !/^\d{4,8}$/.test(code) || !Number.isInteger(minutes) || minutes < 1 || minutes > 30) {
+            return send(res, 400, { error: "invalid" });
+          }
+          if (!manager.isReady()) return send(res, 503, { error: "not_connected" });
+          try {
+            const text = `${code} is your MarutiX sign-in code. It expires in ${minutes} minutes.\nDon't share it with anyone: MarutiX will never ask you for it.`;
+            const sent = await manager.sendText(phone, text);
+            return send(res, 200, { providerMessageId: sent.providerMessageId });
+          } catch (error) {
+            if (error instanceof MessagingError && error.code === "NOT_CONNECTED") return send(res, 503, { error: "not_connected" });
+            if (error instanceof MessagingError && error.code === "NOT_ON_WHATSAPP") return send(res, 422, { error: "not_on_whatsapp" });
+            return send(res, 502, { error: "send_failed" });
+          }
         }
         case "POST /logout":
           await manager.logout();

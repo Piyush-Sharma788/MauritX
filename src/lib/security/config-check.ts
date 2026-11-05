@@ -6,6 +6,7 @@ import { getEmailConfig } from "@/lib/email/config";
 import { getEnv } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { getMessagingProviderName, getWhatsAppCloudConfig } from "@/lib/whatsapp/cloud-config";
+import { getWhatsAppMediaConfig } from "@/lib/whatsapp/media-config";
 import { getWhatsAppWebConfig } from "@/lib/whatsapp-web/config";
 import { requestRetentionDays } from "@/lib/privacy/retention-config";
 import { getSmsConfig } from "@/lib/sms/config";
@@ -66,6 +67,8 @@ export function checkServerConfiguration(role: ProcessRole, environment: Record<
     if (url && new URL(url).protocol !== "https:") throw new Error("ERROR_ALERT_WEBHOOK_URL must be an https URL");
   });
   if (role === "whatsapp-worker") attempt("whatsapp web", getWhatsAppWebConfig);
+  // Workers send the welcome image; check its settings at boot, not at the first send.
+  if (role !== "web") attempt("whatsapp media", getWhatsAppMediaConfig);
   if (errors.length) return { errors, warnings };
 
   const env = getEnv();

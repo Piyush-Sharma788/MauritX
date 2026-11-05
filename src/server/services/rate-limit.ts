@@ -20,6 +20,20 @@ export const RATE_LIMITS = {
   otpSmsPerIp: { scope: "otp-sms:ip", limit: 5, windowSeconds: 60 * 60 },
 } satisfies Record<string, RateLimitRule>;
 
+/**
+ * Per-admin limits on endpoints that fan out to many records or send
+ * messages. Generous for real coordination work; they stop a runaway script
+ * or a hijacked admin session from mass-messaging donors.
+ */
+export const ADMIN_RATE_LIMITS = {
+  matching: { scope: "admin-matching:user", limit: 30, windowSeconds: 10 * 60 },
+  alerts: { scope: "admin-alerts:user", limit: 60, windowSeconds: 10 * 60 },
+  testMessage: { scope: "admin-test-message:user", limit: 20, windowSeconds: 10 * 60 },
+  whatsappSession: { scope: "admin-whatsapp-session:user", limit: 10, windowSeconds: 10 * 60 },
+  // Each manual discovery run queues calls to public OpenStreetMap servers.
+  discovery: { scope: "admin-discovery:user", limit: 6, windowSeconds: 60 * 60 },
+} satisfies Record<string, RateLimitRule>;
+
 function isDuplicateKeyError(error: unknown): boolean {
   return (error as { code?: number })?.code === 11000;
 }

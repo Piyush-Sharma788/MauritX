@@ -19,7 +19,8 @@ const envSchema = z
       .refine((v) => Buffer.from(v, "base64").length === 32, {
         message: "PII_ENCRYPTION_KEY must be 32 bytes encoded as base64",
       }),
-    OTP_PROVIDER: z.enum(["whatsapp", "development"]).optional(),
+    // whatsapp_web: development only, sends codes from the phone linked to the WhatsApp Web pilot.
+    OTP_PROVIDER: z.enum(["whatsapp", "whatsapp_web", "development"]).optional(),
     WHATSAPP_ACCESS_TOKEN: z.string().optional(),
     WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
     WHATSAPP_OTP_TEMPLATE_NAME: z.string().optional(),
@@ -40,6 +41,13 @@ const envSchema = z
     return { ...env, otpProvider, hasWhatsApp };
   })
   .superRefine((env, ctx) => {
+    if (env.otpProvider === "whatsapp_web" && env.NODE_ENV === "production") {
+      ctx.addIssue({
+        code: "custom",
+        path: ["OTP_PROVIDER"],
+        message: "OTP_PROVIDER=whatsapp_web is for development only; production sign-in codes must use the official WhatsApp Cloud API (OTP_PROVIDER=whatsapp)",
+      });
+    }
     if (env.otpProvider === "development" && env.NODE_ENV === "production") {
       ctx.addIssue({
         code: "custom",
@@ -59,12 +67,15 @@ const envSchema = z
 
 export type ServerEnv = z.output<typeof envSchema>;
 
+/** The schema check alone, without caching (tests and tooling). */
+export const parseServerEnv = (raw: Record<string, string | undefined>) => envSchema.safeParse(raw);
+
 let cached: ServerEnv | undefined;
 
 /** Validated server environment. Throws a descriptive error on misconfiguration. */
 export function getEnv(): ServerEnv {
   if (cached) return cached;
-  const parsed = envSchema.safeParse(definedEnv());
+  const parsed = parseServerEnv(definedEnv());
   if (!parsed.success) {
     const issues = parsed.error.issues.map((i) => `  - ${i.path.join(".") || "env"}: ${i.message}`);
     throw new Error(`Invalid server environment configuration:\n${issues.join("\n")}`);

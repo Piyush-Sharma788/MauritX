@@ -32,7 +32,7 @@ export function AutomationCard({ publicRequestId, c }: { publicRequestId: string
       ) : (
         <div className="mt-4 overflow-x-auto">
           <table className="w-full min-w-[28rem] text-left text-sm">
-            <thead className="text-xs uppercase tracking-wide text-ink-muted"><tr>{["Wave", "Zone", "Alerts queued", "Skipped (consent / limits)", "When"].map((h) => <th key={h} scope="col" className="py-2 pr-4 font-semibold">{h}</th>)}</tr></thead>
+            <thead className="border-b-2 border-ink bg-paper-deep font-mono text-[0.66rem] uppercase tracking-[0.1em] text-ink"><tr>{["Wave", "Zone", "Alerts queued", "Skipped (consent / limits)", "When"].map((h) => <th key={h} scope="col" className="py-2 pr-4 font-semibold">{h}</th>)}</tr></thead>
             <tbody className="divide-y divide-line">
               {a.waves.map((w) => (
                 <tr key={w.number}><td className="py-2 pr-4 tabular-nums">{w.number}</td><td className="py-2 pr-4">{w.zone}</td><td className="py-2 pr-4 tabular-nums">{w.queued}</td><td className="py-2 pr-4 tabular-nums">{w.suppressed}</td><td className="py-2 pr-4 text-ink-muted">{formatIST(w.at)}</td></tr>
@@ -60,7 +60,7 @@ export function OutreachCard({ publicRequestId, c }: { publicRequestId: string; 
             <li key={o.id} className="space-y-2 py-3">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <span>
-                  <Link href={`/admin/institutions/${o.institutionId}`} className="font-semibold text-brand-600 hover:text-brand-700">{o.name}</Link>{" "}
+                  <Link href={`/admin/institutions/${o.institutionId}`} className="font-bold text-brand-700 underline decoration-2 underline-offset-4 hover:text-brand-600">{o.name}</Link>{" "}
                   <span className="text-xs text-ink-muted">· {CAPABILITY_LABELS[o.capability]} · {o.distanceKm !== null ? `${o.distanceKm} km` : "distance unknown"} · {o.source === "openstreetmap" ? "discovered (OpenStreetMap)" : "added by admin"} · review: {o.reviewStatus}{o.verificationStatus === "verified" ? " · verified institution" : ""}</span>
                 </span>
                 <Pill tone={OUTREACH_TONE[o.status] ?? "neutral"}>{OUTREACH_STATUS_LABELS[o.status]}</Pill>

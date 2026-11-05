@@ -4,7 +4,7 @@ import { z } from "zod";
 import { logger } from "@/lib/logger";
 import type { WhatsAppCloudConfig } from "@/lib/whatsapp/cloud-config";
 import { recordDeliveryAck } from "@/server/messaging/dispatcher";
-import { handleInboundMessage, type InboundMessage } from "@/server/messaging/inbound";
+import { handleInboundMessage, MAX_INBOUND_TEXT, type InboundEvent, type InboundMessage } from "@/server/messaging/inbound";
 import { OtpChallenge } from "@/server/models/otp-challenge";
 
 /**
@@ -27,6 +27,33 @@ export function verifySignature(rawBody: string | Buffer, header: string | null,
   return expected.length === given.length && timingSafeEqual(expected, given);
 }
 
+/**
+ * Reads a request body as its exact raw bytes (the signature covers them), stopping as
+ * soon as it passes `maxBytes`, so an oversized or chunked body without Content-Length
+ * is never held in memory in full. Returns null when the body is too large.
+ */
+export async function readRawBodyLimited(request: Request, maxBytes: number): Promise<Buffer | null> {
+  if (!request.body) return Buffer.alloc(0);
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel().catch(() => {});
+        return null;
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return Buffer.concat(chunks, total);
+}
+
 /** GET handshake: echo hub.challenge only for our verify token. */
 export function verifySubscription(params: URLSearchParams, verifyToken: string): string | null {
   const mode = params.get("hub.mode") ?? params.get("hub_mode");
@@ -45,6 +72,9 @@ const messageSchema = z.object({
   text: z.object({ body: z.string() }).optional(),
   location: z.object({ latitude: z.coerce.number(), longitude: z.coerce.number() }).optional(),
   button: z.object({ text: z.string() }).optional(),
+  image: z.object({ caption: z.string().optional() }).loose().optional(),
+  video: z.object({ caption: z.string().optional() }).loose().optional(),
+  document: z.object({ caption: z.string().optional() }).loose().optional(),
   interactive: z
     .object({ button_reply: z.object({ title: z.string() }).optional(), list_reply: z.object({ title: z.string() }).optional() })
     .optional(),
@@ -78,23 +108,46 @@ export const webhookPayloadSchema = z.object({
 /** "919876543210" → "+919876543210" for Indian mobiles only (MarutiX serves India). */
 const indianE164 = (digits: string) => (/^91[6-9]\d{9}$/.test(digits) ? `+${digits}` : null);
 
-/** One webhook message → the pipeline's input, or null for types the bot doesn't handle. */
-export function toInboundMessage(raw: unknown): InboundMessage | null {
+/** Message types people send that the bot can't read: they get a one-line explanation. */
+const UNSUPPORTED_TYPES = new Set(["image", "video", "audio", "voice", "document", "sticker", "contacts"]);
+
+/**
+ * One webhook message → the pipeline's input, or the reason it's dropped.
+ * Text, buttons, list replies and locations are read; a photo, video or file
+ * with a caption is read as its caption; other media becomes an "unsupported"
+ * event (polite reply); reactions and system messages are dropped.
+ */
+export function toInboundEvent(raw: unknown): { event: InboundEvent } | { dropped: string } {
   const parsed = messageSchema.safeParse(raw);
-  if (!parsed.success) return null;
+  if (!parsed.success) return { dropped: "unparseable_message" };
   const m = parsed.data;
   const fromE164 = indianE164(m.from);
-  if (!fromE164) return null;
+  if (!fromE164) return { dropped: "not_an_indian_mobile" };
+  const caption = m.type === "image" ? m.image?.caption : m.type === "video" ? m.video?.caption : m.type === "document" ? m.document?.caption : undefined;
   const text =
     m.type === "text" ? m.text?.body
     : m.type === "button" ? m.button?.text
     : m.type === "interactive" ? (m.interactive?.button_reply?.title ?? m.interactive?.list_reply?.title)
+    : caption?.trim() ? caption
     : undefined;
-  if (text !== undefined) return { providerMessageId: m.id, fromE164, input: { type: "text", text: text.slice(0, 300) } };
-  if (m.type === "location" && m.location && Number.isFinite(m.location.latitude) && Number.isFinite(m.location.longitude)) {
-    return { providerMessageId: m.id, fromE164, input: { type: "location", latitude: m.location.latitude, longitude: m.location.longitude } };
+  if (text !== undefined) {
+    if (text.length > MAX_INBOUND_TEXT) logger.info("whatsapp_cloud.inbound_truncated", { length: text.length });
+    return { event: { providerMessageId: m.id, fromE164, input: { type: "text", text: text.slice(0, MAX_INBOUND_TEXT) } } };
   }
-  return null;
+  if (m.type === "location") {
+    if (m.location && Number.isFinite(m.location.latitude) && Number.isFinite(m.location.longitude)) {
+      return { event: { providerMessageId: m.id, fromE164, input: { type: "location", latitude: m.location.latitude, longitude: m.location.longitude } } };
+    }
+    return { dropped: "invalid_location" };
+  }
+  if (UNSUPPORTED_TYPES.has(m.type)) return { event: { providerMessageId: m.id, fromE164, input: { type: "unsupported", mediaType: m.type } } };
+  return { dropped: m.type === "reaction" ? "reaction" : "unsupported_system_type" };
+}
+
+/** Text, buttons and locations only (null for anything else). */
+export function toInboundMessage(raw: unknown): InboundMessage | null {
+  const result = toInboundEvent(raw);
+  return "event" in result && result.event.input.type !== "unsupported" ? (result.event as InboundMessage) : null;
 }
 
 const ACK = { sent: "server", delivered: "device", read: "read", failed: "error" } as const;
@@ -117,12 +170,14 @@ export async function processCloudWebhook(payload: z.output<typeof webhookPayloa
         continue;
       }
       for (const raw of change.value.messages ?? []) {
-        const msg = toInboundMessage(raw);
-        if (!msg) {
+        const converted = toInboundEvent(raw);
+        if ("dropped" in converted) {
+          // Logged without the sender, so a message never disappears silently.
+          logger.info("whatsapp_cloud.inbound_dropped", { reason: converted.dropped, type: typeof (raw as { type?: unknown })?.type === "string" ? String((raw as { type: string }).type).slice(0, 30) : "unknown" });
           result.ignored += 1;
           continue;
         }
-        const outcome = await handleInboundMessage(msg, now);
+        const outcome = await handleInboundMessage(converted.event, now);
         if (outcome === "duplicate") result.duplicates += 1;
         else result.inbound += 1;
       }

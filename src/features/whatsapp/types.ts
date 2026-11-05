@@ -25,6 +25,13 @@ export const MESSAGE_KINDS = [
 export const CONVERSATIONAL_KINDS: readonly MessageKind[] = ["opt_out_confirmation", "help_reply", "bot_reply"];
 export type MessageKind = (typeof MESSAGE_KINDS)[number];
 
+/**
+ * Images the outbox may attach to a message, by configured key (never a path or URL from input).
+ * "welcome": the first-contact welcome image (WHATSAPP_WELCOME_IMAGE_*).
+ */
+export const MEDIA_KEYS = ["welcome"] as const;
+export type MediaKey = (typeof MEDIA_KEYS)[number];
+
 export const MESSAGE_STATUSES = ["queued", "sending", "sent", "delivered", "read", "failed", "suppressed"] as const;
 export type MessageStatus = (typeof MESSAGE_STATUSES)[number];
 

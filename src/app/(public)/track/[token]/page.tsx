@@ -2,12 +2,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
+import { NearbyFacilities } from "@/components/requests/nearby-facilities";
 import { TrackedRequest } from "@/components/requests/tracked-request";
 import { ButtonLink, Spinner } from "@/components/ui/button";
 import { InfoIcon } from "@/components/ui/icons";
 import { TRACKING_TOKEN } from "@/features/requests/schemas";
 import type { TrackedRequestView } from "@/features/requests/types";
 import { AppError } from "@/lib/api/errors";
+import { nearbyFacilitiesForRequest } from "@/server/discovery/nearby";
 import { getTrackedRequest } from "@/server/requests/service";
 
 export const metadata: Metadata = {
@@ -56,17 +58,20 @@ async function TrackContent({ params }: Pick<PageProps<"/track/[token]">, "param
   if (!view) {
     const p = PROBLEMS[problem];
     return (
-      <section className="mx-auto max-w-lg rounded-[var(--radius-card)] border border-line bg-surface p-8 text-center shadow-soft">
-        <InfoIcon className="mx-auto size-8 text-ink-muted" />
-        <h1 className="mt-4 font-display text-2xl font-bold tracking-tight text-ink">{p.title}</h1>
+      <section className="mx-auto max-w-lg rounded-[var(--radius-card)] border-2 border-ink bg-surface p-8 text-center shadow-brut-lg">
+        <span aria-hidden="true" className="mx-auto flex size-14 -rotate-3 items-center justify-center rounded-md border-2 border-ink bg-signal-300 shadow-brut-sm"><InfoIcon className="size-7 text-ink" /></span>
+        <h1 className="mt-5 font-display text-3xl font-extrabold tracking-[-0.045em] text-ink">{p.title}</h1>
         <p className="mt-2 text-ink-soft">{p.body}</p>
-        <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
+        <div className="mt-7 flex flex-col justify-center gap-4 sm:flex-row">
           <ButtonLink href="/request">Make a new request</ButtonLink>
           <ButtonLink href="/get-help" variant="secondary">Get help now</ButtonLink>
         </div>
-        <p className="mt-6 text-xs text-ink-muted">In a life-threatening emergency, call <Link href="tel:112" className="font-semibold underline">112</Link>.</p>
+        <p className="mt-6 text-xs text-ink-muted">In a life-threatening emergency, call <Link href="tel:112" className="font-bold text-ink underline decoration-2">112</Link>.</p>
       </section>
     );
   }
-  return <TrackedRequest initial={view} token={token} />;
+  // The token was checked above, so this viewer may see the request. Database read only, no external calls.
+  // A failure here must never hide the request itself.
+  const nearby = await nearbyFacilitiesForRequest(view.publicRequestId).catch(() => null);
+  return <TrackedRequest initial={view} token={token} nearby={nearby ? <NearbyFacilities result={nearby} /> : null} />;
 }

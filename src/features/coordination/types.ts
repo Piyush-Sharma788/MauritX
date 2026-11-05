@@ -130,7 +130,7 @@ export interface InstitutionDetail extends InstitutionSummary {
 export interface OperationsOverview {
   whatsapp: WhatsAppStatusResponse;
   settings: { botEnabled: boolean; alertsPaused: boolean; updatedAt: string | null };
-  ai: { provider: "none" | "anthropic"; model: string | null };
+  ai: { provider: "none" | "gemini" | "openai" | "anthropic"; model: string | null };
   bot: {
     activeConversations: number;
     conversationsByFlow: Record<string, number>;

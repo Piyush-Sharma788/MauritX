@@ -23,7 +23,7 @@ const STATUS_TONE = { pending: "warn", verified: "good", rejected: "bad", suspen
 export default function InstitutionDetailPage({ params }: PageProps<"/admin/institutions/[institutionId]">) {
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
-      <Link href="/admin/institutions" className="-ml-2 inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-sm font-medium text-ink-soft hover:bg-ink/5 hover:text-ink">
+      <Link href="/admin/institutions" className="-ml-2 inline-flex items-center gap-1.5 rounded-md border-2 border-transparent px-2 py-1 text-sm font-semibold text-ink transition-colors hover:border-ink hover:bg-signal-300">
         <ArrowLeftIcon className="size-4" /> All institutions
       </Link>
       <Suspense fallback={<div className="flex min-h-64 items-center justify-center text-ink-muted" role="status"><Spinner className="size-6" /><span className="sr-only">Loading</span></div>}>
@@ -47,10 +47,10 @@ async function Detail({ params }: Pick<PageProps<"/admin/institutions/[instituti
 
   return (
     <div className="mt-4 space-y-5">
-      <header className="flex flex-col gap-4 rounded-[var(--radius-card)] border border-line bg-surface p-6 shadow-soft sm:flex-row sm:items-start sm:justify-between">
+      <header className="flex flex-col gap-4 rounded-[var(--radius-card)] border-2 border-ink bg-surface p-6 shadow-brut sm:flex-row sm:items-start sm:justify-between">
         <div>
           <Pill tone={STATUS_TONE[i.verificationStatus]}>{i.verificationStatus}</Pill>
-          <h1 className="mt-3 font-display text-2xl font-bold text-ink sm:text-3xl">{i.displayName}</h1>
+          <h1 className="mt-3 font-display text-2xl font-extrabold text-ink sm:text-3xl">{i.displayName}</h1>
           <p className="mt-1 text-sm text-ink-soft">{i.type === "blood_bank" ? "Blood bank" : "Hospital"} · {i.legalName}</p>
           <p className="mt-1 text-sm text-ink-soft">{i.address}, {i.locality}, {i.city}{i.publicPhone ? ` · ${i.publicPhone}` : ""}</p>
           <p className="mt-1 inline-flex items-center gap-1 text-xs text-ink-muted"><LockIcon className="size-3.5" /> Licence: {i.licenceReference ?? "not recorded"}{i.verifiedAt ? ` · verified ${formatIST(i.verifiedAt)}` : ""}</p>
@@ -65,11 +65,19 @@ async function Detail({ params }: Pick<PageProps<"/admin/institutions/[instituti
         actions={<ReviewButtons institutionId={i.id} status={i.review.status} />}
       >
         <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
-          <div><dt className="text-xs text-ink-muted">Source</dt><dd className="font-medium text-ink">{i.source === "openstreetmap" ? "OpenStreetMap (discovered)" : "Added by an admin"}</dd></div>
-          <div><dt className="text-xs text-ink-muted">Capability</dt><dd className="font-medium text-ink">{CAPABILITY_LABELS[i.capability]}<span className="block text-xs font-normal text-ink-muted">from {i.capabilitySource.replace("_", " ")}</span></dd></div>
-          <div><dt className="text-xs text-ink-muted">Review</dt><dd className="font-medium text-ink">{i.review.status}{i.review.reviewedAt ? ` · ${formatIST(i.review.reviewedAt)}` : ""}</dd></div>
-          <div><dt className="text-xs text-ink-muted">Seen in source</dt><dd className="font-medium text-ink">{i.discoveredAt ? formatIST(i.discoveredAt) : "-"}{i.lastSeenAt ? ` · last ${formatIST(i.lastSeenAt)}` : ""}</dd></div>
+          <div><dt className="text-xs text-ink-muted">Source</dt><dd className="font-bold text-ink">{i.source === "openstreetmap" ? "OpenStreetMap (discovered)" : "Added by an admin"}</dd></div>
+          <div><dt className="text-xs text-ink-muted">Capability</dt><dd className="font-bold text-ink">{CAPABILITY_LABELS[i.capability]}<span className="block text-xs font-normal text-ink-muted">from {i.capabilitySource.replace("_", " ")}</span></dd></div>
+          <div><dt className="text-xs text-ink-muted">Review</dt><dd className="font-bold text-ink">{i.review.status}{i.review.reviewedAt ? ` · ${formatIST(i.review.reviewedAt)}` : ""}</dd></div>
+          <div><dt className="text-xs text-ink-muted">Seen in source</dt><dd className="font-bold text-ink">{i.discoveredAt ? formatIST(i.discoveredAt) : "-"}{i.lastSeenAt ? ` · last ${formatIST(i.lastSeenAt)}` : ""}</dd></div>
         </dl>
+        {(i.staleSince || i.mergedInto || i.openingHours || i.fieldSources.some((f) => f.pendingValue)) && (
+          <ul className="mt-3 space-y-1 text-xs text-ink-muted">
+            {i.mergedInto && <li>Duplicate: merged into <Link href={`/admin/institutions/${i.mergedInto}`} className="text-brand-600 hover:underline">another record</Link>.</li>}
+            {i.staleSince && <li>Stale: no longer published by its source since {formatIST(i.staleSince)} (kept, not used for outreach unless verified).</li>}
+            {i.openingHours && <li>Opening hours (as published): {i.openingHours}</li>}
+            {i.fieldSources.filter((f) => f.pendingValue).map((f) => <li key={f.field}>Source now reports a different {f.field}: &ldquo;{f.pendingValue}&rdquo; (not applied)</li>)}
+          </ul>
+        )}
         {i.externalRefs.length > 0 && (
           <p className="mt-3 text-xs text-ink-muted">Source records: {i.externalRefs.map((r, n) => (r.url ? <a key={r.ref} href={r.url} target="_blank" rel="noreferrer" className="text-brand-600 hover:underline">{r.ref}{n < i.externalRefs.length - 1 ? ", " : ""}</a> : <span key={r.ref}>{r.ref}</span>))} · Data © OpenStreetMap contributors (ODbL)</p>
         )}
@@ -83,10 +91,13 @@ async function Detail({ params }: Pick<PageProps<"/admin/institutions/[instituti
             {i.channels.map((c) => (
               <li key={c.id} className="flex flex-wrap items-center justify-between gap-3 py-2.5">
                 <span>
-                  <span className="font-medium text-ink">{c.type}: {c.value}</span>{" "}
-                  <Pill tone={c.status === "verified" ? "good" : c.status === "unverified" ? "warn" : "neutral"}>{c.status.replace("_", " ")}</Pill>
+                  <span className="font-bold text-ink">{c.type}: {c.value}</span>{" "}
+                  <Pill tone={c.displayStatus === "verified" ? "good" : c.displayStatus === "unverified" ? "warn" : "neutral"}>{c.displayStatus.replace("_", " ")}</Pill>
                   <span className="block text-xs text-ink-muted">
                     {c.source.replace("_", " ")} · retrieved {formatIST(c.retrievedAt)}
+                    {c.lastSeenAt ? ` · last seen ${formatIST(c.lastSeenAt)}` : ""}
+                    {c.confidence !== null ? ` · AI confidence ${Math.round(c.confidence * 100)}%` : ""}
+                    {c.validation ? ` · check: ${c.validation.state}${c.validation.reason ? ` (${c.validation.reason.replaceAll("_", " ")})` : ""}` : ""}
                     {c.sourceUrl ? <> · <a href={c.sourceUrl} target="_blank" rel="noreferrer" className="text-brand-600 hover:underline">source</a></> : null}
                   </span>
                 </span>
@@ -110,7 +121,7 @@ async function Detail({ params }: Pick<PageProps<"/admin/institutions/[instituti
             {i.contacts.map((c) => (
               <li key={c.id} className="flex flex-wrap items-center justify-between gap-3 py-2.5">
                 <span>
-                  <span className="font-medium text-ink">{c.name}</span> <Pill tone={c.status === "verified" ? "good" : c.status === "pending" ? "warn" : "neutral"}>{c.status}</Pill>
+                  <span className="font-bold text-ink">{c.name}</span> <Pill tone={c.status === "verified" ? "good" : c.status === "pending" ? "warn" : "neutral"}>{c.status}</Pill>
                   <span className="block text-xs text-ink-muted">{c.maskedPhone} · {c.role}{c.verifiedAt ? ` · verified ${formatIST(c.verifiedAt)}` : ""}</span>
                 </span>
                 {canVerify && <ContactStatusButtons institutionId={i.id} contactId={c.id} status={c.status} />}
@@ -118,7 +129,7 @@ async function Detail({ params }: Pick<PageProps<"/admin/institutions/[instituti
             ))}
           </ul>
         )}
-        {canVerify ? <div className="mt-5 border-t border-line pt-5"><AddContactForm institutionId={i.id} /></div> : <p className="mt-4 text-xs text-ink-muted">Only a super admin can verify institutions or add WhatsApp staff contacts, because that grants WhatsApp access.</p>}
+        {canVerify ? <div className="mt-5 border-t-2 border-ink pt-5"><AddContactForm institutionId={i.id} /></div> : <p className="mt-4 text-xs text-ink-muted">Only a super admin can verify institutions or add WhatsApp staff contacts, because that grants WhatsApp access.</p>}
       </Card>
 
       <div className="grid gap-5 lg:grid-cols-2">
@@ -129,7 +140,7 @@ async function Detail({ params }: Pick<PageProps<"/admin/institutions/[instituti
             <ul className="divide-y divide-line text-sm">
               {i.availability.map((r) => (
                 <li key={r.id} className="flex items-center justify-between gap-3 py-2.5">
-                  <span className="font-medium text-ink">{BLOOD_GROUP_LABELS[r.bloodGroup]} · {COMPONENT_LABELS[r.component]}</span>
+                  <span className="font-bold text-ink">{BLOOD_GROUP_LABELS[r.bloodGroup]} · {COMPONENT_LABELS[r.component]}</span>
                   <span className="text-right text-xs text-ink-muted">{r.status === "available" ? `${r.units} unit(s) reported` : "None reported"}<span className="block">{r.reportedBy} · {formatIST(r.reportedAt)}</span></span>
                 </li>
               ))}

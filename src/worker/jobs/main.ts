@@ -15,7 +15,7 @@ import { logger } from "@/lib/logger";
 import { getWhatsAppWebConfig } from "@/lib/whatsapp-web/config";
 import { getMessagingProviderName, getWhatsAppCloudConfig } from "@/lib/whatsapp/cloud-config";
 import { validateServerConfiguration } from "@/lib/security/config-check";
-import { runOneJob } from "@/server/jobs/runner";
+import { JOB_LANES, runOneJob, type JobLane } from "@/server/jobs/runner";
 import { reportError } from "@/server/monitoring/report";
 import { CloudApiMessagingProvider } from "@/server/messaging/cloud-provider";
 import { dispatchNext } from "@/server/messaging/dispatcher";
@@ -49,6 +49,9 @@ async function main() {
   const cloud = getMessagingProviderName() === "whatsapp_cloud" ? getWhatsAppCloudConfig() : null;
   const dispatching = cloud ? dispatchLoop(new CloudApiMessagingProvider(cloud), cloud.pacing, () => running) : Promise.resolve();
 
+  // One loop per lane: a slow OpenStreetMap refresh never delays a donor wave.
+  const lanes = (Object.keys(JOB_LANES) as JobLane[]).map((lane) => laneLoop(lane, workerId, () => running));
+
   let nextRetentionAt = 0;
   while (running) {
     try {
@@ -57,15 +60,27 @@ async function main() {
         const anonymized = await anonymizeClosedRequests(new Date(), retentionDays);
         if (anonymized > 0) logger.info("retention.requests_anonymized", { count: anonymized, retentionDays });
       }
-      if (!(await runOneJob(workerId))) await sleep(IDLE_POLL_MS);
     } catch (error) {
-      await reportError(error, { source: "jobs", event: "jobs.worker.loop_error" });
-      await sleep(5_000);
+      await reportError(error, { source: "jobs", event: "jobs.retention_error" });
     }
+    await sleep(IDLE_POLL_MS);
   }
+  await Promise.all(lanes);
   await dispatching;
   logger.info("jobs.worker.stopping");
   await mongoose.disconnect();
+}
+
+/** Runs due jobs of one lane until the worker stops. */
+async function laneLoop(lane: JobLane, workerId: string, isRunning: () => boolean) {
+  while (isRunning()) {
+    try {
+      if (!(await runOneJob(`${workerId}:${lane}`, new Date(), JOB_LANES[lane]))) await sleep(IDLE_POLL_MS);
+    } catch (error) {
+      await reportError(error, { source: "jobs", event: "jobs.worker.loop_error", where: lane });
+      await sleep(5_000);
+    }
+  }
 }
 
 /** Outbox dispatcher for the Cloud API: same consent re-checks, caps, retries and TTL as the pilot. */

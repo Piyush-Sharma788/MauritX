@@ -50,7 +50,7 @@ async function InstitutionsContent({ searchParams }: Pick<PageProps<"/admin/inst
         actions={
           <nav aria-label="Filter" className="flex gap-1">
             {FILTERS.map((f) => (
-              <Link key={f.key} href={f.key ? `/admin/institutions?review=${f.key}` : "/admin/institutions"} aria-current={(review ?? "") === f.key ? "page" : undefined} className={`rounded-full px-3 py-1.5 text-xs font-semibold ${(review ?? "") === f.key ? "bg-ink text-white" : "text-ink-soft hover:bg-ink/5"}`}>{f.label}</Link>
+              <Link key={f.key} href={f.key ? `/admin/institutions?review=${f.key}` : "/admin/institutions"} aria-current={(review ?? "") === f.key ? "page" : undefined} className={`inline-flex min-h-10 items-center rounded-md border-2 px-3 text-xs font-bold transition-colors ${(review ?? "") === f.key ? "border-ink bg-ink text-white shadow-[3px_3px_0_0_var(--color-brand-500)]" : "border-ink bg-surface text-ink hover:bg-signal-300"}`}>{f.label}</Link>
             ))}
           </nav>
         }
@@ -62,7 +62,7 @@ async function InstitutionsContent({ searchParams }: Pick<PageProps<"/admin/inst
             {institutions.map((i) => (
               <li key={i.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
                 <span>
-                  <Link href={`/admin/institutions/${i.id}`} className="font-semibold text-brand-600 hover:text-brand-700">{i.displayName}</Link>
+                  <Link href={`/admin/institutions/${i.id}`} className="font-bold text-brand-700 underline decoration-2 underline-offset-4 hover:text-brand-600">{i.displayName}</Link>
                   <span className="block text-xs text-ink-muted">{CAPABILITY_LABELS[i.capability]} · {i.locality}, {i.city} · {i.contactChannels} contact{i.contactChannels === 1 ? "" : "s"} · {i.verifiedContacts} WhatsApp contact{i.verifiedContacts === 1 ? "" : "s"} · {i.source === "openstreetmap" ? "discovered" : "added"} {formatIST(i.createdAt)}</span>
                 </span>
                 <span className="flex flex-wrap gap-1.5">

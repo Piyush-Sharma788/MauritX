@@ -344,7 +344,7 @@ MarutiX is configured entirely through environment variables. In development, th
 |---|---|---|---|
 | `WHATSAPP_WEB_WORKER_SECRET` | ✅ | — | Bearer token for the loopback control server (port 3100). Generate: `openssl rand -hex 32` |
 | `WHATSAPP_WEB_WORKER_URL` | — | `http://127.0.0.1:3100` | URL the web app uses to reach the WhatsApp worker |
-| `WHATSAPP_WEB_SESSION_DIR` | — | `.data/whatsapp-session` | Directory for Puppeteer session persistence |
+| `WHATSAPP_WEB_SESSION_DIR` | — | `~/.marutix/whatsapp-session` | Directory for Puppeteer session persistence |
 | `WHATSAPP_WEB_DEVICE_NAME` | — | `MarutiX` | Device name shown in WhatsApp Linked Devices |
 | `WHATSAPP_WEB_PUBLIC_NUMBER` | — | — | WhatsApp number shown in "Become a Donor" public links (baked into Docker image at build time) |
 | `WHATSAPP_WEB_TEST_RECIPIENTS` | — | — | Comma-separated list of phone numbers that can receive messages in dev/staging (restricts blast to these numbers) |
@@ -541,30 +541,14 @@ This minimal configuration:
 
 ### 4.5 Run the App {#45-run-the-app}
 
-**Terminal 1 — Web app (Next.js dev server)**
+One command starts everything: MongoDB (if local and not already running), the web app, the jobs worker (institution discovery, outreach email, donor waves) and the WhatsApp Web worker.
 
 ```bash
 npm run dev
-# Open: http://localhost:3000
+# Open: http://localhost:3000. Ctrl+C stops everything.
 ```
 
-**Terminal 2 — WhatsApp Web worker (optional)**
-
-Only needed if you have a WhatsApp account to link:
-
-```bash
-npm run whatsapp:worker
-# The worker will log a QR code URL; scan it with the WhatsApp app
-# Check status at: http://localhost:3000/admin/whatsapp (after granting admin access)
-```
-
-**Terminal 3 — Jobs worker (optional)**
-
-Runs institution discovery, outreach emails, and donor wave scheduling:
-
-```bash
-npm run jobs:worker
-```
+To link a WhatsApp account to the pilot worker, grant yourself admin access (below), open http://localhost:3000/admin/whatsapp, press **Connect** and scan the QR code. Full guide: `docs/WHATSAPP_BOT_GUIDE.md`.
 
 ### 4.6 Grant Admin Access {#46-grant-admin-access}
 
@@ -572,7 +556,7 @@ After signing in with your phone number:
 
 ```bash
 # Grant admin role to a phone number
-npm run admin:grant -- +919876543210
+npm run admin:grant -- super_admin +919876543210
 
 # List all admins
 npm run admin:list

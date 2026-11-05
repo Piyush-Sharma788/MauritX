@@ -16,7 +16,7 @@ const LINKS: { href: string; label: string; permission: Permission }[] = [
 
 function NavLinks({ pathname, role }: { pathname: string | null; role: string }) {
   return (
-    <nav aria-label="Admin" className="flex gap-1 overflow-x-auto">
+    <nav aria-label="Admin" className="-my-1 flex gap-1.5 overflow-x-auto px-1 py-1 pr-2 [scrollbar-width:none]">
       {LINKS.filter((link) => can(role, link.permission)).map((link) => {
         const active = pathname?.startsWith(link.href) ?? false;
         return (
@@ -24,7 +24,7 @@ function NavLinks({ pathname, role }: { pathname: string | null; role: string })
             key={link.href}
             href={link.href}
             aria-current={active ? "page" : undefined}
-            className={`shrink-0 rounded-full px-3 py-1.5 text-sm font-medium transition ${active ? "bg-ink text-white" : "text-ink-soft hover:bg-ink/5 hover:text-ink"}`}
+            className={`inline-flex min-h-10 shrink-0 items-center rounded-md border-2 px-3 text-sm font-bold transition-colors ${active ? "border-ink bg-ink text-white shadow-[3px_3px_0_0_var(--color-brand-500)]" : "border-transparent text-ink hover:border-ink hover:bg-signal-300"}`}
           >
             {link.label}
           </Link>

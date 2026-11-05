@@ -61,6 +61,11 @@ const nextConfig: NextConfig = {
       },
     },
   },
+  // /admin has no page of its own. Redirecting here (before any rendering) avoids calling
+  // redirect() inside a page, which logs "Could not validate instant" with cacheComponents.
+  async redirects() {
+    return [{ source: "/admin", destination: "/admin/operations", permanent: false }];
+  },
   async headers() {
     return [
       { source: "/(.*)", headers: securityHeaders },

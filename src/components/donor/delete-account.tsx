@@ -40,8 +40,8 @@ export function DeleteAccount({ isStaff }: { isStaff: boolean }) {
   }
 
   return (
-    <section aria-labelledby="delete-account" className="rounded-[var(--radius-card)] border border-line bg-surface p-5 shadow-soft sm:p-6">
-      <h2 id="delete-account" className="font-semibold text-ink">Delete your account</h2>
+    <section aria-labelledby="delete-account" className="rounded-[var(--radius-card)] border-2 border-ink bg-surface p-5 shadow-brut sm:p-6">
+      <h2 id="delete-account" className="font-display text-lg font-extrabold tracking-[-0.02em] text-ink">Delete your account</h2>
       {step === "done" ? (
         <div className="mt-2 flex flex-wrap items-center justify-between gap-3 text-sm text-ink-soft">
           <p role="status">Your account has been deleted and you&apos;ve been signed out.</p>
@@ -86,7 +86,7 @@ export function DeleteAccount({ isStaff }: { isStaff: boolean }) {
               </div>
             </form>
           )}
-          {error && <p role="alert" className="text-xs font-medium text-danger-600">{error}</p>}
+          {error && <p role="alert" className="text-xs font-bold text-danger-600">{error}</p>}
         </div>
       )}
     </section>

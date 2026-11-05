@@ -162,7 +162,8 @@ describe.skipIf(!enabled)("Phase 5 workflows (MongoDB, fake WhatsApp)", () => {
       expect(confirmation).toMatch(/Pending verification/);
 
       await say(phone, "TRACK");
-      const tracked = (await repliesTo(phone)).at(-2)?.body ?? "";
+      // The status and the "call 112" line arrive as one merged message.
+      const tracked = await lastReply(phone);
       expect(tracked).toMatch(new RegExp(`${request!.publicRequestId}: Pending verification[\\s\\S]*Verified by MarutiX: Not yet`));
       expect(tracked).not.toMatch(/S\. D\./);
     });

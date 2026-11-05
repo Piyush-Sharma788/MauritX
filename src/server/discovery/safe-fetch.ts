@@ -9,6 +9,8 @@ import { isIP } from "node:net";
  * ranges), redirects re-checked hop by hop, and a size and time limit.
  */
 
+const DNS_TIMEOUT_MS = 10_000;
+
 export class UnsafeUrlError extends Error {
   constructor(reason: string) {
     super(`Refused URL: ${reason}`);
@@ -41,7 +43,9 @@ export async function assertPublicUrl(raw: string): Promise<URL> {
   if (url.port && url.port !== "80" && url.port !== "443") throw new UnsafeUrlError("port");
   if (url.username || url.password) throw new UnsafeUrlError("credentials in URL");
   const host = url.hostname.replace(/^\[|\]$/g, "");
-  const addresses = isIP(host) ? [{ address: host }] : await lookup(host, { all: true }).catch(() => []);
+  // Bounded: a hanging resolver must not hold a background job past its lock.
+  const resolved = lookup(host, { all: true }).catch(() => [] as { address: string }[]);
+  const addresses = isIP(host) ? [{ address: host }] : await Promise.race([resolved, new Promise<{ address: string }[]>((r) => setTimeout(() => r([]), DNS_TIMEOUT_MS).unref())]);
   if (addresses.length === 0) throw new UnsafeUrlError("host does not resolve");
   if (addresses.some((a) => isPrivateAddress(a.address))) throw new UnsafeUrlError("private address");
   return url;
@@ -52,13 +56,13 @@ export interface SafeFetchOptions {
   timeoutMs: number;
   maxBytes?: number;
   accept?: string;
-  method?: "GET" | "POST";
+  method?: "GET" | "POST" | "HEAD";
   body?: string;
   contentType?: string;
 }
 
 /** Fetches a public URL and returns its text, following at most 3 checked redirects. */
-export async function safeFetchText(raw: string, options: SafeFetchOptions): Promise<{ status: number; url: string; contentType: string; text: string }> {
+export async function safeFetchText(raw: string, options: SafeFetchOptions): Promise<{ status: number; url: string; contentType: string; text: string; retryAfter: string | null }> {
   let current = raw;
   for (let hop = 0; hop < 4; hop++) {
     const url = await assertPublicUrl(current);
@@ -87,7 +91,7 @@ export async function safeFetchText(raw: string, options: SafeFetchOptions): Pro
       }
       chunks.push(value);
     }
-    return { status: response.status, url: url.toString(), contentType: response.headers.get("content-type") ?? "", text: Buffer.concat(chunks).toString("utf8") };
+    return { status: response.status, url: url.toString(), contentType: response.headers.get("content-type") ?? "", text: Buffer.concat(chunks).toString("utf8"), retryAfter: response.headers.get("retry-after") };
   }
   throw new UnsafeUrlError("too many redirects");
 }

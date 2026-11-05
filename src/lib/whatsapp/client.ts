@@ -52,6 +52,7 @@ interface SendTemplateInput {
 }
 
 const REQUEST_TIMEOUT_MS = 10_000;
+const MEDIA_UPLOAD_TIMEOUT_MS = 20_000;
 const MAX_ATTEMPTS = 2;
 
 async function postMessage(config: WhatsAppConfig, payload: unknown): Promise<{ messageId?: string }> {
@@ -93,6 +94,51 @@ export async function sendTextMessage(config: WhatsAppConfig, input: { to: strin
     type: "text",
     text: { preview_url: false, body: input.body },
   });
+}
+
+/**
+ * An image with an optional caption, by uploaded media ID or public https link.
+ * Single attempt, like text: the outbox dispatcher owns retries.
+ */
+export async function sendImageMessage(config: WhatsAppConfig, input: { to: string; image: { id: string } | { link: string }; caption?: string }) {
+  return postMessage(config, {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to: input.to.replace(/^\+/, ""),
+    type: "image",
+    image: { ...input.image, ...(input.caption ? { caption: input.caption } : {}) },
+  });
+}
+
+/**
+ * Uploads a file to WhatsApp's media store (POST /{phone-number-id}/media) and
+ * returns its media ID. Nothing is sent to anyone, so any failure is safe to
+ * follow with a text message. Meta keeps uploads for 30 days.
+ */
+export async function uploadMedia(config: WhatsAppConfig, input: { data: Uint8Array; mimeType: string; filename: string }): Promise<{ mediaId: string }> {
+  const url = `https://graph.facebook.com/${config.graphApiVersion}/${encodeURIComponent(config.phoneNumberId)}/media`;
+  const form = new FormData();
+  form.append("messaging_product", "whatsapp");
+  form.append("type", input.mimeType);
+  form.append("file", new Blob([new Uint8Array(input.data)], { type: input.mimeType }), input.filename);
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${config.accessToken}` },
+      body: form,
+      signal: AbortSignal.timeout(MEDIA_UPLOAD_TIMEOUT_MS),
+      cache: "no-store",
+    });
+  } catch {
+    throw new WhatsAppApiError(null, null, true);
+  }
+  const body = (await response.json().catch(() => null)) as { id?: string; error?: { code?: number } } | null;
+  if (!response.ok || !body?.id) {
+    const code = body?.error?.code ?? null;
+    throw new WhatsAppApiError(response.status, code, response.status >= 500 || response.status === 429);
+  }
+  return { mediaId: body.id };
 }
 
 /** One template send without the built-in retry (the outbox dispatcher retries). */

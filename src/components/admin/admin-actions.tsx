@@ -14,9 +14,9 @@ import { CONTACT_ROLES, INSTITUTION_TYPES, type ContactStatus, type InstitutionS
 export function BotSwitches({ botEnabled, alertsPaused }: { botEnabled: boolean; alertsPaused: boolean }) {
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-paper-deep/50 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border-2 border-ink bg-paper p-3">
         <div>
-          <p className="text-sm font-semibold text-ink">Bot processing: {botEnabled ? "On" : "Off"}</p>
+          <p className="text-sm font-bold text-ink">Bot processing: {botEnabled ? "On" : "Off"}</p>
           <p className="text-xs text-ink-muted">{botEnabled ? "Replies to registrations, requests and commands." : "Only STOP is processed; other messages get no reply."}</p>
         </div>
         <ActionButton
@@ -26,9 +26,9 @@ export function BotSwitches({ botEnabled, alertsPaused }: { botEnabled: boolean;
           action={() => coordinationApi.setSettings({ botEnabled: !botEnabled })}
         />
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-paper-deep/50 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border-2 border-ink bg-paper p-3">
         <div>
-          <p className="text-sm font-semibold text-ink">Emergency alerts: {alertsPaused ? "Paused" : "Running"}</p>
+          <p className="text-sm font-bold text-ink">Emergency alerts: {alertsPaused ? "Paused" : "Running"}</p>
           <p className="text-xs text-ink-muted">{alertsPaused ? "No alerts are sent or queued. Queued ones expire unsent." : "Admin-sent alert batches are delivered."}</p>
         </div>
         <ActionButton
@@ -103,7 +103,7 @@ function useSubmit() {
   return { pending, error, fields, submit };
 }
 
-const label = "block text-xs font-semibold text-ink-soft";
+const label = "block text-xs font-bold text-ink";
 const input = `${inputClasses} mt-1 h-11 border-line-strong text-sm`;
 
 function FieldError({ message }: { message?: string }) {

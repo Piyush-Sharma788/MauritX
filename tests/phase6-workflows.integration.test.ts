@@ -448,7 +448,7 @@ describe.skipIf(!enabled)("Phase 6 workflows (MongoDB, fake external services)",
     expect(state.donorPhase).toBe("exhausted");
     const history = (await getTrackedRequest(manageToken)).coordination!.history.map((h) => h.summary).join("\n");
     expect(history).toMatch(/No hospitals or blood banks with usable details were found nearby/);
-    expect(history).toMatch(/contacted every matching registered donor/);
+    expect(history).toMatch(/hasn't found registered donors matching this request nearby/);
 
     const other = await activeWhatsAppRequest("B+", "2");
     await donorAt(1, "After Expiry Donor");

@@ -13,8 +13,10 @@ import type { InboundMessage } from "@/server/conversations/bot";
 import { advanceRequest, isRequestState, requestPrompt, startRequest, type RequestDraft, type RequestSnapshot } from "@/server/conversations/request-machine";
 import { beginConversation, saveConversation, toFlowSnapshot, type ConversationRecord } from "@/server/conversations/store";
 import { queueBotReplies } from "@/server/messaging/queue";
+import { skipWelcomeImage } from "@/server/messaging/reply-context";
 import { EmergencyRequest } from "@/server/models/emergency-request";
 import { User } from "@/server/models/user";
+import { formatFacilitiesForWhatsApp, nearbyFacilitiesForRequest } from "@/server/discovery/nearby";
 import { applyTransition, createRequest, expireOverdueRequests, type RequestRecord } from "@/server/requests/service";
 
 /**
@@ -44,6 +46,8 @@ export async function startRequestConversation(msg: InboundMessage, known: Parti
   };
   const { snapshot, replies } = startRequest(randomUUID(), prefill, { senderE164: msg.fromE164, now });
   await beginConversation({ phoneLookup, snapshot, now });
+  // In an emergency the questions (and the call-112 advice) must not wait behind an image.
+  skipWelcomeImage();
   await reply(msg, lead ? [lead, ...replies] : replies);
 }
 
@@ -114,6 +118,7 @@ export async function continueRequestConversation(conversation: ConversationReco
         "Reply TRACK to check the status here, or CANCEL to cancel it.",
         "MarutiX doesn't guarantee blood availability. Stay in touch with the hospital's blood bank, and call 112 if life is at risk.",
       ].join("\n"),
+      ...(await nearbyFacilitiesText(created.publicRequestId)),
     ]);
     return "created";
   } catch (error) {
@@ -148,6 +153,22 @@ function describe(r: RequestRecord): string {
       : []),
     `Last update: ${formatIstShort(r.updatedAt)}`,
   ].join("\n");
+}
+
+/**
+ * The nearest known blood banks and hospitals (verified first, others labelled unverified),
+ * from MarutiX's own records only. Empty when none are known yet, and never allowed to
+ * stop the confirmation itself.
+ */
+async function nearbyFacilitiesText(publicRequestId: string): Promise<string[]> {
+  try {
+    const result = await nearbyFacilitiesForRequest(publicRequestId, { limit: 3 });
+    if (!result?.facilities.length) return [];
+    return [`Blood banks and hospitals near the hospital you named:\n${formatFacilitiesForWhatsApp(result)}`];
+  } catch (error) {
+    logger.warn("whatsapp.nearby_facilities_failed", { errorName: error instanceof Error ? error.name : "UnknownError" });
+    return [];
+  }
 }
 
 /** Requests this number created on WhatsApp or is the contact for. Status only, never patient details. */
