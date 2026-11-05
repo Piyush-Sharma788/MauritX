@@ -1,0 +1,290 @@
+name: Deploy
+
+# Stage 3 of 3. Runs when "Build & Push" finishes successfully and published images:
+#   push to main      -> staging     (when vars.STAGING_DEPLOY_ENABLED == 'true')
+#   release tag vX.Y.Z -> production (when vars.PRODUCTION_DEPLOY_ENABLED == 'true';
+#                                     add required reviewers to the "production" environment)
+# Manual runs deploy (or roll back to) any image tag that Build & Push published.
+#
+# Target: one Docker host per environment, reached over SSH, running
+# deploy/docker-compose.prod.yml from DEPLOY_PATH (see SETUP.md → CI/CD).
+
+on:
+  workflow_run:
+    workflows: ["Build & Push"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment
+        type: choice
+        options: [staging, production]
+        default: staging
+      image_tag:
+        description: Image tag to deploy, e.g. sha-<40-char commit> or 1.4.2 (rollback = an older tag)
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    name: Plan deployment
+    # Only builds that published images: Build & Push skips publishing for pull requests.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       (github.event.workflow_run.event == 'workflow_run' || github.event.workflow_run.event == 'workflow_dispatch'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      environment: ${{ steps.plan.outputs.environment }}
+      image_tag: ${{ steps.plan.outputs.image_tag }}
+      sha: ${{ steps.plan.outputs.sha }}
+      web_digest: ${{ steps.plan.outputs.web_digest }}
+      worker_digest: ${{ steps.plan.outputs.worker_digest }}
+    steps:
+      - name: Download deploy manifest
+        if: github.event_name == 'workflow_run'
+        id: manifest
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: deploy-manifest
+          path: manifest
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Decide
+        id: plan
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          MANIFEST_OK: ${{ steps.manifest.outcome }}
+          INPUT_ENVIRONMENT: ${{ inputs.environment }}
+          INPUT_TAG: ${{ inputs.image_tag }}
+          STAGING_ENABLED: ${{ vars.STAGING_DEPLOY_ENABLED }}
+          PRODUCTION_ENABLED: ${{ vars.PRODUCTION_DEPLOY_ENABLED }}
+        run: |
+          set -euo pipefail
+          out() { echo "$1=$2" >> "$GITHUB_OUTPUT"; }
+          if [[ "$EVENT" == "workflow_dispatch" ]]; then
+            [[ "$INPUT_TAG" =~ ^(sha-[0-9a-f]{40}|[0-9]+\.[0-9]+(\.[0-9]+)?|main)$ ]] \
+              || { echo "::error::image_tag must be sha-<40 hex>, X.Y, X.Y.Z or main"; exit 1; }
+            out environment "$INPUT_ENVIRONMENT"; out image_tag "$INPUT_TAG"
+            out sha ""; out web_digest ""; out worker_digest ""
+            echo "Manual deployment of $INPUT_TAG to $INPUT_ENVIRONMENT"
+            exit 0
+          fi
+
+          # Build & Push ran but published nothing (e.g. a pull request): nothing to deploy.
+          if [[ "$MANIFEST_OK" != "success" || ! -f manifest/deploy-manifest.json ]]; then
+            echo "No deploy manifest in the triggering build; nothing to deploy."; out environment ""; exit 0
+          fi
+          m=manifest/deploy-manifest.json
+          sha="$(jq -r .sha "$m")"; kind="$(jq -r .kind "$m")"; tag="$(jq -r .image_tag "$m")"
+          web="$(jq -r .digests.web "$m")"; worker="$(jq -r .digests.worker "$m")"
+          [[ "$sha" =~ ^[0-9a-f]{40}$ && "$tag" == "sha-$sha" ]] || { echo "::error::Malformed deploy manifest"; exit 1; }
+          [[ "$web" =~ ^sha256:[0-9a-f]{64}$ && "$worker" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::Malformed image digests"; exit 1; }
+
+          environment=""
+          if [[ "$kind" == "branch" && "$STAGING_ENABLED" == "true" ]]; then environment=staging; fi
+          if [[ "$kind" == "tag" && "$PRODUCTION_ENABLED" == "true" ]]; then environment=production; fi
+          if [[ -z "$environment" ]]; then
+            echo "Deployment for a $kind build is not enabled (STAGING_DEPLOY_ENABLED / PRODUCTION_DEPLOY_ENABLED)."
+          fi
+          out environment "$environment"; out image_tag "$tag"; out sha "$sha"; out web_digest "$web"; out worker_digest "$worker"
+          echo "Plan: $tag ($sha) -> ${environment:-nowhere}"
+
+  deploy:
+    name: Deploy to ${{ needs.plan.outputs.environment }}
+    needs: plan
+    if: needs.plan.outputs.environment != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      # Short-lived pull access for the server when GHCR_READ_TOKEN isn't set.
+      packages: read
+    environment:
+      name: ${{ needs.plan.outputs.environment }}
+      url: ${{ vars.APP_URL }}
+    # One deployment per environment at a time; never cancel one halfway.
+    concurrency:
+      group: deploy-${{ needs.plan.outputs.environment }}
+      cancel-in-progress: false
+    env:
+      DEPLOY_ENV: ${{ needs.plan.outputs.environment }}
+      DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+      APP_URL: ${{ vars.APP_URL }}
+      IMAGE_TAG: ${{ needs.plan.outputs.image_tag }}
+      EXPECTED_WEB: ${{ needs.plan.outputs.web_digest }}
+      EXPECTED_WORKER: ${{ needs.plan.outputs.worker_digest }}
+    steps:
+      - name: Check out deployment files
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The workflow's own commit (default branch), never the code being deployed.
+          persist-credentials: false
+          sparse-checkout: |
+            deploy
+            scripts/ci
+
+      - name: Check configuration
+        shell: bash
+        env:
+          HAS_KEY: ${{ secrets.SSH_PRIVATE_KEY != '' }}
+          HAS_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS != '' }}
+        run: |
+          set -euo pipefail
+          missing=()
+          for name in DEPLOY_HOST DEPLOY_USER DEPLOY_PATH APP_URL; do
+            [[ -n "${!name}" ]] || missing+=("variable $name")
+          done
+          [[ "$HAS_KEY" == "true" ]] || missing+=("secret SSH_PRIVATE_KEY")
+          [[ "$HAS_HOSTS" == "true" ]] || missing+=("secret SSH_KNOWN_HOSTS")
+          if (( ${#missing[@]} )); then echo "::error::Environment '$DEPLOY_ENV' is missing: ${missing[*]}"; exit 1; fi
+          [[ "$APP_URL" == https://* ]] || { echo "::error::APP_URL must start with https://"; exit 1; }
+          [[ "$DEPLOY_PATH" =~ ^/[A-Za-z0-9._/-]+$ ]] || { echo "::error::DEPLOY_PATH must be an absolute path"; exit 1; }
+
+      - name: Resolve image digests
+        id: images
+        shell: bash
+        env:
+          OWNER: ${{ github.repository_owner }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          prefix="ghcr.io/${OWNER,,}"
+          echo "$GH_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin >/dev/null
+          trap 'docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
+          # Deploy only images Build & Push published, and (for automatic runs) exactly the ones it built.
+          for image in web worker; do
+            digest="$(docker buildx imagetools inspect "$prefix/marutix-$image:$IMAGE_TAG" --format '{{json .Manifest}}' | jq -r .digest)" \
+              || { echo "::error::$prefix/marutix-$image:$IMAGE_TAG doesn't exist. Has Build & Push published it?"; exit 1; }
+            expected_var="EXPECTED_${image^^}"
+            expected="${!expected_var}"
+            if [[ -n "$expected" && "$digest" != "$expected" ]]; then
+              echo "::error::marutix-$image:$IMAGE_TAG is $digest, but the build produced $expected"; exit 1
+            fi
+            echo "${image}_digest=$digest" >> "$GITHUB_OUTPUT"
+            echo "marutix-$image:$IMAGE_TAG -> $digest"
+          done
+          echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
+
+      - name: Configure SSH
+        shell: bash
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # Pinned host key: never trust on first use.
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<EOF
+          Host deploy-target
+            HostName ${DEPLOY_HOST}
+            User ${DEPLOY_USER}
+            IdentityFile ~/.ssh/deploy_key
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            ServerAliveInterval 15
+            ConnectTimeout 15
+          EOF
+          chmod 600 ~/.ssh/config
+
+      - name: Upload compose file
+        shell: bash
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC2029 # DEPLOY_PATH is validated above and meant to expand here
+          ssh deploy-target "mkdir -p '$DEPLOY_PATH' && test -f '$DEPLOY_PATH/.env.production'" \
+            || { echo "::error::$DEPLOY_PATH/.env.production is missing on the server (see SETUP.md → CI/CD)"; exit 1; }
+          scp -q deploy/docker-compose.prod.yml "deploy-target:$DEPLOY_PATH/docker-compose.yml"
+          scp -q scripts/ci/remote-deploy.sh "deploy-target:$DEPLOY_PATH/.marutix-deploy.sh"
+
+      - name: Deploy, health-check and verify (automatic rollback)
+        shell: bash
+        env:
+          GHCR_USER: ${{ vars.GHCR_READ_USER || github.actor }}
+          GHCR_TOKEN: ${{ secrets.GHCR_READ_TOKEN || github.token }}
+          IMAGE_PREFIX: ${{ steps.images.outputs.prefix }}
+          WEB_DIGEST: ${{ steps.images.outputs.web_digest }}
+          WORKER_DIGEST: ${{ steps.images.outputs.worker_digest }}
+        run: |
+          set -euo pipefail
+          # Values (including the registry token) go over stdin, never on a command line.
+          # shellcheck disable=SC2029 # DEPLOY_PATH is validated above and meant to expand here
+          printf 'DEPLOY_PATH=%q\nIMAGE_TAG=%q\nIMAGE_PREFIX=%q\nGHCR_USER=%q\nGHCR_TOKEN=%q\nWEB_DIGEST=%q\nWORKER_DIGEST=%q\n' \
+            "$DEPLOY_PATH" "$IMAGE_TAG" "$IMAGE_PREFIX" "$GHCR_USER" "$GHCR_TOKEN" "$WEB_DIGEST" "$WORKER_DIGEST" \
+            | ssh deploy-target "bash '$DEPLOY_PATH/.marutix-deploy.sh'"
+
+      - name: Public health check
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="${APP_URL%/}/api/health"
+          for attempt in $(seq 1 20); do
+            body="$(curl -sS --max-time 10 "$url" || true)"
+            if [[ "$body" == '{"status":"ok","db":"up"}' ]]; then echo "Healthy after $attempt attempt(s): $body"; exit 0; fi
+            sleep 6
+          done
+          echo "::error::$url did not report {\"status\":\"ok\",\"db\":\"up\"} (last: ${body:-no answer})"
+          exit 1
+
+      - name: Verify deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="${APP_URL%/}"
+          # TLS, security headers and an authenticated-only admin API on the public URL.
+          headers="$(curl -sS --max-time 10 -o /dev/null -D - "$base/")"
+          grep -qi '^strict-transport-security:' <<<"$headers" || { echo "::error::Missing HSTS header on $base"; exit 1; }
+          grep -qi '^content-security-policy:' <<<"$headers" || { echo "::error::Missing CSP header on $base"; exit 1; }
+          code="$(curl -sS --max-time 10 -o /dev/null -w '%{http_code}' "$base/api/v1/admin/audit")"
+          [[ "$code" == "401" ]] || { echo "::error::Admin API returned $code without a session (expected 401)"; exit 1; }
+          # shellcheck disable=SC2029 # DEPLOY_PATH is validated above and meant to expand here
+          deployed="$(ssh deploy-target "cat '$DEPLOY_PATH/.deployed-tag'")"
+          [[ "$deployed" == "$IMAGE_TAG" ]] || { echo "::error::Server reports $deployed, expected $IMAGE_TAG"; exit 1; }
+          echo "Verified $IMAGE_TAG on $base"
+
+      - name: Roll back after a failed public check
+        if: failure() && steps.images.outcome == 'success'
+        shell: bash
+        env:
+          GHCR_USER: ${{ vars.GHCR_READ_USER || github.actor }}
+          GHCR_TOKEN: ${{ secrets.GHCR_READ_TOKEN || github.token }}
+          IMAGE_PREFIX: ${{ steps.images.outputs.prefix }}
+        run: |
+          set -uo pipefail
+          # shellcheck disable=SC2029 # DEPLOY_PATH is validated above and meant to expand here
+          printf 'DEPLOY_PATH=%q\nIMAGE_PREFIX=%q\nGHCR_USER=%q\nGHCR_TOKEN=%q\nMODE=rollback\n' \
+            "$DEPLOY_PATH" "$IMAGE_PREFIX" "$GHCR_USER" "$GHCR_TOKEN" \
+            | ssh deploy-target "bash '$DEPLOY_PATH/.marutix-deploy.sh'" || echo "::warning::Rollback needs attention on the server"
+
+      - name: Summary
+        if: always()
+        shell: bash
+        env:
+          OUTCOME: ${{ job.status }}
+          SHA: ${{ needs.plan.outputs.sha }}
+        run: |
+          {
+            echo "### Deploy to \`$DEPLOY_ENV\`: $OUTCOME"
+            echo "- Image tag: \`$IMAGE_TAG\`${SHA:+ (commit \`$SHA\`)}"
+            echo "- URL: $APP_URL"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove SSH credentials
+        if: always()
+        run: rm -rf ~/.ssh

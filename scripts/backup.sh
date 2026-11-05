@@ -68,7 +68,8 @@ fi
 # Move into place only when complete, so a half-written backup is never mistaken for a good one.
 mv "$work/dump.out" "$out"
 mv "$work/manifest.json" "$base.manifest.json"
-( cd "$BACKUP_DIR" && shasum -a 256 "$(basename "$out")" > "$(basename "$base").sha256" 2>/dev/null || sha256sum "$(basename "$out")" > "$(basename "$base").sha256" )
+sha256() { if command -v sha256sum >/dev/null; then sha256sum "$@"; else shasum -a 256 "$@"; fi; }
+( cd "$BACKUP_DIR" && sha256 "$(basename "$out")" > "$(basename "$base").sha256" )
 
 find "$BACKUP_DIR" -maxdepth 1 -type f -name 'marutix-*' -mtime +"$RETENTION_DAYS" -print -delete | sed 's/^/backup: pruned /'
 

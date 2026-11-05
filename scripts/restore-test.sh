@@ -26,7 +26,8 @@ for tool in mongorestore mongosh openssl; do
   command -v "$tool" >/dev/null || { echo "restore-test: $tool is not installed" >&2; exit 2; }
 done
 
-archive="${1:-$(ls -1t "$BACKUP_DIR"/marutix-*.archive.gz* 2>/dev/null | grep -v '\.sha256$' | head -1 || true)}"
+# shellcheck disable=SC2012 # names are our own fixed pattern; ls -t gives the newest
+archive="${1:-$(ls -1t "$BACKUP_DIR"/marutix-*.archive.gz "$BACKUP_DIR"/marutix-*.archive.gz.enc 2>/dev/null | head -1 || true)}"
 [[ -n "$archive" && -f "$archive" ]] || { echo "restore-test: no backup archive found" >&2; exit 2; }
 base="${archive%.archive.gz*}"
 manifest="$base.manifest.json"
@@ -36,7 +37,8 @@ started=$(date +%s)
 echo "restore-test: archive $(basename "$archive")"
 
 # 1. Integrity.
-( cd "$(dirname "$archive")" && { shasum -a 256 -c "$(basename "$base").sha256" 2>/dev/null || sha256sum -c "$(basename "$base").sha256"; } ) >/dev/null \
+sha256() { if command -v sha256sum >/dev/null; then sha256sum "$@"; else shasum -a 256 "$@"; fi; }
+( cd "$(dirname "$archive")" && sha256 -c "$(basename "$base").sha256" ) >/dev/null \
   || { echo "restore-test: CHECKSUM MISMATCH, archive is corrupt or was changed" >&2; exit 1; }
 echo "restore-test: checksum ok"
 

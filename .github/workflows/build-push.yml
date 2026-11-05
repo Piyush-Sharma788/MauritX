@@ -1,0 +1,296 @@
+name: Build & Push
+
+# Stage 2 of 3. Runs when "Code Quality" finishes for a push to main or a release tag,
+# and publishes images only if that run succeeded. Pull requests get the same production
+# build and Docker builds (and container smoke tests), but nothing is pushed.
+#
+# Images: ghcr.io/<owner>/marutix-web and ghcr.io/<owner>/marutix-worker
+# Tags:   sha-<full commit sha> (always; this is what Deploy uses)
+#         main                  (pushes to main)
+#         <x.y.z> and <x.y>     (release tags vX.Y.Z)
+
+on:
+  workflow_run:
+    workflows: ["Code Quality"]
+    types: [completed]
+    branches: [main, "v*.*.*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-push-${{ github.event.pull_request.number || github.event.workflow_run.head_sha || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  PUPPETEER_SKIP_DOWNLOAD: "true"
+  NEXT_TELEMETRY_DISABLED: "1"
+
+jobs:
+  resolve:
+    name: Resolve commit and tags
+    # workflow_run: only successful checks of a real push (never a PR, schedule or manual check run).
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      sha: ${{ steps.r.outputs.sha }}
+      ref: ${{ steps.r.outputs.ref }}
+      kind: ${{ steps.r.outputs.kind }}
+      push: ${{ steps.r.outputs.push }}
+      version: ${{ steps.r.outputs.version }}
+    steps:
+      - name: Resolve
+        id: r
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_REF: ${{ github.event.workflow_run.head_branch }}
+          PR_SHA: ${{ github.event.pull_request.head.sha }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          case "$EVENT" in
+            workflow_run) sha="$RUN_SHA"; ref="$RUN_REF" ;;
+            pull_request) sha="$PR_SHA"; ref="pr" ;;
+            *)            sha="$GITHUB_SHA"; ref="$REF_NAME" ;;
+          esac
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::Unexpected commit SHA"; exit 1; }
+
+          kind=none; push=false; version=""
+          if [[ "$ref" == "main" ]]; then
+            kind=branch
+          elif [[ "$ref" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            kind=tag; version="${BASH_REMATCH[1]}"
+            # The tag must really point at this commit.
+            tagged="$(gh api "repos/$REPO/commits/$ref" --jq .sha)"
+            [[ "$tagged" == "$sha" ]] || { echo "::error::Tag $ref points at $tagged, not $sha"; exit 1; }
+          fi
+
+          if [[ "$EVENT" == "workflow_run" && "$kind" != "none" ]]; then
+            push=true
+          elif [[ "$EVENT" == "workflow_dispatch" ]]; then
+            [[ "$kind" != "none" ]] || { echo "::error::Run this on main or a vX.Y.Z tag"; exit 1; }
+            # Manual runs publish only commits that already passed Code Quality.
+            passed="$(gh api "repos/$REPO/actions/workflows/code-quality.yml/runs?head_sha=$sha&status=success&per_page=1" --jq '.total_count')"
+            [[ "$passed" -gt 0 ]] || { echo "::error::No successful Code Quality run for $sha"; exit 1; }
+            push=true
+          fi
+
+          {
+            echo "sha=$sha"; echo "ref=$ref"; echo "kind=$kind"; echo "push=$push"; echo "version=$version"
+          } >> "$GITHUB_OUTPUT"
+          echo "Commit $sha · ref $ref · kind $kind · push $push"
+
+  next-build:
+    name: Production build
+    needs: resolve
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Next.js production build
+        run: npm run build
+
+  image:
+    name: Image (${{ matrix.image }})
+    needs: [resolve, next-build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - image: web
+            dockerfile: Dockerfile
+          - image: worker
+            dockerfile: Dockerfile.worker
+    services:
+      mongodb:
+        # Only for the web container smoke test. Pinned by digest: mongo 9.0.4 (SERVER-131779 fix for kernel ≥6.19).
+        image: mongo@sha256:452bdaf2127b8ff851e31410a267809b9829eded219979f2210e7c7efb85a058
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok'"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      LOCAL_TAG: marutix-${{ matrix.image }}:ci
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+          persist-credentials: false
+
+      - name: Image name and tags
+        id: tags
+        shell: bash
+        env:
+          OWNER: ${{ github.repository_owner }}
+          SHA: ${{ needs.resolve.outputs.sha }}
+          KIND: ${{ needs.resolve.outputs.kind }}
+          VERSION: ${{ needs.resolve.outputs.version }}
+        run: |
+          set -euo pipefail
+          name="ghcr.io/${OWNER,,}/marutix-${{ matrix.image }}"
+          tags="$name:sha-$SHA"
+          [[ "$KIND" == "branch" ]] && tags+=",$name:main"
+          if [[ "$KIND" == "tag" ]]; then tags+=",$name:$VERSION,$name:${VERSION%.*}"; fi
+          { echo "name=$name"; echo "tags=$tags"; } >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build (local, for testing)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64
+          load: true
+          push: false
+          provenance: false
+          tags: ${{ env.LOCAL_TAG }}
+          build-args: |
+            WHATSAPP_WEB_PUBLIC_NUMBER=${{ vars.WHATSAPP_WEB_PUBLIC_NUMBER }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ needs.resolve.outputs.sha }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+
+      - name: Smoke test (web)
+        if: matrix.image == 'web'
+        shell: bash
+        run: bash scripts/ci/smoke-web-image.sh "$LOCAL_TAG"
+
+      - name: Smoke test (worker)
+        if: matrix.image == 'worker'
+        shell: bash
+        run: bash scripts/ci/smoke-worker-image.sh "$LOCAL_TAG"
+
+      - name: Log in to GitHub Container Registry
+        if: needs.resolve.outputs.push == 'true'
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Same inputs and cache as the tested build, so this reuses its layers.
+      - name: Push
+        id: push
+        if: needs.resolve.outputs.push == 'true'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          build-args: |
+            WHATSAPP_WEB_PUBLIC_NUMBER=${{ vars.WHATSAPP_WEB_PUBLIC_NUMBER }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ needs.resolve.outputs.sha }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          provenance: mode=max
+          sbom: true
+
+      - name: Record digest
+        if: needs.resolve.outputs.push == 'true'
+        shell: bash
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+          NAME: ${{ steps.tags.outputs.name }}
+          TAGS: ${{ steps.tags.outputs.tags }}
+        run: |
+          set -euo pipefail
+          [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::No image digest"; exit 1; }
+          mkdir -p manifest
+          printf '{"image":"%s","name":"%s","digest":"%s"}\n' "${{ matrix.image }}" "$NAME" "$DIGEST" > "manifest/${{ matrix.image }}.json"
+          {
+            echo "### marutix-${{ matrix.image }}"
+            echo "Digest: \`$DIGEST\`"
+            echo; echo "Tags:"
+            # shellcheck disable=SC2016 # literal Markdown backticks
+            tr ',' '\n' <<< "$TAGS" | sed 's/^/- `/; s/$/`/'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload digest
+        if: needs.resolve.outputs.push == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: digest-${{ matrix.image }}
+          path: manifest/${{ matrix.image }}.json
+          retention-days: 30
+          if-no-files-found: error
+
+  release-manifest:
+    name: Release manifest
+    needs: [resolve, image]
+    if: needs.resolve.outputs.push == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: digest-*
+          path: digests
+          merge-multiple: true
+      # The single source of truth for "Deploy": which commit, which tag, which exact images.
+      - name: Write deploy manifest
+        shell: bash
+        env:
+          SHA: ${{ needs.resolve.outputs.sha }}
+          REF: ${{ needs.resolve.outputs.ref }}
+          KIND: ${{ needs.resolve.outputs.kind }}
+          VERSION: ${{ needs.resolve.outputs.version }}
+        run: |
+          set -euo pipefail
+          web="$(jq -r .digest digests/web.json)"
+          worker="$(jq -r .digest digests/worker.json)"
+          jq -n --arg sha "$SHA" --arg ref "$REF" --arg kind "$KIND" --arg version "$VERSION" \
+                --arg tag "sha-$SHA" --arg web "$web" --arg worker "$worker" --arg run "$GITHUB_RUN_ID" \
+            '{sha:$sha, ref:$ref, kind:$kind, version:$version, image_tag:$tag, digests:{web:$web, worker:$worker}, build_run_id:$run}' \
+            > deploy-manifest.json
+          cat deploy-manifest.json
+      - name: Upload deploy manifest
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: deploy-manifest
+          path: deploy-manifest.json
+          retention-days: 90
+          if-no-files-found: error

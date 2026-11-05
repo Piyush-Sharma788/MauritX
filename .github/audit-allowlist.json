@@ -1,0 +1,29 @@
+{
+  "$comment": "Read by scripts/audit-gate.mjs. Each entry needs a reason and an expiry (YYYY-MM-DD); expired entries fail CI so they get re-reviewed. onlyVia lists the top-level dependencies through which the vulnerable package may be reached.",
+  "advisories": [
+    {
+      "id": "GHSA-7pqw-9j4j-h8q3",
+      "onlyVia": ["whatsapp-web.js"],
+      "expires": "2027-02-01",
+      "reason": "extract-zip in Puppeteer's browser downloader. The worker image skips the download (PUPPETEER_SKIP_DOWNLOAD) and uses Debian Chromium; never reached by the web app. Removed when the whatsapp-web.js pilot is retired for the Cloud API."
+    },
+    {
+      "id": "GHSA-jmr9-qjv8-65gv",
+      "onlyVia": ["whatsapp-web.js"],
+      "expires": "2027-02-01",
+      "reason": "Same extract-zip path as GHSA-7pqw-9j4j-h8q3 (Puppeteer browser download, not used in production)."
+    },
+    {
+      "id": "GHSA-c475-qrg2-pj4r",
+      "onlyVia": ["whatsapp-web.js"],
+      "expires": "2027-02-01",
+      "reason": "basic-ftp via Puppeteer's proxy-agent: only reachable when Puppeteer fetches through an ftp:// PAC proxy, which the worker never configures."
+    },
+    {
+      "id": "GHSA-mrhx-c7xc-m3w5",
+      "onlyVia": ["whatsapp-web.js"],
+      "expires": "2027-02-01",
+      "reason": "A nested zod <4.6.6 inside Puppeteer's chromium-bidi, validating CDP messages from the local Chromium. The app's own zod is 4.6.7 (patched)."
+    }
+  ]
+}
