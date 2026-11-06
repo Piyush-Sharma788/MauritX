@@ -4,7 +4,7 @@ name: ci-cd pipeline for marutix
 #
 #   codequality  ->  buildandpush  ->  deploy_to_server
 #
-# codequality       ESLint, TypeScript, unit + MongoDB integration tests, dependency audit, CodeQL.
+# codequality       ESLint, TypeScript, unit + MongoDB integration tests, dependency audit.
 # buildandpush      Builds the web + worker Docker images, smoke-tests them, and (for pushes to
 #                   main or a vX.Y.Z tag) pushes them to ghcr.io/<owner>/marutix-{web,worker}.
 # deploy_to_server  Pulls exactly those images on the Docker host over SSH, health-checks the
@@ -39,9 +39,6 @@ jobs:
     name: codequality
     runs-on: ubuntu-24.04
     timeout-minutes: 40
-    permissions:
-      contents: read
-      security-events: write
     services:
       mongodb:
         # Pinned by digest: mongo 9.0.4 (SERVER-131779 fix for kernel ≥6.19).
@@ -92,17 +89,6 @@ jobs:
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           fail-on-severity: high
-
-      # "actions" also scans this workflow file (injection, unsafe triggers, untrusted checkouts).
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
-        with:
-          languages: javascript-typescript, actions
-          build-mode: none
-          queries: security-extended
-
-      - name: CodeQL analysis
-        uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
 
   # ───────────────────────────────────────────── 2. Build & push images
   buildandpush:

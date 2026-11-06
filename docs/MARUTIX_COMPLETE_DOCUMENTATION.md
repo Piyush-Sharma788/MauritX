@@ -1254,7 +1254,7 @@ node scripts/audit-gate.mjs
 
 #### 1. `codequality`
 
-ESLint · TypeScript (`next typegen && tsc --noEmit`) · full integration test suite against MongoDB 9.0.4 · npm signature verification + allowlist dependency gate · dependency review (PRs) · CodeQL (JS/TS + Actions workflows).
+ESLint · TypeScript (`next typegen && tsc --noEmit`) · full integration test suite against MongoDB 9.0.4 · npm signature verification + allowlist dependency gate · dependency review (PRs).
 
 #### 2. `buildandpush`
 
@@ -1492,7 +1492,6 @@ docker compose exec worker \
 | `OTP_PROVIDER=whatsapp requires WHATSAPP_ACCESS_TOKEN, ...` | WhatsApp OTP configured but credentials missing | Either add all 3 WhatsApp vars or set `OTP_PROVIDER=development` |
 | Container health status: `unhealthy` | App is not responding to health checks | Check logs for startup errors; verify MongoDB is reachable |
 | `rate limit exceeded` from Meta | Too many WhatsApp messages in short period | Reduce `WHATSAPP_CLOUD_MAX_MESSAGES_PER_HOUR` or add delay |
-| CodeQL job fails with `Resource not accessible` | Private repo without GitHub Advanced Security | Expected on GitHub Free; either make repo public or disable CodeQL job |
 
 ---
 
