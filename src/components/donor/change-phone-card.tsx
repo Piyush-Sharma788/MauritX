@@ -49,14 +49,14 @@ export function ChangePhoneCard({ maskedPhone }: { maskedPhone: string }) {
   }
 
   return (
-    <section className="rounded-[var(--radius-card)] border-2 border-ink bg-surface p-6 shadow-brut">
+    <section className="rounded-[var(--radius-card)] border border-line bg-surface p-6 shadow-brut-xs">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <span className="flex size-10 items-center justify-center rounded-sm border-2 border-ink bg-signal-300 text-ink">
+          <span className="flex size-10 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
             <PhoneIcon className="size-5" />
           </span>
           <div>
-            <h2 className="font-display text-lg font-extrabold tracking-[-0.02em] text-ink">Mobile number</h2>
+            <h2 className="font-display text-lg font-semibold tracking-[-0.02em] text-ink">Mobile number</h2>
             <p className="text-sm text-ink-soft">{maskedPhone}</p>
           </div>
         </div>
@@ -68,19 +68,19 @@ export function ChangePhoneCard({ maskedPhone }: { maskedPhone: string }) {
       </div>
 
       {done && (
-        <p role="status" className="mt-4 flex gap-2 rounded-md border-2 border-ink bg-mint-50 px-3.5 py-3 text-sm font-semibold text-ink">
+        <p role="status" className="mt-4 flex gap-2 rounded-md border border-line bg-mint-50 px-3.5 py-3 text-sm font-semibold text-ink">
           <CheckIcon className="mt-px size-4 shrink-0" /> {done}
         </p>
       )}
 
       {open && !done && (
-        <div className="mt-5 border-t-2 border-ink pt-5">
+        <div className="mt-5 border-t border-line pt-5">
           {!sentTo ? (
             <form onSubmit={sendCode} noValidate className="flex flex-col gap-3 sm:flex-row sm:items-end">
               <div className="flex-1">
                 <label htmlFor={`${id}-phone`} className="text-sm font-bold text-ink">New mobile number</label>
-                <div className="mt-2 flex h-12 items-center overflow-hidden rounded-md border-2 border-ink bg-surface shadow-brut-xs transition-[box-shadow,background-color] focus-within:bg-signal-50 focus-within:shadow-brut">
-                  <span className="flex h-full items-center border-r-2 border-ink bg-signal-300 px-3 font-mono text-sm font-bold text-ink">{INDIA_COUNTRY_CODE}</span>
+                <div className="mt-2 flex h-12 items-center overflow-hidden rounded-md border border-line bg-surface shadow-brut-xs transition-[box-shadow,background-color] focus-within:bg-signal-50 focus-within:shadow-brut-xs">
+                  <span className="flex h-full items-center border-r border-line bg-signal-300 px-3 font-mono text-sm font-bold text-ink">{INDIA_COUNTRY_CODE}</span>
                   <input
                     id={`${id}-phone`}
                     type="tel"

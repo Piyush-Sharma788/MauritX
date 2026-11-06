@@ -13,11 +13,11 @@ type Setup = { secret: string; qrSvg: string };
 /** Staff second factor: first-time authenticator setup (shows recovery codes once), or the per-session check. */
 export function MfaFlow({ enrolled }: { enrolled: boolean }) {
   return (
-    <section className="rounded-[var(--radius-card)] border-2 border-ink bg-surface p-6 shadow-brut-lg sm:p-8">
-      <span className="flex size-12 items-center justify-center rounded-sm border-2 border-ink bg-signal-300 text-ink shadow-brut-xs">
+    <section className="rounded-[var(--radius-card)] border border-line bg-surface p-6 shadow-brut-sm sm:p-8">
+      <span className="flex size-12 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
         <ShieldIcon className="size-5" />
       </span>
-      <h1 className="mt-5 font-display text-3xl font-extrabold tracking-[-0.045em] text-ink">Two-factor authentication</h1>
+      <h1 className="mt-5 font-display text-3xl font-semibold tracking-[-0.03em] text-ink">Two-factor authentication</h1>
       {enrolled ? <Verify /> : <Enroll />}
     </section>
   );
@@ -88,7 +88,7 @@ function Verify() {
         </Button>
         <button
           type="button"
-          className="inline-flex min-h-11 items-center text-sm font-bold text-ink underline decoration-brand-500 decoration-2 underline-offset-4 hover:decoration-4"
+          className="inline-flex min-h-11 items-center text-sm font-bold text-ink underline decoration-brand-300 underline-offset-4 hover:decoration-brand-500"
           onClick={() => {
             setUseRecovery(!useRecovery);
             setError(null);
@@ -136,7 +136,7 @@ function Enroll() {
       <div className="mt-4 space-y-4 text-sm text-ink-soft">
         <p className="font-bold text-ink">Two-factor authentication is on. Save these recovery codes now.</p>
         <p>Each one signs you in once if you lose your phone. They won&apos;t be shown again.</p>
-        <ul className="grid grid-cols-2 gap-2 rounded-md border-2 border-dashed border-ink bg-signal-50 p-4 font-mono text-base font-semibold text-ink" aria-label="Recovery codes">
+        <ul className="grid grid-cols-2 gap-2 rounded-md border border-dashed border-line bg-signal-50 p-4 font-mono text-base font-semibold text-ink" aria-label="Recovery codes">
           {recoveryCodes.map((c) => <li key={c}>{c}</li>)}
         </ul>
         <label className="flex items-center gap-2 text-ink">
@@ -167,10 +167,10 @@ function Enroll() {
     >
       <p>Scan this code with your authenticator app, then enter the 6-digit code it shows.</p>
       {/* eslint-disable-next-line @next/next/no-img-element -- server-generated SVG data URL */}
-      <img src={`data:image/svg+xml;utf8,${encodeURIComponent(setup.qrSvg)}`} alt="Authenticator setup QR code" className="mx-auto aspect-square w-full max-w-56 rounded-md border-2 border-ink bg-white p-2 shadow-brut-sm" />
+      <img src={`data:image/svg+xml;utf8,${encodeURIComponent(setup.qrSvg)}`} alt="Authenticator setup QR code" className="mx-auto aspect-square w-full max-w-56 rounded-md border border-line bg-white p-2 shadow-brut-sm" />
       <details>
-        <summary className="inline-flex min-h-11 cursor-pointer items-center font-bold text-ink underline decoration-brand-500 decoration-2 underline-offset-4">Can&apos;t scan? Enter the key instead</summary>
-        <p className="mt-2 break-all rounded-md border-2 border-ink bg-paper-deep px-3 py-2 font-mono font-semibold text-ink">{setup.secret.replace(/(.{4})/g, "$1 ").trim()}</p>
+        <summary className="inline-flex min-h-11 cursor-pointer items-center font-bold text-ink underline decoration-brand-300 underline-offset-4">Can&apos;t scan? Enter the key instead</summary>
+        <p className="mt-2 break-all rounded-md border border-line bg-paper-deep px-3 py-2 font-mono font-semibold text-ink">{setup.secret.replace(/(.{4})/g, "$1 ").trim()}</p>
       </details>
       <div>
         <OtpInput length={6} value={code} onChange={setCode} onComplete={(v) => void confirm(v)} disabled={busy} invalid={Boolean(error)} describedBy={error ? "mfa-error" : undefined} />

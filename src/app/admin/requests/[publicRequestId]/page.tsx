@@ -1,4 +1,7 @@
 import type { Metadata } from "next";
+import { FacilityMap, MapLegend } from "@/components/maps/facility-map";
+import { facilityPoints } from "@/components/requests/nearby-facilities";
+import { nearbyFacilitiesForRequest } from "@/server/discovery/nearby";
 import { randomUUID } from "node:crypto";
 import { Types } from "mongoose";
 import Link from "next/link";
@@ -7,11 +10,11 @@ import { Suspense, type ReactNode } from "react";
 import { AutomationCard, HistoryCard, OutreachCard } from "@/components/admin/coordination-detail";
 import { CoordinationPanel } from "@/components/admin/coordination-panel";
 import { RequestStatusActions, RevokeLinkButton } from "@/components/admin/request-actions";
-import { StatusBadge, StatusTimeline, formatIST } from "@/components/requests/status";
+import { PriorityBadge, RequestProgress, StageIndicator, StatusBadge, StatusTimeline, formatIST } from "@/components/requests/status";
 import { Spinner } from "@/components/ui/button";
 import { ArrowLeftIcon, LockIcon, ShieldIcon } from "@/components/ui/icons";
 import { BLOOD_GROUP_LABELS } from "@/features/donors/schemas";
-import { COMPONENT_LABELS, PRIORITY_LABELS, publicRequestIdSchema } from "@/features/requests/schemas";
+import { COMPONENT_LABELS, publicRequestIdSchema } from "@/features/requests/schemas";
 import { AppError } from "@/lib/api/errors";
 import { requireAdminPage } from "@/lib/auth/require-admin";
 import { maskPhone } from "@/lib/validation/phone";
@@ -26,7 +29,7 @@ export const metadata: Metadata = { title: "Request · Admin", robots: { index: 
 export default function AdminRequestDetailPage({ params }: PageProps<"/admin/requests/[publicRequestId]">) {
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
-      <Link href="/admin/requests" className="-ml-2 inline-flex items-center gap-1.5 rounded-md border-2 border-transparent px-2 py-1 text-sm font-semibold text-ink transition-colors hover:border-ink hover:bg-signal-300">
+      <Link href="/admin/requests" className="-ml-2 inline-flex items-center gap-1.5 rounded-md border border-transparent px-2 py-1 text-sm font-semibold text-ink transition-colors hover:border-line-strong hover:bg-signal-100">
         <ArrowLeftIcon className="size-4" /> All requests
       </Link>
       <Suspense fallback={<div className="flex min-h-64 items-center justify-center text-ink-muted" role="status"><Spinner className="size-6" /><span className="sr-only">Loading</span></div>}>
@@ -38,8 +41,8 @@ export default function AdminRequestDetailPage({ params }: PageProps<"/admin/req
 
 function Card({ title, children, note }: { title: string; children: ReactNode; note?: ReactNode }) {
   return (
-    <section className="rounded-[var(--radius-card)] border-2 border-ink bg-surface p-5 shadow-brut sm:p-6">
-      <h2 className="font-display text-lg font-extrabold tracking-[-0.02em] text-ink">{title}</h2>
+    <section className="rounded-[var(--radius-card)] border border-line bg-surface p-5 shadow-brut-xs sm:p-6">
+      <h2 className="font-display text-lg font-semibold tracking-[-0.02em] text-ink">{title}</h2>
       {note && <p className="mt-0.5 text-xs text-ink-muted">{note}</p>}
       <div className="mt-4">{children}</div>
     </section>
@@ -72,7 +75,13 @@ async function DetailContent({ params }: Pick<PageProps<"/admin/requests/[public
     throw error;
   }
 
-  const [coordination, institutions] = await Promise.all([getRequestCoordination(r.publicRequestId), listInstitutions({ status: "verified" })]);
+  const [coordination, institutions, nearby] = await Promise.all([
+    getRequestCoordination(r.publicRequestId),
+    listInstitutions({ status: "verified" }),
+    nearbyFacilitiesForRequest(r.publicRequestId, { includeDeviceCentre: true }).catch(() => null),
+  ]);
+  const mapPoints = nearby ? facilityPoints(nearby) : [];
+  const zonesKm = getCoordinationConfig().zonesKm;
   // Same rule as GET /api/v1/admin/requests/:id/coordination: showing donors' shared phone numbers is audit-logged.
   const disclosed = coordination.responses.filter((x) => x.donorPhone).length;
   if (disclosed > 0) {
@@ -88,24 +97,47 @@ async function DetailContent({ params }: Pick<PageProps<"/admin/requests/[public
 
   return (
     <div className="mt-4 space-y-5">
-      <header className="flex flex-col gap-4 rounded-[var(--radius-card)] border-2 border-ink bg-surface p-6 shadow-brut sm:flex-row sm:items-start sm:justify-between sm:p-8">
+      <header className="flex flex-col gap-4 rounded-[var(--radius-card)] border border-line bg-surface p-6 shadow-brut-xs sm:flex-row sm:items-start sm:justify-between sm:p-8">
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={r.status} className="text-sm" />
-            <span className={`rounded-sm border-2 border-ink px-1.5 py-px font-mono text-[0.66rem] font-bold uppercase tracking-[0.08em] ${r.priority === "critical" ? "bg-danger-50 text-danger-600" : "bg-paper-deep text-ink-soft"}`}>{PRIORITY_LABELS[r.priority].label}</span>
+            <PriorityBadge priority={r.priority} />
+            <StageIndicator status={r.status} className="ml-1" />
           </div>
-          <h1 className="mt-3 font-mono text-2xl font-bold text-ink sm:text-3xl">{r.publicRequestId}</h1>
+          <h1 className="mt-3 font-mono text-2xl font-semibold tracking-[-0.01em] text-ink sm:text-3xl">{r.publicRequestId}</h1>
           <p className="mt-1 text-ink-soft">
             {r.bloodGroup === "unknown" ? "Blood group not known" : BLOOD_GROUP_LABELS[r.bloodGroup]} · {r.unitsRequested} × {COMPONENT_LABELS[r.component]} · needed by {formatIST(r.requiredBy)}
           </p>
           <p className="mt-1 text-xs text-ink-muted">Created {formatIST(r.createdAt)} · expires {formatIST(r.expiresAt)}</p>
         </div>
         {r.verifiedAt && (
-          <p className="inline-flex items-center gap-1.5 self-start rounded-sm border-2 border-ink bg-mint-400 px-2 py-0.5 font-mono text-[0.68rem] font-bold uppercase tracking-[0.08em] text-ink">
+          <p className="inline-flex items-center gap-1.5 self-start rounded-full border border-mint-300 bg-mint-50 px-2.5 py-0.5 text-xs font-medium text-mint-800">
             <ShieldIcon className="size-3.5" /> Verified {formatIST(r.verifiedAt)}
           </p>
         )}
       </header>
+
+      <Card title="Donor matching progress" note="From the request status and alert counts. Interest is not a donation.">
+        <RequestProgress
+          status={r.status}
+          history={r.history}
+          donorsAlerted={coordination.summary.alerts.sent + coordination.summary.alerts.delivered + coordination.summary.alerts.read}
+          donorsInterested={coordination.summary.interested}
+        />
+      </Card>
+
+      {(mapPoints.length > 0 || nearby?.center) && (
+        <Card title="Area map" note="Donor alert zones around the request (approximate centre), with nearby blood banks and hospitals. Donors are never shown individually: only zones and counts.">
+          <FacilityMap
+            points={mapPoints}
+            center={nearby?.center ?? null}
+            rings={nearby?.center ? zonesKm.map((km, i) => ({ radiusKm: km, label: `Donor zone ${i + 1}: within ${km} km` })) : []}
+            ariaLabel={`Map around request ${r.publicRequestId}`}
+            className="h-72 sm:h-96"
+          />
+          <MapLegend showArea={Boolean(nearby?.center)} className="mt-2.5" />
+        </Card>
+      )}
 
       <Card title="Update status" note="Verify only after confirming with the hospital or blood bank. Changes are recorded in the history and audit log.">
         <RequestStatusActions publicRequestId={r.publicRequestId} allowed={r.allowedStatuses} />

@@ -26,7 +26,8 @@ const contentSecurityPolicy = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' blob: data:",
+  // Map tiles (Leaflet + OpenStreetMap) on the tracking page and admin maps.
+  "img-src 'self' blob: data: https://tile.openstreetmap.org",
   "font-src 'self'",
   "connect-src 'self'",
   "object-src 'none'",

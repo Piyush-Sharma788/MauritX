@@ -53,12 +53,12 @@ export function RequestStatusActions({ publicRequestId, allowed }: { publicReque
         ))}
       </div>
       {target && (
-        <div role="alertdialog" aria-labelledby="admin-confirm" className="mt-4 rounded-md border-2 border-ink bg-paper-deep/60 p-4">
+        <div role="alertdialog" aria-labelledby="admin-confirm" className="mt-4 rounded-md border border-line bg-paper-deep/60 p-4">
           <p id="admin-confirm" className="text-sm font-bold text-ink">Change status to “{STATUS_LABELS[target]}”?</p>
           {target === "verified" && <p className="mt-1 text-xs text-ink-soft">Only verify after confirming the need directly with the hospital or blood bank.</p>}
           <label className="mt-3 block text-xs font-bold text-ink">
             Internal note (optional, never shown on tracking links)
-            <textarea value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} rows={2} className="mt-1 w-full rounded-md border-2 border-ink bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand-500" placeholder="e.g. Confirmed with blood bank, Dr. on duty" />
+            <textarea value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} rows={2} className="mt-1 w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand-500" placeholder="e.g. Confirmed with blood bank, Dr. on duty" />
           </label>
           <div className="mt-3 flex gap-2">
             <Button variant={target === "cancelled" ? "danger-solid" : "primary"} className="h-10 px-4 text-sm" onClick={apply} disabled={pending}>

@@ -88,8 +88,8 @@ export function OtpInput({ length, value, onChange, onComplete, disabled, invali
           }}
           onKeyDown={(e) => onKeyDown(index, e)}
           onPaste={(e) => onPaste(index, e)}
-          className={`aspect-[5/6] w-full min-w-0 max-w-14 rounded-md border-2 text-center font-mono text-2xl font-bold text-ink caret-brand-500 shadow-brut-xs outline-none transition-[transform,box-shadow,background-color] duration-150 focus:-translate-x-0.5 focus:-translate-y-0.5 focus:bg-signal-50 focus:shadow-brut disabled:opacity-60 sm:text-[1.7rem] ${
-            invalid ? "border-danger-600 bg-danger-50" : digit ? "border-ink bg-signal-300" : "border-ink bg-surface"
+          className={`aspect-[5/6] w-full min-w-0 max-w-14 rounded-md border text-center font-mono text-2xl font-bold text-ink caret-brand-500 shadow-brut-xs outline-none transition-[transform,box-shadow,background-color] duration-150 focus:-translate-x-0.5 focus:-translate-y-0.5 focus:bg-signal-50 focus:shadow-brut-xs disabled:opacity-60 sm:text-[1.7rem] ${
+            invalid ? "border-danger-600 bg-danger-50" : digit ? "border-line bg-signal-300" : "border-line bg-surface"
           }`}
         />
       ))}

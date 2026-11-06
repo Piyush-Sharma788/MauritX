@@ -44,14 +44,14 @@ export default function GetHelpPage() {
 
       <ol className="mt-10 space-y-5">
         {STEPS.map(({ icon: Icon, title, body, action }, i) => (
-          <li key={title} className="relative flex overflow-hidden rounded-[var(--radius-card)] border-2 border-ink bg-surface shadow-brut">
-            <span aria-hidden="true" className={`flex w-14 shrink-0 flex-col items-center gap-3 border-r-2 border-ink pt-5 sm:w-20 ${i === 2 ? "bg-brand-500 text-white" : i === 1 ? "bg-mint-300 text-ink" : "bg-signal-300 text-ink"}`}>
-              <span className="font-display text-3xl font-extrabold leading-none sm:text-4xl">{i + 1}</span>
+          <li key={title} className="relative flex overflow-hidden rounded-[var(--radius-card)] border border-line bg-surface shadow-brut-xs">
+            <span aria-hidden="true" className={`flex w-14 shrink-0 flex-col items-center gap-3 border-r border-line pt-5 sm:w-20 ${i === 2 ? "bg-brand-500 text-white" : i === 1 ? "bg-mint-50 text-mint-800" : "bg-paper text-ink"}`}>
+              <span className="font-display text-3xl font-semibold leading-none sm:text-4xl">{i + 1}</span>
               <Icon className="size-5" />
             </span>
             <div className="min-w-0 p-5 sm:p-6">
               <p className="eyebrow text-ink-muted">Step {i + 1}</p>
-              <h2 className="mt-1.5 font-display text-xl font-extrabold leading-tight tracking-[-0.025em] text-ink sm:text-[1.4rem]">{title}</h2>
+              <h2 className="mt-1.5 font-display text-xl font-semibold leading-tight tracking-[-0.025em] text-ink sm:text-[1.4rem]">{title}</h2>
               <p className="mt-2 leading-relaxed text-ink-soft">{body}</p>
               {action && (
                 <a
@@ -69,13 +69,13 @@ export default function GetHelpPage() {
         ))}
       </ol>
 
-      <section className="mt-12 rounded-[var(--radius-card)] border-2 border-ink bg-brand-50 p-6 shadow-brut-lg sm:p-8">
+      <section className="mt-12 rounded-[var(--radius-card)] border border-line bg-brand-50 p-6 shadow-brut-sm sm:p-8">
         <div className="flex gap-4">
-          <span aria-hidden="true" className="hidden size-11 shrink-0 items-center justify-center rounded-sm border-2 border-ink bg-ink text-white sm:flex">
+          <span aria-hidden="true" className="hidden size-11 shrink-0 items-center justify-center rounded-xl bg-brand-100 text-brand-600 sm:flex">
             <InfoIcon className="size-5" />
           </span>
           <div>
-            <h2 className="font-display text-2xl font-extrabold tracking-[-0.03em] text-ink">Post a request on MarutiX too</h2>
+            <h2 className="font-display text-2xl font-semibold tracking-[-0.03em] text-ink">Post a request on MarutiX too</h2>
             <p className="mt-2 leading-relaxed text-ink-soft">
               It takes about two minutes and needs no account. Our team verifies it with the hospital, and you get a private link to track it.
               It doesn&apos;t replace the steps above, and MarutiX can&apos;t guarantee blood availability.

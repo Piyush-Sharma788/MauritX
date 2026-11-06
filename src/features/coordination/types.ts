@@ -88,6 +88,8 @@ export interface InstitutionSummary {
   reviewStatus: ReviewStatus;
   capability: InstitutionCapability;
   contactChannels: number;
+  /** Public map position, when known (admin map). */
+  location?: { latitude: number; longitude: number } | null;
 }
 
 export interface InstitutionContactView {

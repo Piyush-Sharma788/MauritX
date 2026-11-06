@@ -74,6 +74,7 @@ async function toSummary(doc: InstitutionRecord): Promise<InstitutionSummaryWith
     reviewStatus: doc.review?.status ?? "approved",
     capability: doc.capability ?? "hospital",
     contactChannels: (doc.contactChannels ?? []).filter((c) => c.status !== "invalid").length,
+    location: doc.location?.coordinates?.length === 2 ? { longitude: doc.location.coordinates[0], latitude: doc.location.coordinates[1] } : null,
     staleSince: iso(doc.staleSince),
     mergedInto: doc.mergedInto?.toString() ?? null,
     unverifiedChannels: (doc.contactChannels ?? []).filter((c) => c.status === "unverified" && !c.staleSince).length,

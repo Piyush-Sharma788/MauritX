@@ -12,10 +12,10 @@ export type Tone = "neutral" | "brand" | "good" | "warn" | "bad" | "info" | "ink
 /* ---- Typography ---------------------------------------------------------- */
 
 export function Eyebrow({ children, className = "", tone = "brand" }: { children: ReactNode; className?: string; tone?: "brand" | "ink" | "muted" | "light" }) {
-  const tones = { brand: "text-brand-600", ink: "text-ink", muted: "text-ink-muted", light: "text-signal-300" };
+  const tones = { brand: "text-brand-600", ink: "text-ink", muted: "text-ink-muted", light: "text-brand-200" };
   return (
     <p className={`eyebrow inline-flex items-center gap-2 ${tones[tone]} ${className}`}>
-      <span aria-hidden="true" className="inline-block size-2 bg-current" />
+      <span aria-hidden="true" className="inline-block size-1.5 rounded-full bg-current" />
       {children}
     </p>
   );
@@ -39,14 +39,14 @@ export function PageHeader({
 }) {
   const titleSize =
     size === "lg"
-      ? "text-[2.4rem] leading-[0.98] sm:text-6xl"
-      : "text-[2rem] leading-[1.02] sm:text-[2.6rem]";
+      ? "text-[2.25rem] leading-[1.05] sm:text-[3.25rem]"
+      : "text-[1.75rem] leading-[1.15] sm:text-[2.125rem]";
   return (
     <div className={`flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between ${className}`}>
       <div className="min-w-0 max-w-3xl">
         {eyebrow && <Eyebrow>{eyebrow}</Eyebrow>}
-        <h1 className={`mt-3 text-balance font-display font-extrabold tracking-[-0.045em] text-ink ${titleSize}`}>{title}</h1>
-        {description && <div className="mt-4 max-w-2xl text-lg leading-relaxed text-ink-soft">{description}</div>}
+        <h1 className={`mt-2 text-balance font-display font-semibold tracking-[-0.03em] text-ink ${titleSize}`}>{title}</h1>
+        {description && <div className="mt-3 max-w-2xl text-base leading-relaxed text-ink-soft sm:text-lg">{description}</div>}
       </div>
       {children && <div className="flex shrink-0 flex-wrap gap-2">{children}</div>}
     </div>
@@ -56,17 +56,17 @@ export function PageHeader({
 /* ---- Surfaces ------------------------------------------------------------ */
 
 const cardTones = {
-  default: "bg-surface",
-  paper: "bg-paper",
-  brand: "bg-brand-50",
-  signal: "bg-signal-50",
-  mint: "bg-mint-50",
-  ink: "bg-ink text-white on-dark",
+  default: "border-line bg-surface",
+  paper: "border-line bg-paper",
+  brand: "border-brand-100 bg-brand-50",
+  signal: "border-line bg-signal-50",
+  mint: "border-mint-100 bg-mint-50",
+  ink: "border-ink bg-ink text-white on-dark",
 };
 
 export type CardTone = keyof typeof cardTones;
 
-/** Generic block: ink outline + hard shadow. */
+/** Generic card: one hairline border, soft elevation. */
 export function Panel({
   as: Tag = "section",
   tone = "default",
@@ -81,9 +81,9 @@ export function Panel({
   className?: string;
   children: ReactNode;
 } & Omit<ComponentProps<"section">, "className" | "children" | "ref">) {
-  const shadows = { none: "shadow-none", sm: "shadow-brut-sm", md: "shadow-brut", lg: "shadow-brut-lg" };
+  const shadows = { none: "shadow-none", sm: "shadow-brut-xs", md: "shadow-brut-xs", lg: "shadow-brut-sm" };
   return (
-    <Tag className={`rounded-[var(--radius-card)] border-2 border-ink ${cardTones[tone]} ${shadows[shadow]} ${className}`} {...props}>
+    <Tag className={`rounded-[var(--radius-card)] border ${cardTones[tone]} ${shadows[shadow]} ${className}`} {...props}>
       {children}
     </Tag>
   );
@@ -94,8 +94,8 @@ export function CardHeader({ title, note, actions, id, as: Tag = "h2" }: { title
   return (
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div className="min-w-0">
-        <Tag id={id} className="font-display text-lg font-extrabold tracking-[-0.02em] text-ink">{title}</Tag>
-        {note && <p className="mt-0.5 text-xs leading-relaxed text-ink-muted">{note}</p>}
+        <Tag id={id} className="font-display text-base font-semibold tracking-[-0.01em] text-ink sm:text-[1.05rem]">{title}</Tag>
+        {note && <p className="mt-1 text-[0.8rem] leading-relaxed text-ink-muted">{note}</p>}
       </div>
       {actions}
     </div>
@@ -105,19 +105,19 @@ export function CardHeader({ title, note, actions, id, as: Tag = "h2" }: { title
 /* ---- Status -------------------------------------------------------------- */
 
 const badgeTones: Record<Tone, string> = {
-  neutral: "bg-paper-deep text-ink",
-  brand: "bg-brand-100 text-brand-700",
-  good: "bg-mint-100 text-mint-800",
-  warn: "bg-signal-100 text-signal-800",
-  bad: "bg-danger-50 text-danger-600",
-  info: "bg-surface text-ink",
-  ink: "bg-ink text-white",
+  neutral: "border-line bg-paper-deep text-signal-800",
+  brand: "border-brand-200 bg-brand-50 text-brand-700",
+  good: "border-mint-300 bg-mint-50 text-mint-800",
+  warn: "border-warning-200 bg-warning-50 text-warning-800",
+  bad: "border-brand-200 bg-danger-50 text-brand-700",
+  info: "border-info-200 bg-info-50 text-info-700",
+  ink: "border-ink bg-ink text-white",
 };
 
 export const badgeBase =
-  "inline-flex items-center gap-1.5 whitespace-nowrap rounded-sm border-2 border-ink px-2 py-0.5 font-mono text-[0.68rem] font-bold uppercase leading-4 tracking-[0.08em]";
+  "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium leading-4";
 
-/** Chunky status chip. Pass an icon or a dot so colour is never the only signal. */
+/** Status pill. Pass an icon or a dot so colour is never the only signal. */
 export function Badge({ children, tone = "neutral", className = "", dot = false }: { children: ReactNode; tone?: Tone; className?: string; dot?: boolean }) {
   return (
     <span className={`${badgeBase} ${badgeTones[tone]} ${className}`}>
@@ -134,16 +134,16 @@ export function badgeClasses(tone: Tone = "neutral") {
 /* ---- Notices ------------------------------------------------------------- */
 
 const noticeTones = {
-  warn: { box: "bg-signal-50 text-ink", icon: "bg-signal-300 text-ink", Icon: AlertIcon },
-  danger: { box: "bg-danger-50 text-ink", icon: "bg-brand-500 text-white", Icon: AlertIcon },
-  info: { box: "bg-surface text-ink", icon: "bg-ink text-white", Icon: InfoIcon },
-  success: { box: "bg-mint-50 text-ink", icon: "bg-mint-400 text-ink", Icon: CheckIcon },
-  shield: { box: "bg-mint-50 text-ink", icon: "bg-mint-400 text-ink", Icon: ShieldIcon },
+  warn: { box: "border-warning-200 bg-warning-50", icon: "bg-warning-100 text-warning-800", Icon: AlertIcon },
+  danger: { box: "border-brand-200 bg-brand-50", icon: "bg-brand-100 text-brand-600", Icon: AlertIcon },
+  info: { box: "border-line bg-surface", icon: "bg-info-50 text-info-700", Icon: InfoIcon },
+  success: { box: "border-mint-300 bg-mint-50", icon: "bg-mint-100 text-mint-800", Icon: CheckIcon },
+  shield: { box: "border-mint-300 bg-mint-50", icon: "bg-mint-100 text-mint-800", Icon: ShieldIcon },
 } as const;
 
 export type NoticeTone = keyof typeof noticeTones;
 
-/** Callout with a solid icon tab on the left. */
+/** Callout with a tinted icon on the left. */
 export function Notice({
   tone = "info",
   title,
@@ -167,12 +167,12 @@ export function Notice({
   const Icon = t.Icon;
   const pad = size === "sm" ? "text-xs" : "text-sm";
   return (
-    <Tag role={role} className={`flex overflow-hidden rounded-md border-2 border-ink leading-relaxed shadow-brut-xs ${t.box} ${pad} ${className}`}>
-      <span aria-hidden="true" className={`flex w-10 shrink-0 items-start justify-center border-r-2 border-ink pt-3 ${t.icon}`}>
-        {icon ?? <Icon className="size-4.5" strokeWidth={2.25} />}
+    <Tag role={role} className={`flex gap-3 rounded-xl border px-3.5 py-3 leading-relaxed text-ink sm:px-4 ${t.box} ${pad} ${className}`}>
+      <span aria-hidden="true" className={`flex size-7 shrink-0 items-center justify-center rounded-lg ${t.icon}`}>
+        {icon ?? <Icon className="size-4" />}
       </span>
-      <span className="min-w-0 flex-1 px-3.5 py-2.5 sm:px-4 sm:py-3">
-        {title && <strong className="block font-bold">{title}</strong>}
+      <span className="min-w-0 flex-1 self-center">
+        {title && <strong className="block font-semibold">{title}</strong>}
         {children}
       </span>
     </Tag>
@@ -182,13 +182,24 @@ export function Notice({
 /* ---- Data ---------------------------------------------------------------- */
 
 const statTones = {
-  neutral: "bg-surface",
-  good: "bg-mint-50",
-  warn: "bg-signal-100",
-  bad: "bg-danger-50",
-  brand: "bg-brand-500 text-white",
+  neutral: { box: "border-line bg-surface", icon: "bg-signal-100 text-signal-800" },
+  good: { box: "border-line bg-surface", icon: "bg-mint-50 text-mint-800" },
+  warn: { box: "border-line bg-surface", icon: "bg-warning-50 text-warning-800" },
+  bad: { box: "border-brand-200 bg-brand-50/50", icon: "bg-brand-100 text-brand-600" },
+  info: { box: "border-line bg-surface", icon: "bg-info-50 text-info-700" },
+  brand: { box: "border-brand-600 bg-brand-500 text-white", icon: "bg-white/15 text-white" },
 };
 
+const statAccent = {
+  neutral: "",
+  good: "text-mint-800",
+  warn: "text-warning-800",
+  bad: "text-brand-600",
+  info: "text-info-700",
+  brand: "text-white",
+};
+
+/** A metric card. `icon` is optional; the value colour follows the tone. */
 export function StatTile({
   label,
   value,
@@ -196,6 +207,7 @@ export function StatTile({
   tone = "neutral",
   className = "",
   as: Tag = "div",
+  icon,
 }: {
   label: ReactNode;
   value: ReactNode;
@@ -203,21 +215,25 @@ export function StatTile({
   tone?: keyof typeof statTones;
   className?: string;
   as?: "div" | "li";
+  icon?: ReactNode;
 }) {
   const inverted = tone === "brand";
+  const t = statTones[tone];
   return (
-    <Tag className={`relative rounded-md border-2 border-ink p-4 shadow-brut-sm ${statTones[tone]} ${className}`}>
-      <p className={`text-[0.78rem] font-bold leading-snug ${inverted ? "text-white" : "text-ink-soft"}`}>{label}</p>
-      <p className={`mt-1.5 font-display text-3xl font-extrabold leading-none tracking-[-0.04em] tabular-nums ${inverted ? "text-white" : "text-ink"}`}>{value}</p>
-      {hint && <p className={`mt-1.5 text-[0.72rem] leading-snug ${inverted ? "text-white" : "text-ink-muted"}`}>{hint}</p>}
+    <Tag className={`relative rounded-xl border p-4 shadow-brut-xs ${t.box} ${className}`}>
+      <div className="flex items-start justify-between gap-3">
+        <p className={`text-[0.8rem] font-medium leading-snug ${inverted ? "text-white/90" : "text-ink-soft"}`}>{label}</p>
+        {icon && <span aria-hidden="true" className={`flex size-8 shrink-0 items-center justify-center rounded-lg ${t.icon}`}>{icon}</span>}
+      </div>
+      <p className={`mt-2 font-display text-[1.75rem] font-semibold leading-none tracking-[-0.03em] tabular-nums ${inverted ? "text-white" : statAccent[tone] || "text-ink"}`}>{value}</p>
+      {hint && <p className={`mt-1.5 text-xs leading-snug ${inverted ? "text-white/85" : "text-ink-muted"}`}>{hint}</p>}
     </Tag>
   );
 }
 
 export function EmptyBlock({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
-    <div className={`rounded-md border-2 border-dashed border-ink/50 bg-paper px-4 py-8 text-center text-sm text-ink-muted ${className}`}>
-      <span aria-hidden="true" className="mx-auto mb-2 block font-mono text-lg font-bold text-ink/30">∅</span>
+    <div className={`rounded-xl border border-dashed border-line-strong bg-paper px-4 py-8 text-center text-sm text-ink-muted ${className}`}>
       {children}
     </div>
   );
@@ -225,11 +241,11 @@ export function EmptyBlock({ children, className = "" }: { children: ReactNode; 
 
 /** Table shell: scrolls horizontally inside its frame, never the page. */
 export const table = {
-  frame: "overflow-hidden rounded-[var(--radius-card)] border-2 border-ink bg-surface shadow-brut",
+  frame: "overflow-hidden rounded-[var(--radius-card)] border border-line bg-surface shadow-brut-xs",
   scroll: "overflow-x-auto",
   table: "w-full text-left text-sm",
-  head: "border-b-2 border-ink bg-ink text-white",
-  th: "whitespace-nowrap px-4 py-2.5 font-mono text-[0.68rem] font-bold uppercase tracking-[0.1em] first:pl-5",
+  head: "border-b border-line bg-paper text-ink-muted",
+  th: "whitespace-nowrap px-4 py-2.5 text-xs font-medium first:pl-5",
   body: "divide-y divide-line",
   row: "transition-colors hover:bg-signal-50",
   td: "px-4 py-3 align-top first:pl-5",
@@ -238,11 +254,11 @@ export const table = {
 /** Small key/value list. */
 export function KeyValue({ items, className = "" }: { items: { label: ReactNode; value: ReactNode }[]; className?: string }) {
   return (
-    <dl className={`grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2 ${className}`}>
+    <dl className={`grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2 ${className}`}>
       {items.map((item, i) => (
-        <div key={i} className="min-w-0 border-l-2 border-ink pl-3">
-          <dt className="font-mono text-[0.66rem] font-bold uppercase tracking-[0.1em] text-ink-muted">{item.label}</dt>
-          <dd className="mt-0.5 break-words font-semibold text-ink">{item.value}</dd>
+        <div key={i} className="min-w-0">
+          <dt className="text-xs font-medium text-ink-muted">{item.label}</dt>
+          <dd className="mt-0.5 break-words font-medium text-ink">{item.value}</dd>
         </div>
       ))}
     </dl>
@@ -253,11 +269,10 @@ export function KeyValue({ items, className = "" }: { items: { label: ReactNode;
 export function LoadingBlock({ label = "Loading", className = "min-h-64" }: { label?: string; className?: string }) {
   return (
     <div className={`flex items-center justify-center ${className}`} role="status">
-      <span className="inline-flex items-center gap-3 rounded-md border-2 border-ink bg-surface px-4 py-2.5 font-mono text-xs font-bold uppercase tracking-[0.12em] text-ink shadow-brut-sm">
-        <span aria-hidden="true" className="flex gap-1">
-          <span className="size-2 animate-pulse bg-brand-500" />
-          <span className="size-2 animate-pulse bg-signal-400 [animation-delay:150ms]" />
-          <span className="size-2 animate-pulse bg-mint-400 [animation-delay:300ms]" />
+      <span className="inline-flex items-center gap-3 rounded-full border border-line bg-surface px-4 py-2 text-sm font-medium text-ink-soft shadow-brut-xs">
+        <span aria-hidden="true" className="relative flex size-2.5">
+          <span className="absolute inset-0 animate-ping rounded-full bg-brand-400 opacity-60" />
+          <span className="relative size-2.5 rounded-full bg-brand-500" />
         </span>
         {label}…
       </span>

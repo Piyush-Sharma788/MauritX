@@ -68,6 +68,8 @@ export interface NearbyFacility {
   capabilityLabel: string;
   capabilitySource: string;
   distanceKm: number | null;
+  /** The institution's public map position, when known (for maps). */
+  location?: { latitude: number; longitude: number } | null;
   address: string;
   openingHours: string | null;
   phones: { value: string; verified: boolean; source: string }[];
@@ -84,6 +86,8 @@ export interface NearbyFacilitiesResult {
   /** How the search centre was found; "city" when only the city name matched. */
   origin: "institution" | "requester_device" | "geocoded_address" | "city" | null;
   radiusKm: number | null;
+  /** The search centre rounded to ~1 km, for maps. Omitted for a requester-device centre unless asked for (admin). */
+  center?: { latitude: number; longitude: number } | null;
   facilities: NearbyFacility[];
   verifiedCount: number;
   unverifiedCount: number;

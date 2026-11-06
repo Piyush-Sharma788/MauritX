@@ -31,6 +31,8 @@ type Channel = Record_["contactChannels"][number];
 export const VERIFIED_LABEL = "Verified by MarutiX";
 export const UNVERIFIED_LABEL = "Unverified: from public listings (OpenStreetMap / its website). Call to confirm before going.";
 const OSM_ATTRIBUTION = "Data © OpenStreetMap contributors (ODbL)";
+/** Two decimals ≈ 1 km: enough to draw a search area, never a precise point. */
+const roundTo1Km = (v: number) => Math.round(v * 100) / 100;
 
 const usablePhone = (c: Channel) => c.type === "phone" && c.status !== "invalid" && c.status !== "opted_out" && !(c.staleSince && c.status !== "verified");
 const usableSite = (c: Channel) => c.type === "website" && c.status !== "invalid" && c.status !== "opted_out" && !c.staleSince && c.validation?.state !== "invalid";
@@ -47,7 +49,15 @@ async function loadRequest(requestRef: string) {
  * "MX-7K3Q9P2A"). Returns null if the request doesn't exist. Callers must
  * already have authorised the viewer for this request.
  */
-export async function nearbyFacilitiesForRequest(requestRef: string, options: { limit?: number; radiusKm?: number } = {}): Promise<NearbyFacilitiesResult | null> {
+/**
+ * `includeDeviceCentre`: also return the map centre when it comes from the requester's
+ * device (admin views only). Tracking links can be shared with family, so by default the
+ * centre is returned only when it is a public place (the hospital or its geocoded address).
+ */
+export async function nearbyFacilitiesForRequest(
+  requestRef: string,
+  options: { limit?: number; radiusKm?: number; includeDeviceCentre?: boolean } = {},
+): Promise<NearbyFacilitiesResult | null> {
   await connectToDatabase();
   const request = await loadRequest(requestRef);
   if (!request) return null;
@@ -73,7 +83,7 @@ export async function nearbyFacilitiesForRequest(requestRef: string, options: { 
   const items = docs.map((d) => {
     const coords = d.location?.coordinates;
     const p = coords?.length === 2 ? { longitude: coords[0], latitude: coords[1] } : null;
-    return { id: d._id.toString(), capability: (d.capability ?? "hospital") as InstitutionCapability, distanceKm: origin && p ? Math.round(haversineKm(origin.point, p) * 10) / 10 : null, doc: d };
+    return { id: d._id.toString(), capability: (d.capability ?? "hospital") as InstitutionCapability, distanceKm: origin && p ? Math.round(haversineKm(origin.point, p) * 10) / 10 : null, point: p, doc: d };
   });
   const verified = rankInstitutions(items.filter((i) => i.doc.verificationStatus === "verified"));
   const others = rankInstitutions(items.filter((i) => i.doc.verificationStatus !== "verified"));
@@ -81,7 +91,7 @@ export async function nearbyFacilitiesForRequest(requestRef: string, options: { 
 
   const availability = activeAvailabilitySource();
   const facilities: NearbyFacility[] = [];
-  for (const { id, capability, distanceKm, doc } of chosen) {
+  for (const { id, capability, distanceKm, point, doc } of chosen) {
     const isVerified = doc.verificationStatus === "verified";
     const phones = (doc.contactChannels ?? []).filter(usablePhone)
       .sort((a, b) => Number(b.status === "verified") - Number(a.status === "verified"))
@@ -99,6 +109,7 @@ export async function nearbyFacilitiesForRequest(requestRef: string, options: { 
       capabilityLabel: CAPABILITY_LABELS[capability],
       capabilitySource: doc.capabilitySource ?? "admin",
       distanceKm,
+      location: point,
       address: [doc.address, doc.locality, doc.city].filter((v) => v && v !== "Not listed" && v !== "Address not listed in the source").join(", "),
       openingHours: doc.openingHours ?? null,
       phones: phones.slice(0, 2),
@@ -115,6 +126,10 @@ export async function nearbyFacilitiesForRequest(requestRef: string, options: { 
     requestId: request.publicRequestId,
     origin: origin?.source ?? (facilities.length ? "city" : null),
     radiusKm: origin ? radiusKm : null,
+    center:
+      origin && (origin.source !== "requester_device" || options.includeDeviceCentre)
+        ? { latitude: roundTo1Km(origin.point.latitude), longitude: roundTo1Km(origin.point.longitude) }
+        : null,
     facilities,
     verifiedCount: facilities.filter((f) => f.verification === "verified").length,
     unverifiedCount: facilities.filter((f) => f.verification === "unverified").length,

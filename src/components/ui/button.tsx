@@ -5,27 +5,25 @@ type Variant = "primary" | "secondary" | "ghost" | "inverse" | "danger" | "dange
 type Size = "md" | "lg";
 
 /*
- * Neo-brutalist buttons: ink outline, hard shadow, and a physical "press"
- * into the shadow on hover/active (see brut-press in globals.css).
- * Ghost buttons stay flat for low-emphasis actions.
+ * Minimal buttons: primary is solid medical red; secondary is white with a
+ * hairline border; ghost is text-only for low emphasis. All share one height
+ * scale (44/52px touch targets), soft elevation and a subtle press.
  */
 const base =
-  "inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-md font-bold tracking-[-0.01em] focus-visible:outline-3 focus-visible:outline-offset-3 disabled:pointer-events-none disabled:opacity-55";
-
-const solid = "border-2 border-ink brut-press";
+  "inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-lg font-semibold tracking-[-0.01em] focus-visible:outline-2 focus-visible:outline-offset-2 disabled:pointer-events-none disabled:opacity-50";
 
 const variants: Record<Variant, string> = {
-  primary: `${solid} bg-brand-500 text-white hover:bg-brand-600`,
-  secondary: `${solid} bg-surface text-ink hover:bg-signal-100`,
-  ghost: "border-2 border-transparent text-ink-soft transition-colors hover:border-ink hover:bg-surface hover:text-ink active:translate-y-px",
-  inverse: `${solid} bg-signal-300 text-ink hover:bg-signal-400`,
-  danger: `${solid} bg-surface text-danger-600 hover:bg-danger-50`,
-  "danger-solid": `${solid} bg-danger-600 text-white hover:bg-brand-700`,
+  primary: "brut-press border border-brand-600 bg-brand-500 text-white hover:bg-brand-600",
+  secondary: "brut-press border border-line-strong bg-surface text-ink hover:bg-signal-50",
+  ghost: "border border-transparent text-ink-soft transition-colors duration-150 hover:bg-signal-100 hover:text-ink",
+  inverse: "brut-press border border-white/20 bg-white text-ink hover:bg-signal-100",
+  danger: "brut-press border border-brand-200 bg-surface text-brand-600 hover:border-brand-300 hover:bg-brand-50",
+  "danger-solid": "brut-press border border-brand-700 bg-brand-600 text-white hover:bg-brand-700",
 };
 
 const sizes: Record<Size, string> = {
-  md: "min-h-11 px-5 text-[0.95rem]",
-  lg: "min-h-13 px-7 text-base",
+  md: "min-h-11 px-4.5 text-[0.95rem]",
+  lg: "min-h-13 px-6 text-base",
 };
 
 export function buttonClasses({ variant = "primary", size = "md", className = "" }: {
@@ -54,7 +52,7 @@ export function Spinner({ className = "size-4" }: { className?: string }) {
   return (
     <svg className={`${className} animate-spin`} viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity="0.25" strokeWidth="3" />
-      <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="square" />
+      <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
     </svg>
   );
 }

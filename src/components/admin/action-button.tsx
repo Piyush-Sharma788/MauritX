@@ -44,7 +44,7 @@ export function ActionButton({
   return (
     <span className="inline-flex flex-col items-start gap-1.5">
       {asking ? (
-        <span role="alertdialog" aria-label={confirm} className="inline-flex flex-wrap items-center gap-2 rounded-md border-2 border-ink bg-paper px-3 py-2 text-xs text-ink">
+        <span role="alertdialog" aria-label={confirm} className="inline-flex flex-wrap items-center gap-2 rounded-md border border-line bg-paper px-3 py-2 text-xs text-ink">
           <span className="font-medium">{confirm}</span>
           <Button variant={variant === "danger" ? "danger-solid" : "primary"} className="h-8 px-3 text-xs" onClick={run} disabled={pending}>
             {pending && <Spinner className="size-3" />}Confirm

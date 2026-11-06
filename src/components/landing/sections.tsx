@@ -22,14 +22,14 @@ function SectionHeading({ eyebrow, title, intro, tone = "light" }: {
   const dark = tone === "dark";
   return (
     <div className="max-w-2xl">
-      <p className={`eyebrow inline-flex items-center gap-2 rounded-sm border-2 px-2 py-1 ${dark ? "border-signal-300 text-signal-300" : "border-ink bg-surface text-ink"}`}>
-        <span aria-hidden="true" className={`size-2 ${dark ? "bg-signal-300" : "bg-brand-500"}`} />
+      <p className={`eyebrow inline-flex items-center gap-2 ${dark ? "text-brand-200" : "text-brand-600"}`}>
+        <span aria-hidden="true" className="size-1.5 rounded-full bg-current" />
         {eyebrow}
       </p>
-      <h2 className={`mt-5 text-balance font-display text-[2.1rem] font-extrabold leading-[1.02] tracking-[-0.045em] sm:text-[3.1rem] ${dark ? "text-white" : "text-ink"}`}>
+      <h2 className={`mt-3 text-balance font-display text-[1.9rem] font-semibold leading-[1.1] tracking-[-0.03em] sm:text-[2.6rem] ${dark ? "text-white" : "text-ink"}`}>
         {title}
       </h2>
-      {intro && <p className={`mt-5 text-lg leading-relaxed ${dark ? "text-white/80" : "text-ink-soft"}`}>{intro}</p>}
+      {intro && <p className={`mt-4 text-lg leading-relaxed ${dark ? "text-white/80" : "text-ink-soft"}`}>{intro}</p>}
     </div>
   );
 }
@@ -81,22 +81,22 @@ export function HowItWorks() {
             title="One calm, guided path when every minute counts."
             intro="MarutiX handles the coordination: who to reach, in what order and with whose consent. That leaves families and donors free to focus on what matters."
           />
-          <div className="w-full overflow-hidden rounded-md border-2 border-ink bg-surface shadow-brut lg:max-w-sm">
-            <p className="eyebrow border-b-2 border-ink bg-ink px-4 py-2 text-white">Rolling out in phases</p>
-            <ol className="divide-y-2 divide-ink/10 px-4 py-1">
+          <div className="w-full overflow-hidden rounded-xl border border-line bg-surface shadow-brut-xs lg:max-w-sm">
+            <p className="eyebrow border-b border-line bg-paper px-4 py-2.5 text-ink-soft">Rolling out in phases</p>
+            <ol className="divide-y divide-line px-4 py-1">
               {ROLLOUT.map((item, i) => (
                 <li key={item.label} className="flex items-center justify-between gap-3 py-2.5 text-sm">
                   <span className="flex items-center gap-2.5 font-medium text-ink">
                     <span
-                      className={`flex size-6 shrink-0 items-center justify-center rounded-sm border-2 border-ink font-mono text-[0.7rem] font-bold ${
-                        item.live ? "bg-mint-400 text-ink" : "bg-paper-deep text-ink"
+                      className={`flex size-6 shrink-0 items-center justify-center rounded-full text-[0.7rem] font-semibold ${
+                        item.live ? "bg-success-600 text-white" : "border border-line-strong bg-surface text-ink-muted"
                       }`}
                     >
-                      {item.live ? <CheckIcon className="size-3.5" strokeWidth={3} /> : i + 1}
+                      {item.live ? <CheckIcon className="size-3.5" strokeWidth={2.75} /> : i + 1}
                     </span>
                     {item.label}
                   </span>
-                  <span className={`shrink-0 rounded-sm border-2 border-ink px-1.5 font-mono text-[0.62rem] font-bold uppercase tracking-[0.08em] ${item.live ? "bg-mint-100 text-mint-800" : "bg-paper-deep text-ink-soft"}`}>{item.state}</span>
+                  <span className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium ${item.live ? "border-mint-300 bg-mint-50 text-mint-800" : "border-line bg-paper-deep text-ink-soft"}`}>{item.state}</span>
                 </li>
               ))}
             </ol>
@@ -114,23 +114,24 @@ export function HowItWorks() {
 
 function StepCard({ label, steps, accent = false }: { label: string; steps: { title: string; body: string }[]; accent?: boolean }) {
   return (
-    <article className={`brut-lift relative overflow-hidden rounded-md border-2 border-ink shadow-brut ${accent ? "bg-brand-50" : "bg-surface"}`}>
-      <h3 className={`flex items-center justify-between border-b-2 border-ink px-6 py-3 font-display text-lg font-extrabold tracking-[-0.02em] sm:px-8 ${accent ? "bg-brand-500 text-white" : "bg-ink text-white"}`}>
+    <article className="brut-lift relative overflow-hidden rounded-[var(--radius-card)] border border-line bg-surface shadow-brut-xs">
+      {accent && <span aria-hidden="true" className="absolute inset-x-0 top-0 h-1 bg-brand-500" />}
+      <h3 className={`flex items-center justify-between border-b border-line px-6 py-4 font-display text-base font-semibold tracking-[-0.01em] sm:px-8 ${accent ? "text-brand-700" : "text-ink"}`}>
         {label}
-        <span aria-hidden="true" className="font-mono text-xs font-bold tracking-[0.12em] opacity-80">{String(steps.length).padStart(2, "0")} STEPS</span>
+        <span aria-hidden="true" className="text-xs font-medium text-ink-muted">{steps.length} steps</span>
       </h3>
       <ol className="space-y-6 p-6 sm:p-8">
         {steps.map((step, i) => (
           <li key={step.title} className="flex gap-4">
             <span
-              className={`flex size-10 shrink-0 items-center justify-center rounded-sm border-2 border-ink font-mono text-sm font-bold shadow-brut-xs ${
-                accent ? "bg-signal-300 text-ink" : "bg-mint-300 text-ink"
+              className={`flex size-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold ring-1 ${
+                accent ? "bg-brand-50 text-brand-700 ring-brand-200" : "bg-signal-100 text-signal-800 ring-line"
               }`}
             >
-              {String(i + 1).padStart(2, "0")}
+              {i + 1}
             </span>
             <div>
-              <p className="font-bold text-ink">{step.title}</p>
+              <p className="font-semibold text-ink">{step.title}</p>
               <p className="mt-1 text-[0.95rem] leading-relaxed text-ink-soft">{step.body}</p>
             </div>
           </li>
@@ -179,25 +180,24 @@ const COMMITMENTS = [
 
 export function TrustSafety() {
   return (
-    <section id="safety" className="on-dark scroll-mt-20 border-y-2 border-ink bg-ink py-20 text-white sm:py-28">
+    <section id="safety" className="scroll-mt-20 border-y border-line bg-surface py-20 sm:py-28">
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
         <SectionHeading
-          tone="dark"
           eyebrow="Trust & safety"
           title="Built for trust, not just speed."
           intro="An emergency is exactly when people need to know their information is safe and that the decisions stay with professionals. These commitments shape every feature we ship."
         />
         <ul className="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 lg:gap-5">
           {COMMITMENTS.map(({ icon: Icon, title, body }, i) => (
-            <li key={title} className="group rounded-md border-2 border-white/90 bg-ink p-6 shadow-[6px_6px_0_0_var(--color-brand-500)] transition-transform duration-150 hover:-translate-x-0.5 hover:-translate-y-0.5 sm:p-7">
+            <li key={title} className="group rounded-[var(--radius-card)] border border-line bg-paper p-6 transition-colors duration-150 hover:border-line-strong hover:bg-surface sm:p-7">
               <div className="flex items-center justify-between">
-                <span className="flex size-12 items-center justify-center rounded-sm border-2 border-white bg-signal-300 text-ink transition-transform duration-200 group-hover:-rotate-6">
-                  <Icon className="size-6" />
+                <span className="flex size-11 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
+                  <Icon className="size-5" />
                 </span>
-                <span aria-hidden="true" className="font-mono text-xs font-bold text-white/40">{String(i + 1).padStart(2, "0")}</span>
+                <span aria-hidden="true" className="text-xs font-medium tabular-nums text-ink-muted">{String(i + 1).padStart(2, "0")}</span>
               </div>
-              <h3 className="mt-5 font-display text-xl font-extrabold tracking-[-0.02em] text-white">{title}</h3>
-              <p className="mt-2 text-[0.95rem] leading-relaxed text-white/80">{body}</p>
+              <h3 className="mt-5 font-display text-lg font-semibold tracking-[-0.02em] text-ink">{title}</h3>
+              <p className="mt-2 text-[0.95rem] leading-relaxed text-ink-soft">{body}</p>
             </li>
           ))}
         </ul>
@@ -228,8 +228,8 @@ export function DonorBand() {
   return (
     <section id="donors" className="scroll-mt-20 py-20 sm:py-28">
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
-        <div className="relative grid gap-10 rounded-md border-[3px] border-ink bg-surface p-6 shadow-brut-xl sm:p-10 lg:grid-cols-[1fr_1.1fr] lg:gap-14 lg:p-14">
-          <span aria-hidden="true" className="absolute -top-4 right-6 rotate-3 rounded-sm border-2 border-ink bg-mint-300 px-3 py-1 font-mono text-xs font-bold uppercase tracking-[0.12em] text-ink shadow-brut-xs sm:right-10">~2 min on WhatsApp</span>
+        <div className="relative grid gap-10 rounded-2xl border border-line bg-surface p-6 shadow-brut-sm sm:p-10 lg:grid-cols-[1fr_1.1fr] lg:gap-14 lg:p-14">
+          <span aria-hidden="true" className="absolute -top-3.5 right-6 rounded-full border border-mint-300 bg-mint-50 px-3 py-1 text-xs font-semibold text-mint-800 shadow-brut-xs sm:right-10">~2 min on WhatsApp</span>
           <div className="flex flex-col justify-center">
             <SectionHeading
               eyebrow="For donors"
@@ -259,17 +259,17 @@ export function DonorBand() {
 
 function ChecklistCard({ title, items, positive = false }: { title: string; items: string[]; positive?: boolean }) {
   return (
-    <div className={`rounded-md border-2 border-ink p-5 sm:p-6 ${positive ? "bg-mint-50" : "bg-paper-deep"}`}>
-      <h3 className="font-display text-lg font-extrabold tracking-[-0.02em] text-ink">{title}</h3>
+    <div className={`rounded-xl border p-5 sm:p-6 ${positive ? "border-mint-300 bg-mint-50/60" : "border-line bg-paper"}`}>
+      <h3 className="font-display text-base font-semibold tracking-[-0.02em] text-ink">{title}</h3>
       <ul className="mt-4 space-y-3">
         {items.map((item) => (
           <li key={item} className="flex gap-2.5 text-[0.93rem] leading-snug text-ink">
             <span
-              className={`mt-px flex size-5 shrink-0 items-center justify-center rounded-sm border-2 border-ink ${
-                positive ? "bg-mint-400 text-ink" : "bg-brand-500 text-white"
+              className={`mt-px flex size-5 shrink-0 items-center justify-center rounded-full ${
+                positive ? "bg-success-600 text-white" : "bg-brand-100 text-brand-600"
               }`}
             >
-              {positive ? <CheckIcon className="size-3" strokeWidth={3.5} /> : <XIcon className="size-3" strokeWidth={3.5} />}
+              {positive ? <CheckIcon className="size-3" strokeWidth={3} /> : <XIcon className="size-3" strokeWidth={3} />}
             </span>
             {item}
           </li>
@@ -313,22 +313,22 @@ const FAQS = [
 
 export function Faq() {
   return (
-    <section id="faq" className="scroll-mt-20 border-t-2 border-ink bg-paper-deep py-20 sm:py-28">
+    <section id="faq" className="scroll-mt-20 border-t border-line bg-paper py-20 sm:py-28">
       <div className="mx-auto grid max-w-6xl gap-10 px-4 sm:px-6 lg:grid-cols-[0.8fr_1.2fr] lg:gap-16">
         <SectionHeading eyebrow="FAQ" title="Questions people ask us." intro="Can't find what you need? In an emergency, always speak to the treating hospital first." />
         <div className="space-y-3">
           {FAQS.map((item) => (
-            <details key={item.q} className="group rounded-md border-2 border-ink bg-surface shadow-brut-sm transition-shadow open:shadow-brut [&_summary::-webkit-details-marker]:hidden">
-              <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-4 rounded-md px-5 py-3 font-bold text-ink transition-colors hover:bg-signal-50 group-open:border-b-2 group-open:border-ink sm:px-6">
+            <details key={item.q} className="group rounded-xl border border-line bg-surface shadow-brut-xs transition-shadow open:shadow-brut-sm [&_summary::-webkit-details-marker]:hidden">
+              <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-4 rounded-xl px-5 py-3 font-semibold text-ink transition-colors hover:bg-signal-50 group-open:border-b group-open:border-line sm:px-6">
                 {item.q}
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-sm border-2 border-ink bg-signal-300 text-ink transition-transform duration-200 group-open:rotate-45 group-open:bg-brand-500 group-open:text-white">
-                  <XIcon className="size-4 rotate-45" strokeWidth={3} />
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-full border border-line bg-surface text-ink-soft transition-[transform,background-color,color,border-color] duration-200 group-open:rotate-45 group-open:border-brand-200 group-open:bg-brand-50 group-open:text-brand-600">
+                  <XIcon className="size-4 rotate-45" strokeWidth={2.25} />
                 </span>
               </summary>
               <div className="px-5 pb-5 pt-4 text-[0.95rem] leading-relaxed text-ink-soft sm:px-6">
                 <p>{item.a}</p>
                 {item.link && (
-                  <Link href={item.link.href} className="mt-3 inline-flex min-h-11 items-center gap-1.5 font-bold text-ink underline decoration-brand-500 decoration-2 underline-offset-4 hover:decoration-4">
+                  <Link href={item.link.href} className="mt-3 inline-flex min-h-11 items-center gap-1.5 font-bold text-ink underline decoration-brand-300 underline-offset-4 hover:decoration-brand-500">
                     {item.link.label}
                     <ArrowRightIcon className="size-4" />
                   </Link>

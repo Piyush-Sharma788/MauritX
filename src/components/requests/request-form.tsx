@@ -198,22 +198,22 @@ export function RequestForm() {
   return (
     <div ref={topRef} className="scroll-mt-24">
       {/* Progress */}
-      <div className="sticky top-[66px] z-20 -mx-4 border-y-2 border-ink bg-paper px-4 py-3 sm:static sm:mx-0 sm:rounded-md sm:border-2 sm:bg-surface sm:px-5 sm:shadow-brut-sm">
+      <div className="sticky top-[66px] z-20 -mx-4 border-y border-line bg-paper px-4 py-3 sm:static sm:mx-0 sm:rounded-md sm:border sm:bg-surface sm:px-5 sm:shadow-brut-sm">
         <div className="flex items-center justify-between gap-3 text-sm">
           <p className="min-w-0 font-bold text-ink">
-            <span className="mr-2 inline-flex rounded-sm border-2 border-ink bg-signal-300 px-1.5 font-mono text-xs">{String(step + 1).padStart(2, "0")}/{String(STEPS.length).padStart(2, "0")}</span>
+            <span className="mr-2 inline-flex rounded-sm border border-line bg-signal-300 px-1.5 font-mono text-xs">{String(step + 1).padStart(2, "0")}/{String(STEPS.length).padStart(2, "0")}</span>
             {STEPS[step].title}
           </p>
-          <p className="shrink-0 font-mono text-[0.66rem] font-bold uppercase tracking-[0.1em] text-ink-muted">~2 min</p>
+          <p className="shrink-0 text-xs font-medium text-ink-muted">~2 min</p>
         </div>
         <div className="mt-3 grid grid-cols-4 gap-1.5" aria-hidden="true">
           {STEPS.map((s, i) => (
-            <span key={s.key} className={`h-2.5 rounded-sm border-2 border-ink transition-colors duration-300 ${i < step ? "bg-ink" : i === step ? "bg-brand-500" : "bg-surface"}`} />
+            <span key={s.key} className={`h-1.5 rounded-full transition-colors duration-300 ${i < step ? "bg-brand-300" : i === step ? "bg-brand-500" : "bg-line"}`} />
           ))}
         </div>
       </div>
 
-      <div className="mt-6 rounded-[var(--radius-card)] border-2 border-ink bg-surface p-5 shadow-brut-lg sm:p-8">
+      <div className="mt-6 rounded-[var(--radius-card)] border border-line bg-surface p-5 shadow-brut-sm sm:p-8">
         {step === 0 && (
           <fieldset className="space-y-5">
             <legend className="sr-only">Patient and contact</legend>
@@ -227,8 +227,8 @@ export function RequestForm() {
               <TextInput id={f("contact")} autoComplete="name" value={form.contactName} maxLength={60} onChange={(e) => set("contactName", e.target.value)} error={errors.contactName} />
             </Field>
             <Field id={f("phone")} label="Contact person's mobile number" hint="Never shown publicly. MarutiX may call to verify the request." error={errors.contactPhone}>
-              <div className={`flex h-12 items-center overflow-hidden rounded-md border-2 bg-surface shadow-brut-xs transition-[box-shadow,background-color] focus-within:bg-signal-50 focus-within:shadow-brut ${errors.contactPhone ? "border-danger-600" : "border-ink"}`}>
-                <span className="flex h-full items-center border-r-2 border-ink bg-signal-300 px-3.5 font-mono font-bold text-ink" aria-hidden="true">{INDIA_COUNTRY_CODE}</span>
+              <div className={`flex h-12 items-center overflow-hidden rounded-md border bg-surface shadow-brut-xs transition-[box-shadow,background-color] focus-within:bg-signal-50 focus-within:shadow-brut-xs ${errors.contactPhone ? "border-danger-600" : "border-line"}`}>
+                <span className="flex h-full items-center border-r border-line bg-signal-300 px-3.5 font-mono font-bold text-ink" aria-hidden="true">{INDIA_COUNTRY_CODE}</span>
                 <input
                   id={f("phone")}
                   type="tel"
@@ -256,9 +256,9 @@ export function RequestForm() {
                   return (
                     <label
                       key={group}
-                      className={`flex h-13 cursor-pointer items-center justify-center rounded-md border-2 font-display text-lg font-extrabold transition-[transform,box-shadow,background-color] duration-150 has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ink ${
+                      className={`flex h-13 cursor-pointer items-center justify-center rounded-md border font-display text-lg font-semibold transition-[transform,box-shadow,background-color] duration-150 has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-brand-500 ${
                         group === "unknown" ? "col-span-4 font-sans text-sm font-bold" : ""
-                      } ${checked ? "-translate-x-0.5 -translate-y-0.5 border-ink bg-brand-500 text-white shadow-brut" : `${errors.bloodGroup ? "border-danger-600" : "border-ink"} bg-surface text-ink shadow-brut-xs hover:bg-signal-50`}`}
+                      } ${checked ? "border-line bg-brand-500 text-white shadow-brut-xs" : `${errors.bloodGroup ? "border-danger-600" : "border-line"} bg-surface text-ink shadow-brut-xs hover:bg-signal-50`}`}
                     >
                       <input type="radio" name="bloodGroup" checked={checked} onChange={() => set("bloodGroup", group)} className="sr-only" />
                       {group === "unknown" ? "Not sure yet" : BLOOD_GROUP_LABELS[group]}
@@ -280,10 +280,10 @@ export function RequestForm() {
 
             <div>
               <p id={f("units-label")} className="text-sm font-bold text-ink">Units needed</p>
-              <div className="mt-2 inline-flex items-center overflow-hidden rounded-md border-2 border-ink bg-surface shadow-brut-sm" role="group" aria-labelledby={f("units-label")}>
-                <button type="button" aria-label="Fewer units" onClick={() => set("unitsRequested", Math.max(1, form.unitsRequested - 1))} className="h-12 w-12 border-r-2 border-ink text-xl font-bold text-ink transition-colors hover:bg-signal-300 active:bg-signal-400">−</button>
-                <output aria-live="polite" className="w-16 text-center font-display text-2xl font-extrabold tabular-nums text-ink">{form.unitsRequested}</output>
-                <button type="button" aria-label="More units" onClick={() => set("unitsRequested", Math.min(20, form.unitsRequested + 1))} className="h-12 w-12 border-l-2 border-ink text-xl font-bold text-ink transition-colors hover:bg-signal-300 active:bg-signal-400">+</button>
+              <div className="mt-2 inline-flex items-center overflow-hidden rounded-md border border-line bg-surface shadow-brut-sm" role="group" aria-labelledby={f("units-label")}>
+                <button type="button" aria-label="Fewer units" onClick={() => set("unitsRequested", Math.max(1, form.unitsRequested - 1))} className="h-12 w-12 border-r border-line text-xl font-bold text-ink transition-colors hover:bg-signal-100 active:bg-signal-400">−</button>
+                <output aria-live="polite" className="w-16 text-center font-display text-2xl font-semibold tabular-nums text-ink">{form.unitsRequested}</output>
+                <button type="button" aria-label="More units" onClick={() => set("unitsRequested", Math.min(20, form.unitsRequested + 1))} className="h-12 w-12 border-l border-line text-xl font-bold text-ink transition-colors hover:bg-signal-100 active:bg-signal-400">+</button>
               </div>
               {errors.unitsRequested && <p role="alert" className="mt-1.5 text-xs font-medium text-danger-600">{errors.unitsRequested}</p>}
             </div>
@@ -310,7 +310,7 @@ export function RequestForm() {
               <TextInput id={f("by")} type="datetime-local" min={hoursFromNow(-1)} value={form.requiredByLocal} onChange={(e) => set("requiredByLocal", e.target.value)} error={errors.requiredBy} />
               <div className="mt-2 flex flex-wrap gap-2">
                 {[["In 2 hours", 2], ["In 6 hours", 6], ["In 24 hours", 24]].map(([label, h]) => (
-                  <button key={label} type="button" onClick={() => set("requiredByLocal", hoursFromNow(Number(h)))} className="inline-flex min-h-10 items-center rounded-sm border-2 border-ink bg-surface px-3 font-mono text-xs font-bold uppercase tracking-[0.06em] text-ink shadow-brut-xs transition-colors hover:bg-signal-300">
+                  <button key={label} type="button" onClick={() => set("requiredByLocal", hoursFromNow(Number(h)))} className="inline-flex min-h-10 items-center rounded-lg border border-line-strong bg-surface px-3 text-sm font-medium text-ink shadow-brut-xs transition-colors hover:bg-signal-100">
                     {label}
                   </button>
                 ))}
@@ -341,7 +341,7 @@ export function RequestForm() {
             </Field>
             <div>
               <p className="flex items-baseline justify-between text-sm font-bold text-ink">
-                Your current location <span className="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-ink-muted">Optional</span>
+                Your current location <span className="text-xs font-medium text-ink-muted">Optional</span>
               </p>
               <div className="mt-2">
                 <LocationPicker
@@ -384,7 +384,7 @@ export function RequestForm() {
             <Checkbox id={f("consent")} checked={form.consent} onChange={(v) => set("consent", v)} error={errors.consent}>
               <strong className="font-semibold text-ink">I confirm these details are accurate.</strong> MarutiX may contact me and the hospital to verify this request, and may share
               only the blood need, hospital and area (never the patient&apos;s name or my number) with people who can help. See the{" "}
-              <Link href="/privacy" target="_blank" className="font-bold text-ink underline decoration-brand-500 decoration-2 underline-offset-2">privacy notice</Link>.
+              <Link href="/privacy" target="_blank" className="font-bold text-ink underline decoration-brand-300 underline-offset-2">privacy notice</Link>.
             </Checkbox>
             {errors.consent && <p role="alert" className="text-xs font-medium text-danger-600">{errors.consent}</p>}
 
@@ -400,7 +400,7 @@ export function RequestForm() {
           </Notice>
         )}
 
-        <div className="mt-8 flex flex-col-reverse gap-3 border-t-2 border-ink pt-6 sm:flex-row sm:justify-between">
+        <div className="mt-8 flex flex-col-reverse gap-3 border-t border-line pt-6 sm:flex-row sm:justify-between">
           {step > 0 ? (
             <Button type="button" variant="ghost" onClick={back} disabled={pending}>
               <ArrowLeftIcon className="size-4" /> Back
@@ -426,10 +426,10 @@ export function RequestForm() {
 
 function ReviewSection({ title, onEdit, children }: { title: string; onEdit: () => void; children: ReactNode }) {
   return (
-    <section className="overflow-hidden rounded-md border-2 border-ink">
-      <div className="flex items-center justify-between border-b-2 border-ink bg-paper-deep px-4 py-1.5 sm:px-5">
+    <section className="overflow-hidden rounded-md border border-line">
+      <div className="flex items-center justify-between border-b border-line bg-paper-deep px-4 py-1.5 sm:px-5">
         <h3 className="eyebrow text-ink">{title}</h3>
-        <button type="button" onClick={onEdit} className="inline-flex min-h-10 items-center px-2 text-sm font-bold text-ink underline decoration-brand-500 decoration-2 underline-offset-4 hover:decoration-4">Edit</button>
+        <button type="button" onClick={onEdit} className="inline-flex min-h-10 items-center px-2 text-sm font-bold text-ink underline decoration-brand-300 underline-offset-4 hover:decoration-brand-500">Edit</button>
       </div>
       <dl className="space-y-2 p-4 text-sm sm:p-5">{children}</dl>
     </section>
@@ -467,20 +467,20 @@ function Confirmation({ result, onNew, topRef }: { result: CreateRequestResponse
 
   return (
     <div ref={topRef} className="scroll-mt-24 space-y-5">
-      <section className="relative rounded-[var(--radius-card)] border-2 border-ink bg-surface p-6 text-center shadow-brut-lg sm:p-10" role="status">
-        <span className="animate-pop mx-auto flex size-16 items-center justify-center rounded-md border-2 border-ink bg-mint-400 text-ink shadow-brut-sm [--pop-rotate:-6deg]">
+      <section className="relative rounded-[var(--radius-card)] border border-line bg-surface p-6 text-center shadow-brut-sm sm:p-10" role="status">
+        <span className="animate-pop mx-auto flex size-16 items-center justify-center rounded-2xl bg-mint-50 text-success-600 ring-1 ring-mint-300">
           <CheckIcon className="size-8" strokeWidth={3} />
         </span>
-        <h2 className="mt-5 font-display text-4xl font-extrabold tracking-[-0.045em] text-ink">Request received</h2>
+        <h2 className="mt-5 font-display text-4xl font-semibold tracking-[-0.03em] text-ink">Request received</h2>
         <p className="mt-2 text-ink-soft">Your request ID</p>
         <button
           type="button"
           onClick={() => copy(result.publicRequestId, "id")}
-          className="brut-press mt-2 inline-flex max-w-full items-center gap-3 rounded-md border-2 border-ink bg-signal-300 px-4 py-2 font-mono text-xl font-bold tracking-wider text-ink sm:text-2xl"
+          className="brut-press mt-2 inline-flex max-w-full items-center gap-3 rounded-md border border-line bg-signal-300 px-4 py-2 font-mono text-xl font-bold tracking-wider text-ink sm:text-2xl"
           aria-label={`Copy request ID ${result.publicRequestId}`}
         >
           {result.publicRequestId}
-          <span className="rounded-sm bg-ink px-1.5 py-0.5 font-mono text-[0.65rem] font-bold uppercase tracking-[0.1em] text-white">{copied === "id" ? "Copied" : "Copy"}</span>
+          <span className="rounded-md border border-line bg-surface px-1.5 py-0.5 text-xs font-medium text-ink-soft">{copied === "id" ? "Copied" : "Copy"}</span>
         </button>
         <div className="mt-4 flex justify-center">
           <StatusBadge status={result.status} />
@@ -491,14 +491,14 @@ function Confirmation({ result, onNew, topRef }: { result: CreateRequestResponse
         {result.replayed && <p className="mt-2 text-xs text-ink-muted">This request was already submitted; you&apos;re seeing the same confirmation.</p>}
       </section>
 
-      <section className="rounded-[var(--radius-card)] border-2 border-ink bg-brand-50 p-5 shadow-brut sm:p-6">
-        <h3 className="font-display text-xl font-extrabold tracking-[-0.02em] text-ink">Save your private tracking link</h3>
+      <section className="rounded-[var(--radius-card)] border border-line bg-brand-50 p-5 shadow-brut-xs sm:p-6">
+        <h3 className="font-display text-xl font-semibold tracking-[-0.02em] text-ink">Save your private tracking link</h3>
         <p className="mt-1 text-sm leading-relaxed text-ink-soft">
           It shows the latest status and lets you update or cancel this request. Anyone with it can manage the request, so share it only with people you trust.
           It works until {formatIST(result.manageLinkExpiresAt)}.
         </p>
         <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-          <input readOnly value={result.manageUrl} aria-label="Private tracking link" onFocus={(e) => e.currentTarget.select()} className="h-11 min-w-0 flex-1 rounded-md border-2 border-ink bg-surface px-3 font-mono text-xs text-ink" />
+          <input readOnly value={result.manageUrl} aria-label="Private tracking link" onFocus={(e) => e.currentTarget.select()} className="h-11 min-w-0 flex-1 rounded-md border border-line bg-surface px-3 font-mono text-xs text-ink" />
           <Button variant="secondary" onClick={() => copy(result.manageUrl, "link")}>
             {copied === "link" ? "Copied" : "Copy link"}
           </Button>
@@ -513,11 +513,11 @@ function Confirmation({ result, onNew, topRef }: { result: CreateRequestResponse
         )}
       </section>
 
-      <section className="rounded-[var(--radius-card)] border-2 border-ink bg-surface p-5 shadow-brut sm:p-6">
-        <h3 className="font-display text-xl font-extrabold tracking-[-0.02em] text-ink">While we verify</h3>
+      <section className="rounded-[var(--radius-card)] border border-line bg-surface p-5 shadow-brut-xs sm:p-6">
+        <h3 className="font-display text-xl font-semibold tracking-[-0.02em] text-ink">While we verify</h3>
         <ul className="mt-3 space-y-2.5 text-sm text-ink-soft">
           <li className="flex gap-2.5"><PhoneIcon className="mt-0.5 size-4 shrink-0 text-brand-600" /><span>Keep talking to the hospital&apos;s blood bank. They decide what&apos;s needed and test compatibility.</span></li>
-          <li className="flex gap-2.5"><InfoIcon className="mt-0.5 size-4 shrink-0 text-brand-600" /><span>Check stock at government blood centres on <a href="https://eraktkosh.mohfw.gov.in/" target="_blank" rel="noopener noreferrer" className="font-bold text-ink underline decoration-brand-500 decoration-2 underline-offset-2">e-RaktKosh</a>.</span></li>
+          <li className="flex gap-2.5"><InfoIcon className="mt-0.5 size-4 shrink-0 text-brand-600" /><span>Check stock at government blood centres on <a href="https://eraktkosh.mohfw.gov.in/" target="_blank" rel="noopener noreferrer" className="font-bold text-ink underline decoration-brand-300 underline-offset-2">e-RaktKosh</a>.</span></li>
           <li className="flex gap-2.5"><AlertIcon className="mt-0.5 size-4 shrink-0 text-brand-600" /><span>If life is at risk, call <a href="tel:112" className="font-semibold text-ink underline">112</a>.</span></li>
         </ul>
         <Button variant="ghost" onClick={onNew} className="mt-5 text-sm">

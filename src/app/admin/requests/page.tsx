@@ -3,12 +3,13 @@ import Link from "next/link";
 
 import { Suspense } from "react";
 import { z } from "zod";
-import { StatusBadge, formatIST } from "@/components/requests/status";
+import { ArrowRight, Ban, CircleCheck, ClipboardList, Clock, Hospital, Siren, UserRoundCheck } from "lucide-react";
+import { PriorityBadge, StageIndicator, STAGE_STYLES, STATUS_STAGE, StatusBadge, formatIST } from "@/components/requests/status";
 import { Spinner, buttonClasses } from "@/components/ui/button";
-import { Badge, EmptyBlock, PageHeader, StatTile, table } from "@/components/ui/primitives";
+import { EmptyBlock, PageHeader, StatTile } from "@/components/ui/primitives";
 import { inputClasses } from "@/components/ui/form";
 import { BLOOD_GROUP_LABELS, BLOOD_GROUPS } from "@/features/donors/schemas";
-import { COMPONENT_LABELS, PRIORITY_LABELS, publicRequestIdSchema, REQUEST_STATUSES, STATUS_LABELS } from "@/features/requests/schemas";
+import { COMPONENT_LABELS, publicRequestIdSchema, REQUEST_STATUSES, STATUS_LABELS } from "@/features/requests/schemas";
 import { requireAdminPage } from "@/lib/auth/require-admin";
 import { listRequests } from "@/server/requests/service";
 
@@ -34,12 +35,12 @@ export default function AdminRequestsPage({ searchParams }: PageProps<"/admin/re
 }
 
 const STAT_CARDS = [
-  { key: "total", label: "Total requests" },
-  { key: "pending_verification", label: "Pending verification" },
-  { key: "active", label: "Active" },
-  { key: "partially_fulfilled", label: "Partially fulfilled" },
-  { key: "fulfilled", label: "Fulfilled" },
-  { key: "closed", label: "Cancelled / expired" },
+  { key: "total", label: "Total requests", tone: "neutral", Icon: ClipboardList },
+  { key: "pending_verification", label: "Pending verification", tone: "warn", Icon: Clock },
+  { key: "active", label: "Active", tone: "bad", Icon: Siren },
+  { key: "partially_fulfilled", label: "Partially fulfilled", tone: "info", Icon: UserRoundCheck },
+  { key: "fulfilled", label: "Fulfilled", tone: "good", Icon: CircleCheck },
+  { key: "closed", label: "Cancelled / expired", tone: "neutral", Icon: Ban },
 ] as const;
 
 async function RequestsContent({ searchParams }: Pick<PageProps<"/admin/requests">, "searchParams">) {
@@ -63,28 +64,28 @@ async function RequestsContent({ searchParams }: Pick<PageProps<"/admin/requests
     <div className="mt-8 space-y-6">
       <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {STAT_CARDS.map((card) => (
-          <StatTile as="li" key={card.key} label={card.label} value={counts[card.key]} tone={card.key === "pending_verification" && counts[card.key] > 0 ? "warn" : "neutral"} />
+          <StatTile as="li" key={card.key} label={card.label} value={counts[card.key]} tone={counts[card.key] > 0 ? card.tone : "neutral"} icon={<card.Icon className="size-4" />} />
         ))}
       </ul>
       <p className="-mt-3 text-xs text-ink-muted">“Active” includes verified requests ({stats.byStatus.verified} verified, {stats.byStatus.active} active). Counts come straight from the database.</p>
 
-      <form method="get" className="grid gap-3 rounded-[var(--radius-card)] border-2 border-ink bg-paper-deep p-4 shadow-brut sm:grid-cols-2 lg:grid-cols-[1.2fr_1fr_0.8fr_1fr_auto]">
-        <label className="text-xs font-bold text-ink">Request ID
+      <form method="get" className="grid gap-3 rounded-[var(--radius-card)] border border-line bg-surface p-4 shadow-brut-xs sm:grid-cols-2 lg:grid-cols-[1.2fr_1fr_0.8fr_1fr_auto]">
+        <label className="text-xs font-medium text-ink-soft">Request ID
           <input name="q" defaultValue={filters.q ?? ""} placeholder="MX-7K3Q9P2A" className={`${inputClasses} mt-1 h-11 border-line-strong font-mono text-sm uppercase`} />
         </label>
-        <label className="text-xs font-bold text-ink">Status
+        <label className="text-xs font-medium text-ink-soft">Status
           <select name="status" defaultValue={filters.status ?? ""} className={`${inputClasses} mt-1 h-11 border-line-strong text-sm`}>
             <option value="">All statuses</option>
             {REQUEST_STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
           </select>
         </label>
-        <label className="text-xs font-bold text-ink">Blood group
+        <label className="text-xs font-medium text-ink-soft">Blood group
           <select name="bloodGroup" defaultValue={filters.bloodGroup ?? ""} className={`${inputClasses} mt-1 h-11 border-line-strong text-sm`}>
             <option value="">All</option>
             {BLOOD_GROUPS.map((g) => <option key={g} value={g}>{g === "unknown" ? "Not sure" : BLOOD_GROUP_LABELS[g]}</option>)}
           </select>
         </label>
-        <label className="text-xs font-bold text-ink">City
+        <label className="text-xs font-medium text-ink-soft">City
           <input name="city" defaultValue={filters.city ?? ""} placeholder="Any city" className={`${inputClasses} mt-1 h-11 border-line-strong text-sm`} />
         </label>
         <div className="flex items-end gap-2">
@@ -93,36 +94,57 @@ async function RequestsContent({ searchParams }: Pick<PageProps<"/admin/requests
         </div>
       </form>
 
-      <section className={table.frame}>
-        {requests.length === 0 ? (
-          <EmptyBlock className="m-4">{filtered ? "No requests match these filters." : "No requests yet."}</EmptyBlock>
-        ) : (
-          <div className={table.scroll}>
-            <table className={`${table.table} min-w-[56rem]`}>
-              <thead className={table.head}>
-                <tr>
-                  {["Request", "Status", "Need", "Hospital", "Needed by", "Created"].map((h) => <th key={h} scope="col" className={table.th}>{h}</th>)}
-                </tr>
-              </thead>
-              <tbody className={table.body}>
-                {requests.map((r) => (
-                  <tr key={r.publicRequestId} className={table.row}>
-                    <td className={table.td}>
-                      <Link href={`/admin/requests/${r.publicRequestId}`} className="whitespace-nowrap font-mono font-bold text-brand-700 underline decoration-2 underline-offset-4 hover:text-brand-600">{r.publicRequestId}</Link>
-                      {r.priority === "critical" && <Badge tone="bad" className="ml-2">{PRIORITY_LABELS.critical.label}</Badge>}
-                    </td>
-                    <td className={table.td}><StatusBadge status={r.status} /></td>
-                    <td className={`${table.td} text-ink`}><strong>{r.bloodGroup === "unknown" ? "?" : BLOOD_GROUP_LABELS[r.bloodGroup]}</strong> · {r.unitsRequested} × {COMPONENT_LABELS[r.component]}</td>
-                    <td className={`${table.td} text-ink-soft`}>{r.hospitalName}<span className="block text-xs text-ink-muted">{r.locality}, {r.city}</span></td>
-                    <td className={`${table.td} whitespace-nowrap font-mono text-xs text-ink-soft`}>{formatIST(r.requiredBy)}</td>
-                    <td className={`${table.td} whitespace-nowrap font-mono text-xs text-ink-soft`}>{formatIST(r.createdAt)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+      {requests.length === 0 ? (
+        <EmptyBlock>{filtered ? "No requests match these filters." : "No requests yet."}</EmptyBlock>
+      ) : (
+        <ul aria-label="Requests" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {requests.map((r) => {
+            const stage = STATUS_STAGE[r.status];
+            return (
+              <li key={r.publicRequestId}>
+                <Link
+                  href={`/admin/requests/${r.publicRequestId}`}
+                  className="group relative flex h-full flex-col overflow-hidden rounded-[var(--radius-card)] border border-line bg-surface p-4 pl-5 shadow-brut-xs transition-[border-color,box-shadow] duration-150 hover:border-line-strong hover:shadow-brut-sm"
+                >
+                  <span aria-hidden="true" className={`absolute inset-y-0 left-0 w-1 ${STAGE_STYLES[stage].bar}`} />
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-brand-50 font-display text-lg font-semibold tracking-[-0.02em] text-brand-700">
+                        {r.bloodGroup === "unknown" ? "?" : BLOOD_GROUP_LABELS[r.bloodGroup]}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="font-mono text-sm font-semibold text-ink">{r.publicRequestId}</p>
+                        <p className="truncate text-sm text-ink-soft">{r.unitsRequested} × {COMPONENT_LABELS[r.component]}</p>
+                      </div>
+                    </div>
+                    <StageIndicator status={r.status} className="shrink-0 pt-1" />
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    <StatusBadge status={r.status} />
+                    <PriorityBadge priority={r.priority} />
+                  </div>
+                  <dl className="mt-3 space-y-1.5 text-sm">
+                    <div className="flex items-start gap-2">
+                      <dt className="sr-only">Hospital</dt>
+                      <Hospital aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-ink-muted" />
+                      <dd className="min-w-0 text-ink">{r.hospitalName}<span className="block text-xs text-ink-muted">{r.locality}, {r.city}</span></dd>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <dt className="sr-only">Needed by</dt>
+                      <Clock aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-ink-muted" />
+                      <dd className="text-ink-soft">Needed by <span className="tabular-nums text-ink">{formatIST(r.requiredBy)}</span></dd>
+                    </div>
+                  </dl>
+                  <div className="mt-auto flex items-center justify-between gap-2 border-t border-line pt-3 text-xs text-ink-muted">
+                    <span className="tabular-nums">Created {formatIST(r.createdAt)}</span>
+                    <span className="inline-flex items-center gap-1 font-medium text-brand-600">Open<ArrowRight aria-hidden="true" className="size-3.5 transition-transform group-hover:translate-x-0.5" /></span>
+                  </div>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
       {nextHref && (
         <div className="flex justify-end">
           <Link href={nextHref} className={buttonClasses({ variant: "secondary", className: "text-sm" })}>Older requests →</Link>

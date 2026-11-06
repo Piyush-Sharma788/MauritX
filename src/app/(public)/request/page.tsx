@@ -17,7 +17,7 @@ export default function RequestBloodPage() {
         description="No account needed. MarutiX verifies every request with the hospital before marking it verified."
       />
       <Notice tone="danger" className="mt-6">
-        <strong>If life is at risk, call <a href="tel:112" className="underline decoration-2 underline-offset-2">112</a> now</strong> and speak to the hospital&apos;s blood bank. Don&apos;t wait on this request.
+        <strong>If life is at risk, call <a href="tel:112" className="underline underline-offset-2">112</a> now</strong> and speak to the hospital&apos;s blood bank. Don&apos;t wait on this request.
       </Notice>
       <div className="mt-8">
         <RequestForm />

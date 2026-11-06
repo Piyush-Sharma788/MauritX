@@ -46,10 +46,10 @@ export function InstitutionResponseForm({ token, current, emailOptOutAvailable }
   }
 
   return (
-    <section className="rounded-[var(--radius-card)] border-2 border-ink bg-surface p-5 shadow-brut sm:p-6">
-      <h2 className="font-display text-lg font-extrabold tracking-[-0.02em] text-ink">Can your institution assist?</h2>
+    <section className="rounded-[var(--radius-card)] border border-line bg-surface p-5 shadow-brut-xs sm:p-6">
+      <h2 className="font-display text-lg font-semibold tracking-[-0.02em] text-ink">Can your institution assist?</h2>
       {saved && (
-        <p role="status" className="mt-3 flex gap-2 rounded-md border-2 border-ink bg-mint-50 px-3 py-2 text-sm font-semibold text-ink">
+        <p role="status" className="mt-3 flex gap-2 rounded-md border border-line bg-mint-50 px-3 py-2 text-sm font-semibold text-ink">
           <CheckIcon className="mt-0.5 size-4 shrink-0" />Recorded: {INSTITUTION_RESPONSE_LABELS[saved]}. You can change it below.
         </p>
       )}
@@ -57,7 +57,7 @@ export function InstitutionResponseForm({ token, current, emailOptOutAvailable }
         <fieldset className="grid gap-2 sm:grid-cols-3">
           <legend className="sr-only">Answer</legend>
           {INSTITUTION_RESPONSES.map((r) => (
-            <label key={r} className={`flex min-h-12 cursor-pointer items-center gap-2 rounded-md border-2 border-ink px-3 py-3 text-sm font-bold transition-[transform,box-shadow,background-color] duration-150 has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ink ${choice === r ? "-translate-x-0.5 -translate-y-0.5 bg-ink text-white shadow-[4px_4px_0_0_var(--color-brand-500)]" : "bg-surface text-ink shadow-brut-xs hover:bg-signal-50"}`}>
+            <label key={r} className={`flex min-h-12 cursor-pointer items-center gap-2 rounded-md border border-line px-3 py-3 text-sm font-bold transition-[transform,box-shadow,background-color] duration-150 has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-brand-500 ${choice === r ? "border-brand-500 bg-brand-50 text-brand-700" : "bg-surface text-ink shadow-brut-xs hover:bg-signal-50"}`}>
               <input type="radio" name="response" value={r} checked={choice === r} onChange={() => setChoice(r)} className="sr-only" />
               {CHOICES[r]}
             </label>
@@ -73,7 +73,7 @@ export function InstitutionResponseForm({ token, current, emailOptOutAvailable }
       </form>
       {error && <p role="alert" className="mt-3 flex gap-2 text-sm font-semibold text-danger-600"><InfoIcon className="mt-px size-4 shrink-0" />{error}</p>}
       {emailOptOutAvailable && (
-        <div className="mt-6 border-t-2 border-ink pt-4 text-xs text-ink-muted">
+        <div className="mt-6 border-t border-line pt-4 text-xs text-ink-muted">
           {stopped ? "MarutiX won't email this address again." : (
             <button type="button" onClick={stopEmails} disabled={pending !== null} className="font-semibold text-ink-soft underline hover:text-ink">Stop MarutiX emails to this address</button>
           )}

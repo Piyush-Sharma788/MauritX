@@ -6,7 +6,9 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { BotSwitches, RetryMessageButton } from "@/components/admin/admin-actions";
 import { RetryJobButton } from "@/components/admin/coordination-actions";
+import { CircleCheck, Clock, Siren, UserRoundCheck } from "lucide-react";
 import { Card, EmptyState, PageHeader, Pill, Stat } from "@/components/admin/kit";
+import { StatTile } from "@/components/ui/primitives";
 import { formatIST } from "@/components/requests/status";
 import { Spinner } from "@/components/ui/button";
 import { can } from "@/lib/auth/permissions";
@@ -56,12 +58,34 @@ async function OperationsContent() {
 
   return (
     <div className="mt-8 space-y-6">
+      <section aria-labelledby="overview-title">
+        <h2 id="overview-title" className="sr-only">Emergency overview</h2>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <StatTile label="Active requests" value={o.coordination.activeRequests} hint="Finding donors now" tone={o.coordination.activeRequests ? "bad" : "neutral"} icon={<Siren className="size-4" />} />
+          <StatTile label="Pending verification" value={o.coordination.pendingVerification} hint="Waiting on the team" tone={o.coordination.pendingVerification ? "warn" : "neutral"} icon={<Clock className="size-4" />} />
+          <StatTile label="Donors interested" value={o.coordination.interested7Days} hint="Last 7 days" tone="info" icon={<UserRoundCheck className="size-4" />} />
+          <StatTile label="Requests fulfilled" value={o.coordination.fulfilled7Days} hint="Last 7 days" tone="good" icon={<CircleCheck className="size-4" />} />
+        </div>
+      </section>
+      <Card title="Emergency coordination" id="coord" note="Interest is not a donation. Donations count only when a coordinator confirms them. Alert figures cover the last 7 days.">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          <Stat label="Pending verification" value={o.coordination.pendingVerification} tone={o.coordination.pendingVerification ? "warn" : "neutral"} />
+          <Stat label="Verified, not active" value={o.coordination.verifiedRequests} />
+          <Stat label="Active" value={o.coordination.activeRequests} />
+          <Stat label="Alerts attempted" value={o.coordination.alertsAttempted7Days} />
+          <Stat label="Alerts delivered" value={o.coordination.alertsDelivered7Days} hint="acknowledged by WhatsApp" />
+          <Stat label="Donors interested" value={o.coordination.interested7Days} />
+          <Stat label="Unavailable replies" value={o.coordination.unavailable7Days} />
+          <Stat label="Donations confirmed" value={o.coordination.donationsConfirmed7Days} tone="good" />
+          <Stat label="Requests fulfilled" value={o.coordination.fulfilled7Days} tone="good" />
+        </div>
+      </Card>
       <div className="grid gap-5 lg:grid-cols-[1.1fr_1fr]">
         <Card
           title="WhatsApp connection"
           id="wa"
           note="Pilot via whatsapp-web.js. Delivery is never guaranteed; only acknowledged deliveries are counted."
-          actions={<Link href="/admin/whatsapp" className="inline-flex min-h-10 items-center rounded-md border-2 border-ink bg-surface px-3 text-sm font-bold text-ink shadow-brut-xs transition-colors hover:bg-signal-300">QR, reconnect & logout →</Link>}
+          actions={<Link href="/admin/whatsapp" className="inline-flex min-h-10 items-center rounded-md border border-line bg-surface px-3 text-sm font-bold text-ink shadow-brut-xs transition-colors hover:bg-signal-100">QR, reconnect & logout →</Link>}
         >
           <div className="flex flex-wrap items-center gap-2">
             <Pill tone={waTone}>{wa.workerOnline ? STATE_LABEL[wa.state] : "Worker offline"}</Pill>
@@ -110,7 +134,7 @@ async function OperationsContent() {
             <Stat label="Suppressed, 24 h" value={o.queue.suppressed24h} hint="consent / limits" />
           </div>
         </Card>
-        <Card title="Institutions" id="inst" actions={<Link href="/admin/institutions" className="inline-flex min-h-10 items-center rounded-md border-2 border-ink bg-surface px-3 text-sm font-bold text-ink shadow-brut-xs transition-colors hover:bg-signal-300">Manage →</Link>}>
+        <Card title="Institutions" id="inst" actions={<Link href="/admin/institutions" className="inline-flex min-h-10 items-center rounded-md border border-line bg-surface px-3 text-sm font-bold text-ink shadow-brut-xs transition-colors hover:bg-signal-100">Manage →</Link>}>
           <div className="grid grid-cols-2 gap-3">
             <Stat label="Verified" value={o.institutions.verified} tone="good" />
             <Stat label="Awaiting verification" value={o.institutions.pending} tone={o.institutions.pending ? "warn" : "neutral"} />
@@ -158,19 +182,6 @@ async function OperationsContent() {
         </Card>
       )}
 
-      <Card title="Emergency coordination" id="coord" note="Interest is not a donation. Donations count only when a coordinator confirms them. Alert figures cover the last 7 days.">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          <Stat label="Pending verification" value={o.coordination.pendingVerification} tone={o.coordination.pendingVerification ? "warn" : "neutral"} />
-          <Stat label="Verified, not active" value={o.coordination.verifiedRequests} />
-          <Stat label="Active" value={o.coordination.activeRequests} />
-          <Stat label="Alerts attempted" value={o.coordination.alertsAttempted7Days} />
-          <Stat label="Alerts delivered" value={o.coordination.alertsDelivered7Days} hint="acknowledged by WhatsApp" />
-          <Stat label="Donors interested" value={o.coordination.interested7Days} />
-          <Stat label="Unavailable replies" value={o.coordination.unavailable7Days} />
-          <Stat label="Donations confirmed" value={o.coordination.donationsConfirmed7Days} tone="good" />
-          <Stat label="Requests fulfilled" value={o.coordination.fulfilled7Days} tone="good" />
-        </div>
-      </Card>
 
       <div className="grid gap-5 lg:grid-cols-2">
         <Card title="Failed messages" id="failed" note="Only emergency alerts that certainly weren't delivered can be retried, and only while the request is active.">
@@ -209,7 +220,7 @@ async function OperationsContent() {
               ))}
             </ul>
           )}
-          {can(user.role, "audit.read") && <p className="mt-3 text-xs"><Link href="/admin/audit" className="font-bold text-brand-700 underline decoration-2 underline-offset-4 hover:text-brand-600">Audit history →</Link></p>}
+          {can(user.role, "audit.read") && <p className="mt-3 text-xs"><Link href="/admin/audit" className="font-bold text-brand-700 underline underline-offset-4 hover:text-brand-600">Audit history →</Link></p>}
         </Card>
       </div>
     </div>

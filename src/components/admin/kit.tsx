@@ -5,7 +5,7 @@ import { Badge, CardHeader, EmptyBlock, PageHeader as BasePageHeader, StatTile }
 
 export function Card({ title, note, children, actions, id }: { title: string; note?: ReactNode; children: ReactNode; actions?: ReactNode; id?: string }) {
   return (
-    <section aria-labelledby={id} className="rounded-[var(--radius-card)] border-2 border-ink bg-surface p-4 shadow-brut sm:p-5">
+    <section aria-labelledby={id} className="rounded-[var(--radius-card)] border border-line bg-surface p-4 shadow-brut-xs sm:p-5">
       <CardHeader id={id} title={title} note={note} actions={actions} />
       <div className="mt-4">{children}</div>
     </section>

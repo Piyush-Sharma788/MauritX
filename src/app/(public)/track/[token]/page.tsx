@@ -58,15 +58,15 @@ async function TrackContent({ params }: Pick<PageProps<"/track/[token]">, "param
   if (!view) {
     const p = PROBLEMS[problem];
     return (
-      <section className="mx-auto max-w-lg rounded-[var(--radius-card)] border-2 border-ink bg-surface p-8 text-center shadow-brut-lg">
-        <span aria-hidden="true" className="mx-auto flex size-14 -rotate-3 items-center justify-center rounded-md border-2 border-ink bg-signal-300 shadow-brut-sm"><InfoIcon className="size-7 text-ink" /></span>
-        <h1 className="mt-5 font-display text-3xl font-extrabold tracking-[-0.045em] text-ink">{p.title}</h1>
+      <section className="mx-auto max-w-lg rounded-[var(--radius-card)] border border-line bg-surface p-8 text-center shadow-brut-sm">
+        <span aria-hidden="true" className="mx-auto flex size-14 items-center justify-center rounded-md border border-line bg-signal-300 shadow-brut-sm"><InfoIcon className="size-7 text-ink" /></span>
+        <h1 className="mt-5 font-display text-3xl font-semibold tracking-[-0.03em] text-ink">{p.title}</h1>
         <p className="mt-2 text-ink-soft">{p.body}</p>
         <div className="mt-7 flex flex-col justify-center gap-4 sm:flex-row">
           <ButtonLink href="/request">Make a new request</ButtonLink>
           <ButtonLink href="/get-help" variant="secondary">Get help now</ButtonLink>
         </div>
-        <p className="mt-6 text-xs text-ink-muted">In a life-threatening emergency, call <Link href="tel:112" className="font-bold text-ink underline decoration-2">112</Link>.</p>
+        <p className="mt-6 text-xs text-ink-muted">In a life-threatening emergency, call <Link href="tel:112" className="font-bold text-ink underline">112</Link>.</p>
       </section>
     );
   }

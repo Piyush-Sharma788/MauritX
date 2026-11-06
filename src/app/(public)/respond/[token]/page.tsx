@@ -38,22 +38,22 @@ async function Content({ params }: Pick<PageProps<"/respond/[token]">, "params">
   }
   if (!page) {
     return (
-      <section className="rounded-[var(--radius-card)] border-2 border-ink bg-surface p-8 text-center shadow-brut-lg">
-        <span aria-hidden="true" className="mx-auto flex size-14 -rotate-3 items-center justify-center rounded-md border-2 border-ink bg-signal-300 shadow-brut-sm"><InfoIcon className="size-7 text-ink" /></span>
+      <section className="rounded-[var(--radius-card)] border border-line bg-surface p-8 text-center shadow-brut-sm">
+        <span aria-hidden="true" className="mx-auto flex size-14 items-center justify-center rounded-md border border-line bg-signal-300 shadow-brut-sm"><InfoIcon className="size-7 text-ink" /></span>
         <p className="mt-4 text-ink-soft">{problem}</p>
       </section>
     );
   }
   return (
     <div className="space-y-5">
-      <header className="relative overflow-hidden rounded-[var(--radius-card)] border-2 border-ink bg-surface p-6 shadow-brut-lg sm:p-8">
+      <header className="relative overflow-hidden rounded-[var(--radius-card)] border border-line bg-surface p-6 shadow-brut-sm sm:p-8">
         <div aria-hidden="true" className="absolute inset-x-0 top-0 h-2 bg-stripes" />
         <p className="eyebrow text-brand-600">MarutiX emergency coordination</p>
-        <h1 className="mt-3 font-display text-3xl font-extrabold leading-[1.02] tracking-[-0.045em] text-ink sm:text-4xl">
+        <h1 className="mt-3 font-display text-3xl font-semibold leading-[1.02] tracking-[-0.03em] text-ink sm:text-4xl">
           {page.bloodGroup === "unknown" ? "Blood" : BLOOD_GROUP_LABELS[page.bloodGroup]} · {page.unitsRequested} × {COMPONENT_LABELS[page.component]}
         </h1>
         <p className="mt-1 text-sm text-ink-soft">For {page.institutionName}</p>
-        <dl className="mt-6 grid gap-3 text-sm sm:grid-cols-2 [&>div]:border-l-2 [&>div]:border-ink [&>div]:pl-3 [&_dt]:font-mono [&_dt]:text-[0.66rem] [&_dt]:font-bold [&_dt]:uppercase [&_dt]:tracking-[0.1em]">
+        <dl className="mt-6 grid gap-3 text-sm sm:grid-cols-2 [&>div]:border-l [&>div]:border-line [&>div]:pl-3 [&_dt]:text-xs [&_dt]:font-medium">
           <div><dt className="text-ink-muted">Request</dt><dd className="font-mono font-semibold text-ink">{page.publicRequestId}{page.verified ? " · verified by MarutiX" : ""}</dd></div>
           <div><dt className="text-ink-muted">Priority</dt><dd className="font-bold text-ink">{PRIORITY_LABELS[page.priority].label}</dd></div>
           <div><dt className="text-ink-muted">Required by</dt><dd className="font-bold text-ink">{formatIST(page.requiredBy)}</dd></div>
@@ -66,7 +66,7 @@ async function Content({ params }: Pick<PageProps<"/respond/[token]">, "params">
       {page.open ? (
         <InstitutionResponseForm token={token} current={page.response} emailOptOutAvailable={page.emailOptOutAvailable} />
       ) : (
-        <p className="rounded-md border-2 border-ink bg-paper px-4 py-3 text-sm text-ink-soft">This request is closed. Thank you for looking.</p>
+        <p className="rounded-md border border-line bg-paper px-4 py-3 text-sm text-ink-soft">This request is closed. Thank you for looking.</p>
       )}
       <p className="text-xs leading-relaxed text-ink-muted">MarutiX is a voluntary coordination service. It doesn&apos;t hold blood and doesn&apos;t treat a reply as confirmed stock. Patient details are shared only with the treating hospital.</p>
     </div>

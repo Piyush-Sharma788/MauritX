@@ -17,10 +17,10 @@ export const metadata: Metadata = {
 export default function EditProfilePage() {
   return (
     <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
-      <Link href="/dashboard" className="-ml-2 inline-flex items-center gap-1.5 rounded-md border-2 border-transparent px-2 py-1 text-sm font-semibold text-ink transition-colors hover:border-ink hover:bg-signal-300">
+      <Link href="/dashboard" className="-ml-2 inline-flex items-center gap-1.5 rounded-md border border-transparent px-2 py-1 text-sm font-semibold text-ink transition-colors hover:border-line-strong hover:bg-signal-100">
         <ArrowLeftIcon className="size-4" /> Dashboard
       </Link>
-      <h1 className="mt-3 font-display text-[2rem] font-extrabold leading-[1.02] tracking-[-0.045em] text-ink sm:text-[2.6rem]">Edit your profile</h1>
+      <h1 className="mt-3 font-display text-[2rem] font-semibold leading-[1.02] tracking-[-0.03em] text-ink sm:text-[2.6rem]">Edit your profile</h1>
       <Suspense
         fallback={
           <div className="flex min-h-64 items-center justify-center text-ink-muted" role="status">
@@ -43,7 +43,7 @@ async function EditContent() {
 
   return (
     <div className="mt-8 space-y-5">
-      <section className="rounded-[var(--radius-card)] border-2 border-ink bg-surface p-5 shadow-brut sm:p-8">
+      <section className="rounded-[var(--radius-card)] border border-line bg-surface p-5 shadow-brut-xs sm:p-8">
         <DonorProfileForm key={overview.profile.updatedAt} maskedPhone={overview.maskedPhone} profile={overview.profile} />
       </section>
       <ChangePhoneCard maskedPhone={overview.maskedPhone} />

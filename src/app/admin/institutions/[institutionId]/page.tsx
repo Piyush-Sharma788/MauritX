@@ -23,7 +23,7 @@ const STATUS_TONE = { pending: "warn", verified: "good", rejected: "bad", suspen
 export default function InstitutionDetailPage({ params }: PageProps<"/admin/institutions/[institutionId]">) {
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
-      <Link href="/admin/institutions" className="-ml-2 inline-flex items-center gap-1.5 rounded-md border-2 border-transparent px-2 py-1 text-sm font-semibold text-ink transition-colors hover:border-ink hover:bg-signal-300">
+      <Link href="/admin/institutions" className="-ml-2 inline-flex items-center gap-1.5 rounded-md border border-transparent px-2 py-1 text-sm font-semibold text-ink transition-colors hover:border-line-strong hover:bg-signal-100">
         <ArrowLeftIcon className="size-4" /> All institutions
       </Link>
       <Suspense fallback={<div className="flex min-h-64 items-center justify-center text-ink-muted" role="status"><Spinner className="size-6" /><span className="sr-only">Loading</span></div>}>
@@ -47,10 +47,10 @@ async function Detail({ params }: Pick<PageProps<"/admin/institutions/[instituti
 
   return (
     <div className="mt-4 space-y-5">
-      <header className="flex flex-col gap-4 rounded-[var(--radius-card)] border-2 border-ink bg-surface p-6 shadow-brut sm:flex-row sm:items-start sm:justify-between">
+      <header className="flex flex-col gap-4 rounded-[var(--radius-card)] border border-line bg-surface p-6 shadow-brut-xs sm:flex-row sm:items-start sm:justify-between">
         <div>
           <Pill tone={STATUS_TONE[i.verificationStatus]}>{i.verificationStatus}</Pill>
-          <h1 className="mt-3 font-display text-2xl font-extrabold text-ink sm:text-3xl">{i.displayName}</h1>
+          <h1 className="mt-3 font-display text-2xl font-semibold text-ink sm:text-3xl">{i.displayName}</h1>
           <p className="mt-1 text-sm text-ink-soft">{i.type === "blood_bank" ? "Blood bank" : "Hospital"} · {i.legalName}</p>
           <p className="mt-1 text-sm text-ink-soft">{i.address}, {i.locality}, {i.city}{i.publicPhone ? ` · ${i.publicPhone}` : ""}</p>
           <p className="mt-1 inline-flex items-center gap-1 text-xs text-ink-muted"><LockIcon className="size-3.5" /> Licence: {i.licenceReference ?? "not recorded"}{i.verifiedAt ? ` · verified ${formatIST(i.verifiedAt)}` : ""}</p>
@@ -129,7 +129,7 @@ async function Detail({ params }: Pick<PageProps<"/admin/institutions/[instituti
             ))}
           </ul>
         )}
-        {canVerify ? <div className="mt-5 border-t-2 border-ink pt-5"><AddContactForm institutionId={i.id} /></div> : <p className="mt-4 text-xs text-ink-muted">Only a super admin can verify institutions or add WhatsApp staff contacts, because that grants WhatsApp access.</p>}
+        {canVerify ? <div className="mt-5 border-t border-line pt-5"><AddContactForm institutionId={i.id} /></div> : <p className="mt-4 text-xs text-ink-muted">Only a super admin can verify institutions or add WhatsApp staff contacts, because that grants WhatsApp access.</p>}
       </Card>
 
       <div className="grid gap-5 lg:grid-cols-2">

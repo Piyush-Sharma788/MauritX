@@ -23,6 +23,8 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.4.0",
+    "leaflet": "^1.9.4",
+    "lucide-react": "^1.69.0",
     "mongoose": "^9.11.4",
     "next": "16.4.5",
     "nodemailer": "^10.3.1",
@@ -36,6 +38,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.4",
     "@tailwindcss/turbopack": "^4",
+    "@types/leaflet": "^1.9.22",
     "@types/node": "^24.19.2",
     "@types/nodemailer": "^8.0.2",
     "@types/qrcode": "^1.5.6",

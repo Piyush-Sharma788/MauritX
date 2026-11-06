@@ -30,7 +30,7 @@ export function SiteHeader() {
   }, [open]);
 
   return (
-    <header className="sticky top-0 z-40 border-b-2 border-ink bg-paper">
+    <header className="sticky top-0 z-40 border-b border-line bg-paper">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6 lg:h-[4.5rem]">
         <Logo />
 
@@ -40,7 +40,7 @@ export function SiteHeader() {
               <li key={link.href}>
                 <Link
                   href={link.href}
-                  className="inline-flex min-h-11 items-center rounded-md border-2 border-transparent px-3 text-[0.93rem] font-semibold text-ink transition-colors hover:border-ink hover:bg-signal-300"
+                  className="inline-flex min-h-11 items-center rounded-md border border-transparent px-3 text-[0.93rem] font-semibold text-ink transition-colors hover:border-line-strong hover:bg-signal-100"
                 >
                   {link.label}
                 </Link>
@@ -60,7 +60,7 @@ export function SiteHeader() {
           </div>
           <button
             type="button"
-            className="inline-flex size-11 items-center justify-center rounded-md border-2 border-ink bg-surface text-ink shadow-brut-xs transition-colors hover:bg-signal-300 aria-expanded:bg-signal-300 lg:hidden"
+            className="inline-flex size-11 items-center justify-center rounded-md border border-line bg-surface text-ink shadow-brut-xs transition-colors hover:bg-signal-100 aria-expanded:bg-signal-100 lg:hidden"
             aria-expanded={open}
             aria-controls={menuId}
             aria-label={open ? "Close menu" : "Open menu"}
@@ -74,16 +74,16 @@ export function SiteHeader() {
       <div
         id={menuId}
         hidden={!open}
-        className="border-t-2 border-ink bg-paper px-4 pb-6 pt-3 sm:px-6 lg:hidden"
+        className="border-t border-line bg-paper px-4 pb-6 pt-3 sm:px-6 lg:hidden"
       >
         <nav aria-label="Mobile">
-          <ul className="flex flex-col divide-y-2 divide-ink border-y-2 border-ink">
+          <ul className="flex flex-col divide-y divide-line border-y border-line">
             {NAV_LINKS.map((link) => (
               <li key={link.href}>
                 <Link
                   href={link.href}
                   onClick={() => setOpen(false)}
-                  className="flex min-h-13 items-center justify-between px-1 font-display text-xl font-extrabold tracking-[-0.03em] text-ink hover:bg-signal-300"
+                  className="flex min-h-13 items-center justify-between px-1 font-display text-xl font-semibold tracking-[-0.03em] text-ink hover:bg-signal-100"
                 >
                   {link.label}
                   <ArrowRightIcon className="size-5" />

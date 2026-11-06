@@ -88,8 +88,8 @@ export function CoordinationPanel({
           ["Interested", summary.interested],
           ["Donations confirmed", summary.donationsConfirmed],
         ].map(([label, value]) => (
-          <div key={label} className="rounded-md border-2 border-ink bg-paper px-2 py-2">
-            <p className="font-display text-lg font-extrabold text-ink tabular-nums">{value}</p>
+          <div key={label} className="rounded-md border border-line bg-paper px-2 py-2">
+            <p className="font-display text-lg font-semibold text-ink tabular-nums">{value}</p>
             <p className="text-ink-muted">{label}</p>
           </div>
         ))}
@@ -127,7 +127,7 @@ export function CoordinationPanel({
                 type="button"
                 onClick={() => setRadius(r)}
                 aria-pressed={radius === r}
-                className={`inline-flex min-h-10 items-center rounded-md border-2 border-ink px-3.5 text-sm font-bold transition-colors ${radius === r ? "bg-ink text-white shadow-[3px_3px_0_0_var(--color-brand-500)]" : "bg-surface text-ink hover:bg-signal-300"}`}
+                className={`inline-flex min-h-10 items-center rounded-md border border-line px-3.5 text-sm font-bold transition-colors ${radius === r ? "border-brand-500 bg-brand-50 text-brand-700" : "bg-surface text-ink hover:bg-signal-100"}`}
               >
                 {r} km
               </button>
@@ -138,19 +138,19 @@ export function CoordinationPanel({
         {error && <p role="alert" className="mt-2 flex gap-1.5 text-sm text-danger-600"><InfoIcon className="mt-0.5 size-4 shrink-0" />{error}</p>}
 
         {latestRun && (
-          <div className="mt-4 rounded-md border-2 border-ink">
+          <div className="mt-4 rounded-md border border-line">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3 text-xs text-ink-muted">
               <span>
                 {latestRun.trigger === "automatic" ? "Automatic search" : "Search"} {when(latestRun.createdAt)} · {latestRun.basis === "distance" ? `within ${latestRun.radiusKm} km of the ${latestRun.originSource === "institution" ? "linked institution" : latestRun.originSource === "geocoded_address" ? "hospital address (geocoded, approximate)" : "requester's shared location"}` : "same city (no location on the request)"} · {latestRun.scanned} profiles checked · groups {latestRun.eligibleGroups.join(", ") || "none"}
               </span>
-              <span className="rounded-sm border-2 border-ink bg-signal-100 px-1.5 py-px font-mono text-[0.66rem] font-bold uppercase tracking-[0.06em] text-ink">Policy {latestRun.policyVersion}: {latestRun.policyReviewStatus.replace(/_/g, " ")}</span>
+              <span className="rounded-sm border border-line bg-signal-100 px-1.5 py-px text-xs font-medium text-ink">Policy {latestRun.policyVersion}: {latestRun.policyReviewStatus.replace(/_/g, " ")}</span>
             </div>
             {latestRun.candidates.length === 0 ? (
               <p className="px-4 py-6 text-center text-sm text-ink-muted">No potential donors match. Try a wider radius, and keep working directly with the hospital&apos;s blood bank.</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[36rem] text-left text-sm">
-                  <thead className="border-b-2 border-ink bg-paper-deep font-mono text-[0.66rem] uppercase tracking-[0.1em] text-ink">
+                  <thead className="border-b border-line bg-paper text-xs font-medium text-ink-muted">
                     <tr>{["#", "Donor", "Distance", "Why", "Alert", "Reply"].map((h) => <th key={h} scope="col" className="px-4 py-2 font-semibold">{h}</th>)}</tr>
                   </thead>
                   <tbody className="divide-y divide-line">

@@ -23,13 +23,13 @@ export default function LoginPage() {
     <div className="mx-auto grid w-full max-w-6xl grid-cols-1 items-center gap-10 px-4 pb-16 pt-8 sm:px-6 lg:grid-cols-[1fr_minmax(0,28rem)] lg:gap-20 lg:pb-24 lg:pt-10">
       <section className="order-2 hidden lg:order-1 lg:block" aria-label="Why sign in with MarutiX">
         <Eyebrow>Secure sign-in</Eyebrow>
-        <h2 className="mt-4 max-w-md font-display text-6xl font-extrabold leading-[0.96] tracking-[-0.055em] text-ink">
-          One number. One code. <span className="mt-2 inline-block -rotate-1 rounded-sm border-2 border-ink bg-brand-500 px-2 text-white shadow-brut">No passwords.</span>
+        <h2 className="mt-4 max-w-md font-display text-6xl font-semibold leading-[0.96] tracking-[-0.03em] text-ink">
+          One number. One code. <span className="block text-brand-500">No passwords.</span>
         </h2>
         <ul className="mt-12 max-w-md space-y-4">
           {POINTS.map(({ icon: Icon, title, body }) => (
-            <li key={title} className="flex gap-4 rounded-md border-2 border-ink bg-surface p-4 shadow-brut-sm">
-              <span className="flex size-11 shrink-0 items-center justify-center rounded-sm border-2 border-ink bg-signal-300 text-ink">
+            <li key={title} className="flex gap-4 rounded-md border border-line bg-surface p-4 shadow-brut-sm">
+              <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
                 <Icon className="size-5" />
               </span>
               <span>
@@ -42,12 +42,12 @@ export default function LoginPage() {
       </section>
 
       <div className="order-1 w-full lg:order-2">
-        <div className="rounded-[var(--radius-card)] border-2 border-ink bg-surface p-6 shadow-brut-lg sm:p-8">
+        <div className="rounded-[var(--radius-card)] border border-line bg-surface p-6 shadow-brut-sm sm:p-8">
           <Suspense fallback={<FormSkeleton />}>
             <LoginForm />
           </Suspense>
         </div>
-        <p className="mt-6 flex items-center justify-center gap-2 text-center font-mono text-[0.7rem] font-semibold uppercase tracking-[0.08em] text-ink-muted">
+        <p className="mt-6 flex items-center justify-center gap-2 text-center text-xs text-ink-muted">
           <ShieldIcon className="size-4" /> Codes expire in 5 minutes and work only once.
         </p>
       </div>

@@ -14,7 +14,7 @@ import { CONTACT_ROLES, INSTITUTION_TYPES, type ContactStatus, type InstitutionS
 export function BotSwitches({ botEnabled, alertsPaused }: { botEnabled: boolean; alertsPaused: boolean }) {
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border-2 border-ink bg-paper p-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-line bg-paper p-3">
         <div>
           <p className="text-sm font-bold text-ink">Bot processing: {botEnabled ? "On" : "Off"}</p>
           <p className="text-xs text-ink-muted">{botEnabled ? "Replies to registrations, requests and commands." : "Only STOP is processed; other messages get no reply."}</p>
@@ -26,7 +26,7 @@ export function BotSwitches({ botEnabled, alertsPaused }: { botEnabled: boolean;
           action={() => coordinationApi.setSettings({ botEnabled: !botEnabled })}
         />
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border-2 border-ink bg-paper p-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-line bg-paper p-3">
         <div>
           <p className="text-sm font-bold text-ink">Emergency alerts: {alertsPaused ? "Paused" : "Running"}</p>
           <p className="text-xs text-ink-muted">{alertsPaused ? "No alerts are sent or queued. Queued ones expire unsent." : "Admin-sent alert batches are delivered."}</p>

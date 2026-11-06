@@ -110,9 +110,9 @@ export function DonorProfileForm({ maskedPhone, profile }: { maskedPhone: string
               return (
                 <label
                   key={group}
-                  className={`flex h-13 cursor-pointer items-center justify-center rounded-md border-2 font-display text-lg font-extrabold transition-[transform,box-shadow,background-color] duration-150 has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ink ${
+                  className={`flex h-13 cursor-pointer items-center justify-center rounded-md border font-display text-lg font-semibold transition-[transform,box-shadow,background-color] duration-150 has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-brand-500 ${
                     group === "unknown" ? "col-span-4 font-sans text-sm font-bold" : ""
-                  } ${checked ? "-translate-x-0.5 -translate-y-0.5 border-ink bg-brand-500 text-white shadow-brut" : `${errors.bloodGroup ? "border-danger-600" : "border-ink"} bg-surface text-ink shadow-brut-xs hover:bg-signal-50`}`}
+                  } ${checked ? "border-line bg-brand-500 text-white shadow-brut-xs" : `${errors.bloodGroup ? "border-danger-600" : "border-line"} bg-surface text-ink shadow-brut-xs hover:bg-signal-50`}`}
                 >
                   <input type="radio" name="bloodGroup" value={group} checked={checked} onChange={() => set("bloodGroup", group)} className="sr-only" />
                   {BLOOD_GROUP_LABELS[group]}
@@ -135,7 +135,7 @@ export function DonorProfileForm({ maskedPhone, profile }: { maskedPhone: string
 
         <div>
           <p className="flex items-baseline justify-between text-sm font-bold text-ink">
-            Current location <span className="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-ink-muted">Optional</span>
+            Current location <span className="text-xs font-medium text-ink-muted">Optional</span>
           </p>
           <div className="mt-2">
             <LocationPicker value={form.location} onChange={(v) => set("location", v)} />
@@ -148,13 +148,13 @@ export function DonorProfileForm({ maskedPhone, profile }: { maskedPhone: string
         </Field>
       </section>
 
-      <p className="flex gap-2 rounded-md border-2 border-ink bg-paper px-4 py-3 text-xs leading-relaxed text-ink-soft">
+      <p className="flex gap-2 rounded-md border border-line bg-paper px-4 py-3 text-xs leading-relaxed text-ink-soft">
         <InfoIcon className="mt-px size-4 shrink-0" />
         We never ask for medical history. Registering isn&apos;t a medical eligibility check: a licensed blood centre always makes that decision.
       </p>
 
       {formError && (
-        <p role="alert" className="flex gap-2 rounded-md border-2 border-danger-600 bg-danger-50 px-4 py-3 text-sm font-semibold text-danger-600">
+        <p role="alert" className="flex gap-2 rounded-md border border-danger-600 bg-danger-50 px-4 py-3 text-sm font-semibold text-danger-600">
           <InfoIcon className="mt-px size-4 shrink-0" />
           {formError}
         </p>

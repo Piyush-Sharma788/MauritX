@@ -94,12 +94,12 @@ export default function PrivacyPage() {
 
       <div className="mt-12 grid gap-10 lg:grid-cols-[15rem_minmax(0,1fr)]">
         <nav aria-label="On this page" className="hidden lg:block">
-          <div className="sticky top-24 rounded-md border-2 border-ink bg-surface shadow-brut-sm">
-            <p className="eyebrow border-b-2 border-ink bg-ink px-3 py-2 text-white">On this page</p>
+          <div className="sticky top-24 rounded-md border border-line bg-surface shadow-brut-sm">
+            <p className="eyebrow border-b border-line bg-paper px-3 py-2.5 text-ink-soft">On this page</p>
             <ol className="p-2 text-sm">
               {SECTIONS.map((section, i) => (
                 <li key={section.title}>
-                  <a href={`#s${i + 1}`} className="flex gap-2 rounded-sm px-2 py-1.5 font-medium text-ink hover:bg-signal-300">
+                  <a href={`#s${i + 1}`} className="flex gap-2 rounded-sm px-2 py-1.5 font-medium text-ink hover:bg-signal-100">
                     <span className="font-mono text-xs font-bold text-ink-muted">{String(i + 1).padStart(2, "0")}</span>
                     {section.title}
                   </a>
@@ -110,8 +110,8 @@ export default function PrivacyPage() {
         </nav>
         <div className="max-w-3xl space-y-6">
           {SECTIONS.map((section, i) => (
-            <section id={`s${i + 1}`} key={section.title} className="scroll-mt-24 rounded-[var(--radius-card)] border-2 border-ink bg-surface p-6 shadow-brut sm:p-7">
-              <h2 className="flex items-baseline gap-3 font-display text-xl font-extrabold tracking-[-0.025em] text-ink sm:text-2xl">
+            <section id={`s${i + 1}`} key={section.title} className="scroll-mt-24 rounded-[var(--radius-card)] border border-line bg-surface p-6 shadow-brut-xs sm:p-7">
+              <h2 className="flex items-baseline gap-3 font-display text-xl font-semibold tracking-[-0.025em] text-ink sm:text-2xl">
                 <span className="font-mono text-sm font-bold text-brand-600">{String(i + 1).padStart(2, "0")}</span>
                 {section.title}
               </h2>

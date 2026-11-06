@@ -65,7 +65,7 @@ export function LocationPicker({
   }
 
   return (
-    <div className="rounded-md border-2 border-dashed border-ink bg-paper p-4">
+    <div className="rounded-md border border-dashed border-line bg-paper p-4">
       {value ? (
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="flex items-center gap-2 text-sm font-bold text-success-600">
