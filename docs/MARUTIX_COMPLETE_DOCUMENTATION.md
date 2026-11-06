@@ -236,9 +236,7 @@ MauritX/
 ├── .github/
 │   ├── audit-allowlist.json    # Dep vulnerability allowlist
 │   └── workflows/
-│       ├── code-quality.yml    # Stage 1: ESLint, TS, tests, audit, CodeQL
-│       ├── build-push.yml      # Stage 2: Build, Docker images, push to GHCR
-│       └── deploy.yml          # Stage 3: SSH deploy, health check, rollback
+│       └── ci-cd.yml           # codequality → buildandpush → deploy_to_server
 ├── Dockerfile                  # Web app image (multi-stage)
 ├── Dockerfile.worker           # WhatsApp/jobs worker image
 ├── next.config.ts              # Next.js config (CSP, security headers)
@@ -1250,44 +1248,29 @@ node scripts/audit-gate.mjs
 
 ## 10. CI/CD & Deployment {#10-cicd--deployment}
 
-### Three-stage GitHub Actions pipeline
+### One GitHub Actions pipeline, three jobs
 
-#### Stage 1 — Code Quality (`code-quality.yml`)
+`.github/workflows/ci-cd.yml` — **ci-cd pipeline for marutix** — runs on every push to `main`, every `vX.Y.Z` tag, every pull request, and on demand. Its jobs run in order; each starts only if the previous one passed.
 
-Runs on every push, pull request, and weekly schedule:
+#### 1. `codequality`
 
-| Job | What it checks |
-|---|---|
-| **ESLint** | TypeScript/React lint rules |
-| **TypeScript** | Full type check (`next typegen && tsc --noEmit`) |
-| **Tests** | Full integration test suite with MongoDB 9.0.4 |
-| **Dependency audit** | npm signature verification + custom allowlist gate |
-| **Dependency review** | PRs: flags new high/critical advisory additions |
-| **CodeQL** | SAST scan (JS/TS + Actions workflows) |
+ESLint · TypeScript (`next typegen && tsc --noEmit`) · full integration test suite against MongoDB 9.0.4 · npm signature verification + allowlist dependency gate · dependency review (PRs) · CodeQL (JS/TS + Actions workflows).
 
-#### Stage 2 — Build & Push (`build-push.yml`)
+#### 2. `buildandpush`
 
-Runs automatically after Stage 1 succeeds on `main` or a release tag:
+1. **Docker images** — builds `marutix-web` (includes the Next.js production build) and `marutix-worker`
+2. **Smoke tests** — verifies each image (non-root, no `.env` leaks, health endpoint, security headers)
+3. **Push to GHCR** — `sha-<commit>` plus `main` or `X.Y.Z`/`X.Y` (only for `main` and release tags, never PRs)
 
-1. **Resolve commit** — determines SHA, kind (branch/tag), whether to push
-2. **Next.js build** — full production build
-3. **Docker images** — builds `marutix-web` and `marutix-worker` in parallel
-4. **Smoke tests** — verifies each image (non-root, no `.env` leaks, health endpoint, security headers)
-5. **Push to GHCR** — pushes with SHA tag + branch/version tags (only on real pushes)
-6. **Release manifest** — uploads `deploy-manifest.json` artifact with digests
+Images: `ghcr.io/piyush-sharma788/marutix-web` and `ghcr.io/piyush-sharma788/marutix-worker`.
 
-Images are pushed to:
-- `ghcr.io/piyush-sharma788/marutix-web:<sha>`
-- `ghcr.io/piyush-sharma788/marutix-worker:<sha>`
+#### 3. `deploy_to_server`
 
-#### Stage 3 — Deploy (`deploy.yml`)
+Runs only when images were pushed and the environment is enabled (`main` → staging, tag → production):
 
-Runs after Stage 2 produces a manifest:
-
-1. **Plan** — downloads manifest, selects environment (staging/production)
-2. **Deploy** — SSH to server, copy Compose file + deploy script, verify image digests, `docker compose up -d`
-3. **Health check** — polls `$APP_URL/api/health` until `{"status":"ok","db":"up"}`
-4. **Auto-rollback** — on failure, re-runs compose with the previous tag
+1. **Deploy** — SSH to server, copy Compose file + deploy script, pin the exact image digests just pushed, `docker compose up -d`
+2. **Health check** — polls `$APP_URL/api/health` until `{"status":"ok","db":"up"}`, then checks HSTS/CSP and admin API auth
+3. **Auto-rollback** — on failure, re-runs compose with the previous tag
 
 ### Required GitHub Secrets & Variables
 
@@ -1334,8 +1317,8 @@ EOF
 systemctl restart caddy
 
 # 5. First manual deploy (from your machine)
-# Trigger via GitHub Actions → Build & Push → Run workflow → main
-# Then → Deploy → Run workflow → production
+# Trigger via GitHub Actions → ci-cd pipeline for marutix → Run workflow
+#   (select main for staging, or a vX.Y.Z tag for production)
 ```
 
 ### Release process
@@ -1344,7 +1327,7 @@ systemctl restart caddy
 # Tag a release
 git tag v1.0.0
 git push origin v1.0.0
-# → Triggers Code Quality → Build & Push → Deploy (production)
+# → ci-cd pipeline for marutix: codequality → buildandpush → deploy_to_server (production)
 ```
 
 ### Manual rollback

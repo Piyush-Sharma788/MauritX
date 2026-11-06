@@ -2,7 +2,7 @@
 
 **Every Drop Matters. Every Life Counts.**
 
-[![Code Quality](https://github.com/Piyush-Sharma788/MauritX/actions/workflows/code-quality.yml/badge.svg)](https://github.com/Piyush-Sharma788/MauritX/actions/workflows/code-quality.yml)
+[![ci-cd pipeline for marutix](https://github.com/Piyush-Sharma788/MauritX/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/Piyush-Sharma788/MauritX/actions/workflows/ci-cd.yml)
 [![Live demo](https://img.shields.io/badge/demo-maurit--x.vercel.app-crimson)](https://maurit-x.vercel.app)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 

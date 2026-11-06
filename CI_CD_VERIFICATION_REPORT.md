@@ -1,5 +1,7 @@
 # MarutiX CI/CD Pipeline — Verification Report
 
+> **Superseded (2026-11-06):** the three workflows below were merged into one, `.github/workflows/ci-cd.yml` (“ci-cd pipeline for marutix”) with jobs `codequality` → `buildandpush` → `deploy_to_server`. See `CI_CD_SETUP.md`.
+
 **Generated:** 2026-11-05  
 **Engineer:** Senior DevOps review (Antigravity)  
 **Repository:** `https://github.com/Piyush-Sharma788/MauritX` (private, GitHub Free)  

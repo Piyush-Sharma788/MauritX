@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs ON the deploy host (copied there by .github/workflows/deploy.yml).
+# Runs ON the deploy host (copied there by the deploy_to_server job in .github/workflows/ci-cd.yml).
 # Settings arrive on stdin as shell-quoted KEY=value lines, so the registry token never
 # appears in a process list:
 #   DEPLOY_PATH IMAGE_PREFIX GHCR_USER GHCR_TOKEN   always

@@ -2,47 +2,27 @@
 
 > [!IMPORTANT]
 > Complete every step in order before pushing to `main` or creating a release tag.
-> The Deploy workflow will refuse to run on a machine that has no `.env.production`.
+> The `deploy_to_server` job will refuse to run on a machine that has no `.env.production`.
 
 ---
 
 ## Architecture overview
 
+One workflow — **`ci-cd pipeline for marutix`** (`.github/workflows/ci-cd.yml`) — with three jobs that run in order. Each job only starts if the previous one passed, so the checks on a commit read:
+
 ```
-push to main / release tag
-        │
-        ▼
-┌─────────────────┐    fails → ✗ blocked
-│  Code Quality   │─────────────────────────────────
-│  (code-quality) │                                 │
-│  ESLint         │                                 │
-│  TypeScript     │   succeeds                      │
-│  Tests (Mongo)  │───────────────────┐             │
-│  Dep audit      │                   │             │
-│  CodeQL         │                   ▼             │
-└─────────────────┘      ┌──────────────────────┐  │
-                         │   Build & Push       │  │
-                         │   (build-push)       │  │
-                         │   Next.js build      │  │
-                         │   Docker web image   │  │
-                         │   Docker worker img  │  │
-                         │   Smoke tests        │  │
-                         │   Push to GHCR       │  │
-                         │   Deploy manifest    │  │
-                         └──────────┬───────────┘  │
-                                    │ succeeds      │
-                                    ▼               │
-                         ┌──────────────────────┐  │
-                         │   Deploy             │  │
-                         │   (deploy)           │  │
-                         │   staging: auto      │  │
-                         │   production: tag    │  │
-                         │   Digest verify      │  │
-                         │   docker compose up  │  │
-                         │   Health check       │  │
-                         │   Auto-rollback      │  │
-                         └──────────────────────┘  │
+ci-cd pipeline for marutix / codequality (push)
+ci-cd pipeline for marutix / buildandpush (push)
+ci-cd pipeline for marutix / deploy_to_server (push)
 ```
+
+| Job | What it does |
+|---|---|
+| `codequality` | ESLint, TypeScript, unit + MongoDB integration tests, dependency audit/gate, dependency review (PRs), CodeQL |
+| `buildandpush` | Builds the web and worker Docker images, smoke-tests both, then pushes them to GHCR (`sha-<commit>`, plus `main` or `X.Y.Z`/`X.Y`) — pushes only for `main` and `vX.Y.Z` tags |
+| `deploy_to_server` | SSH deploy of the exact image digests just pushed, health check, verification, automatic rollback. `main` → staging (`STAGING_DEPLOY_ENABLED=true`), `vX.Y.Z` → production (`PRODUCTION_DEPLOY_ENABLED=true`); otherwise skipped |
+
+Pull requests run `codequality` and `buildandpush` (nothing pushed); `deploy_to_server` is skipped.
 
 ---
 
@@ -166,12 +146,11 @@ echo "$GHCR_READ_TOKEN" | docker login ghcr.io -u "$GHCR_READ_USER" --password-s
 
 After setting up Secrets/Variables and the server:
 
-1. Go to **GitHub → Actions → Build & Push**
-2. Click **Run workflow** → select `main` branch → Run
-3. Once Build & Push succeeds, go to **Deploy → Run workflow** → select environment → Run
+1. Go to **GitHub → Actions → ci-cd pipeline for marutix**
+2. Click **Run workflow** → select `main` (staging) or a `vX.Y.Z` tag (production) → Run
 
-The Deploy workflow:
-1. Downloads the deploy manifest created by Build & Push
+The `deploy_to_server` job:
+1. Takes the image digests `buildandpush` just pushed
 2. SSH-es into the server as `$DEPLOY_USER`
 3. Copies `deploy/docker-compose.prod.yml` and `scripts/ci/remote-deploy.sh` to `$DEPLOY_PATH`
 4. Verifies pulled image digests match what GHCR published (tamper-proof)
@@ -191,9 +170,9 @@ git push origin v1.0.0
 ```
 
 This triggers:
-1. **Code Quality** runs for the tagged commit
-2. **Build & Push** publishes images tagged `v1.0.0`, `1.0`, and `sha-<commit>`  
-3. **Deploy** deploys to production automatically (if `PRODUCTION_DEPLOY_ENABLED=true`)
+1. `codequality` runs for the tagged commit
+2. `buildandpush` publishes images tagged `1.0.0`, `1.0`, and `sha-<commit>`
+3. `deploy_to_server` deploys to production automatically (if `PRODUCTION_DEPLOY_ENABLED=true`)
 
 ---
 
@@ -208,7 +187,7 @@ MARUTIX_IMAGE_TAG="$PREV" \
 docker compose -f docker-compose.yml up -d
 ```
 
-The Deploy workflow performs this rollback automatically on health-check failure.
+The `deploy_to_server` job performs this rollback automatically on health-check failure. To redeploy an older release from GitHub, open that commit's pipeline run and **Re-run** its `deploy_to_server` job.
 
 ---
 
@@ -216,10 +195,10 @@ The Deploy workflow performs this rollback automatically on health-check failure
 
 | Limitation | Detail |
 |---|---|
-| **CodeQL on private repos** | The `codeql` job in `code-quality.yml` requires GitHub Advanced Security (GHAS), which is not included in GitHub Free for private repos. The job will fail with a permissions error. Either make the repo public, or disable the `codeql` job until you upgrade. |
-| **dependency-review-action on private repos** | Same restriction — requires GHAS. The `dependency-review` job runs only on PRs; it will silently succeed or error depending on your repo visibility. |
+| **CodeQL on private repos** | The CodeQL steps in the `codequality` job require GitHub Advanced Security (GHAS), which is not included in GitHub Free for private repos. The job will fail with a permissions error. Either make the repo public, or remove the two CodeQL steps until you upgrade. |
+| **dependency-review-action on private repos** | Same restriction — requires GHAS. The dependency-review step runs only on PRs; it will silently succeed or error depending on your repo visibility. |
 | **No branch protection** | GitHub Free private repos cannot enforce required status checks via API. Merge discipline is manual. |
-| **`GITHUB_TOKEN` package write** | The `Build & Push` workflow uses `secrets.GITHUB_TOKEN` to push images. This works automatically as long as the `packages: write` permission is set (it is). |
+| **`GITHUB_TOKEN` package write** | The `buildandpush` job uses `secrets.GITHUB_TOKEN` to push images. This works automatically as long as the `packages: write` permission is set (it is). |
 
 ---
 
