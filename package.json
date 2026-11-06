@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "dev:web": "next dev",
+    "bot": "bash scripts/start-bot.sh",
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
