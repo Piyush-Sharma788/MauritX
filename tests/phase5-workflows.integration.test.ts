@@ -155,16 +155,17 @@ describe.skipIf(!enabled)("Phase 5 workflows (MongoDB, fake WhatsApp)", () => {
       await say(phone, "YES");
       const confirmation = await lastReply(phone);
       const request = await EmergencyRequest.findOne({ requesterPhoneLookup: phoneLookupToken(phone) }).lean();
-      expect(request).toMatchObject({ status: "pending_verification", createdVia: "whatsapp", bloodGroup: "O+", component: "packed_red_cells", unitsRequested: 2, city: "Prayagraj", priority: "critical" });
+      // Requests go live on creation (no manual verification step).
+      expect(request).toMatchObject({ status: "active", createdVia: "whatsapp", bloodGroup: "O+", component: "packed_red_cells", unitsRequested: 2, city: "Prayagraj", priority: "critical" });
       expect(decryptPii(request!.patientNameEncrypted)).toBe("S. D.");
       expect(confirmation).toContain(request!.publicRequestId);
       expect(confirmation).toMatch(/http:\/\/localhost:3000\/track\/[A-Za-z0-9_-]{43}/);
-      expect(confirmation).toMatch(/Pending verification/);
+      expect(confirmation).toMatch(/is now active/);
 
       await say(phone, "TRACK");
       // The status and the "call 112" line arrive as one merged message.
       const tracked = await lastReply(phone);
-      expect(tracked).toMatch(new RegExp(`${request!.publicRequestId}: Pending verification[\\s\\S]*Verified by MarutiX: Not yet`));
+      expect(tracked).toMatch(new RegExp(`${request!.publicRequestId}: Active[\\s\\S]*Verified by MarutiX: Yes`));
       expect(tracked).not.toMatch(/S\. D\./);
     });
 

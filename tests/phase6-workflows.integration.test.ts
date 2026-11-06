@@ -104,7 +104,10 @@ function fakeDiscovery(places: DiscoveredInstitution[], options: { geocode?: { l
   return { provider, calls };
 }
 
-/** A WhatsApp-created request (the sender is the verified requester), verified and activated by an admin. */
+/**
+ * A WhatsApp-created request (the sender is the verified requester), live and coordinating.
+ * Requests now go live on creation; older flows needed an admin to verify and activate them.
+ */
 async function activeWhatsAppRequest(group = "B+", units = "1") {
   const requester = randomMobile("9");
   await say(requester, "REQUEST");
@@ -112,9 +115,15 @@ async function activeWhatsAppRequest(group = "B+", units = "1") {
   const confirmation = await lastReply(requester);
   const manageToken = /\/track\/([A-Za-z0-9_-]{43})/.exec(confirmation)![1];
   const request = (await EmergencyRequest.findOne({ requesterPhoneLookup: phoneLookupToken(requester) }).lean())!;
-  await adminUpdateStatus(request.publicRequestId, "verified", "Confirmed with blood bank", admin, ctx);
-  await adminUpdateStatus(request.publicRequestId, "active", undefined, admin, ctx);
-  return { requester, manageToken, request };
+  await activate(request.publicRequestId, request.status);
+  return { requester, manageToken, request: (await EmergencyRequest.findById(request._id).lean())! };
+}
+
+/** Admin verify + activate, only for flows where a request doesn't start active. */
+async function activate(publicRequestId: string, status: string) {
+  if (status === "active") return;
+  await adminUpdateStatus(publicRequestId, "verified", "Confirmed with blood bank", admin, ctx);
+  await adminUpdateStatus(publicRequestId, "active", undefined, admin, ctx);
 }
 
 async function donorAt(km: number | null, name: string, group = "B+") {
@@ -316,8 +325,7 @@ describe.skipIf(!enabled)("Phase 6 workflows (MongoDB, fake external services)",
       { patientName: "A. B.", patientAge: null, contactName: "Meena Devi", contactPhone, bloodGroup: "B+", component: "whole_blood", unitsRequested: 1, requiredBy: new Date(Date.now() + 6 * 3600_000), priority: "critical", hospitalName: "City Hospital", hospitalAddress: "12 MG Road", city: "Prayagraj", locality: "Civil Lines", hospitalPhone: null, location: ORIGIN, whatsappUpdates: true, consent: true, privacyNoticeVersion: "2026-11-04" },
       randomUUID(), ctx,
     );
-    await adminUpdateStatus(created.publicRequestId, "verified", undefined, admin, ctx);
-    await adminUpdateStatus(created.publicRequestId, "active", undefined, admin, ctx);
+    await activate(created.publicRequestId, created.status);
     await runDueJobs("test", new Date());
     await drainWhatsApp(fakeWhatsApp().provider);
     await say(donor.phone, "1");

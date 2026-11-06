@@ -419,12 +419,13 @@ async function phaseOne(m: Mods) {
   check("nothing is saved before the family confirms", (await m.EmergencyRequest.countDocuments({ requesterPhoneLookup: patient.lookup })) === 0);
   r = await patient.send("YES");
   const request = await m.EmergencyRequest.findOne({ requesterPhoneLookup: patient.lookup }).lean();
-  check("YES saves the request as pending verification", request?.status === "pending_verification" && request.createdVia === "whatsapp");
+  // Requests go live on creation (no manual verification step).
+  check("YES saves the request and it goes live", request?.status === "active" && request.createdVia === "whatsapp");
   check("the family receives the request ID and a tracking link", Boolean(request && has(r, new RegExp(request.publicRequestId))) && has(r, /\/track\//));
   r = await patient.send("TRACK");
-  check("TRACK reports the status", has(r, /Pending verification/i));
+  check("TRACK reports the status", has(r, new RegExp(`${request?.publicRequestId ?? "MX-"}: Active`)));
   r = await patient.send("mera request kaha tak pahucha");
-  check("Hinglish free text is understood as TRACK", has(r, new RegExp(`${request?.publicRequestId ?? "MX-"}: Pending verification`)));
+  check("Hinglish free text is understood as TRACK", has(r, new RegExp(`${request?.publicRequestId ?? "MX-"}: Active`)));
   if (!request) throw new Error("Request wasn't created; can't continue the workflow");
 
   section("5. Web sign-in (OTP) and admin verification over the real API");
@@ -443,10 +444,9 @@ async function phaseOne(m: Mods) {
   check("a correct authenticator code completes 2FA", confirm.status === 200, `HTTP ${confirm.status}`);
   const noAuth = await new Browser().call("POST", `/api/v1/admin/requests/${request.publicRequestId}/status`, { status: "verified" });
   check("the admin API refuses an anonymous caller", noAuth.status === 401, `HTTP ${noAuth.status}`);
+  // The request is already live, so the admin API must refuse to move it back to "verified".
   const verify = await browser.call("POST", `/api/v1/admin/requests/${request.publicRequestId}/status`, { status: "verified", note: "E2E: confirmed with the hospital" });
-  check("admin verifies the request", verify.status === 200, `HTTP ${verify.status} ${verify.status !== 200 ? JSON.stringify(verify.json) : ""}`);
-  const activate = await browser.call("POST", `/api/v1/admin/requests/${request.publicRequestId}/status`, { status: "active" });
-  check("admin activates the request", activate.status === 200, `HTTP ${activate.status}`);
+  check("the admin API refuses to re-verify a request that is already live", verify.status === 409 && verify.json?.error?.code === "INVALID_TRANSITION", `HTTP ${verify.status}`);
 
   section("6. Automated matching and donor alert (jobs worker, real background processing)");
   const alert = await donor.waitForReplies(/URGENT BLOOD REQUEST/, 90_000);

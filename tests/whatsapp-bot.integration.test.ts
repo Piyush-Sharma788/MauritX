@@ -431,11 +431,11 @@ describe.skipIf(!enabled)("WhatsApp bot: first contact, media, reliability, spee
       for (const t of ["S. D.", "skip", "Rohit Kumar", "B+", "1", "1", "in 6 hours", "1", "City Hospital", "Prayagraj", "Civil Lines", "12 MG Road", "skip", "yes"]) await send(phone, t);
       const confirmation = await lastReply(phone);
       const request = await EmergencyRequest.findOne({ requesterPhoneLookup: phoneLookupToken(phone) }).lean();
-      expect(confirmation).toMatch(new RegExp(`Request ${request!.publicRequestId} submitted`));
+      expect(confirmation).toMatch(new RegExp(`Request ${request!.publicRequestId} is now active`));
       const token = /\/track\/([^\s/]+)/.exec(confirmation)?.[1];
       expect(token).toBeTruthy();
       const tracked = await getTrackedRequest(token!);
-      expect(tracked).toMatchObject({ publicRequestId: request!.publicRequestId, status: "pending_verification", bloodGroup: "B+" });
+      expect(tracked).toMatchObject({ publicRequestId: request!.publicRequestId, status: "active", bloodGroup: "B+" });
     });
   });
 

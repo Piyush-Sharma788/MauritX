@@ -125,7 +125,8 @@ describe.skipIf(!enabled)("Emergency requests (MongoDB)", () => {
     const input = body();
     const res = await createRequest(input, randomUUID(), ctx());
     expect(res.publicRequestId).toMatch(/^MX-[0-9A-HJKMNP-TV-Z]{8}$/);
-    expect(res).toMatchObject({ status: "pending_verification", whatsappConfirmation: "not_requested", replayed: false });
+    // Requests go live on creation (no manual verification step).
+    expect(res).toMatchObject({ status: "active", whatsappConfirmation: "not_requested", replayed: false });
     expect(res.manageUrl).toMatch(/^http:\/\/localhost:3000\/track\/[A-Za-z0-9_-]{43}$/);
 
     const raw = JSON.stringify(await EmergencyRequest.collection.findOne({ publicRequestId: res.publicRequestId }));
@@ -158,9 +159,10 @@ describe.skipIf(!enabled)("Emergency requests (MongoDB)", () => {
   it("tracking shows status and hospital but no patient, contact or location details", async () => {
     const res = await createRequest(body(), randomUUID(), ctx());
     const view = await getTrackedRequest(tokenOf(res.manageUrl), res.publicRequestId);
-    expect(view).toMatchObject({ publicRequestId: res.publicRequestId, status: "pending_verification", bloodGroup: "B+", unitsRequested: 2, verifiedAt: null });
+    expect(view).toMatchObject({ publicRequestId: res.publicRequestId, status: "active", bloodGroup: "B+", unitsRequested: 2 });
+    expect(view.verifiedAt).not.toBeNull();
     expect(view.hospital.name).toBe("City General Hospital");
-    expect(view.manage?.allowedStatuses).toEqual(["fulfilled", "cancelled"]);
+    expect(view.manage?.allowedStatuses).toEqual(["partially_fulfilled", "fulfilled", "cancelled"]);
     const json = JSON.stringify(view);
     for (const secret of ["Sunita", "Rohit", "25.45", "81.84"]) expect(json).not.toContain(secret);
 
@@ -189,18 +191,19 @@ describe.skipIf(!enabled)("Emergency requests (MongoDB)", () => {
   it("lets the requester cancel, after which nothing else can change it", async () => {
     const res = await createRequest(body(), randomUUID(), ctx());
     const token = tokenOf(res.manageUrl);
-    await expectAppError(requesterUpdateStatus(token, res.publicRequestId, "partially_fulfilled", ctx()), "INVALID_TRANSITION", 409);
+    // Requesters can never verify. The type already forbids it; this checks the runtime guard behind it.
+    await expectAppError(requesterUpdateStatus(token, res.publicRequestId, "verified" as never, ctx()), "INVALID_TRANSITION", 409);
     const cancelled = await requesterUpdateStatus(token, res.publicRequestId, "cancelled", ctx());
     expect(cancelled.status).toBe("cancelled");
-    expect(cancelled.history.map((h) => [h.status, h.actor])).toEqual([["pending_verification", "requester"], ["cancelled", "requester"]]);
+    expect(cancelled.history.map((h) => [h.status, h.actor])).toEqual([["active", "requester"], ["cancelled", "requester"]]);
     await expectAppError(adminUpdateStatus(res.publicRequestId, "verified", undefined, admin, ctx()), "INVALID_TRANSITION", 409);
+    await expectAppError(adminUpdateStatus(res.publicRequestId, "active", undefined, admin, ctx()), "INVALID_TRANSITION", 409);
   });
 
   it("admins verify and move a request through its lifecycle, with history and audit", async () => {
     const res = await createRequest(body(), randomUUID(), ctx());
-    await expectAppError(adminUpdateStatus(res.publicRequestId, "fulfilled", undefined, admin, ctx()), "INVALID_TRANSITION");
-    await adminUpdateStatus(res.publicRequestId, "verified", "Confirmed with blood bank", admin, ctx());
-    await adminUpdateStatus(res.publicRequestId, "active", undefined, admin, ctx());
+    // An active request can't go back to "verified".
+    await expectAppError(adminUpdateStatus(res.publicRequestId, "verified", undefined, admin, ctx()), "INVALID_TRANSITION");
     await adminUpdateStatus(res.publicRequestId, "partially_fulfilled", "1 of 2 units arranged", admin, ctx());
     await requesterUpdateStatus(tokenOf(res.manageUrl), res.publicRequestId, "fulfilled", ctx());
 
@@ -209,14 +212,14 @@ describe.skipIf(!enabled)("Emergency requests (MongoDB)", () => {
     expect(detail.verifiedAt).not.toBeNull();
     expect(detail.closedAt).not.toBeNull();
     expect(detail.history.map((h) => `${h.status}:${h.actor}`)).toEqual([
-      "pending_verification:requester", "verified:admin", "active:admin", "partially_fulfilled:admin", "fulfilled:requester",
+      "active:requester", "partially_fulfilled:admin", "fulfilled:requester",
     ]);
-    expect(detail.history[1].note).toBe("Confirmed with blood bank");
+    expect(detail.history[1].note).toBe("1 of 2 units arranged");
 
     // Admin notes stay internal: tracking shows who and when, not the note.
     const tracked = await getTrackedRequest(tokenOf(res.manageUrl));
-    expect(JSON.stringify(tracked)).not.toContain("Confirmed with blood bank");
-    expect(await AuditLog.countDocuments({ action: "request.status_changed", resourceId: { $regex: `^${res.publicRequestId}:` } })).toBe(4);
+    expect(JSON.stringify(tracked)).not.toContain("1 of 2 units arranged");
+    expect(await AuditLog.countDocuments({ action: "request.status_changed", resourceId: { $regex: `^${res.publicRequestId}:` } })).toBe(2);
     expect(await AuditLog.countDocuments({ action: "request.viewed_by_admin", resourceId: res.publicRequestId })).toBe(1);
   });
 
@@ -275,14 +278,14 @@ describe.skipIf(!enabled)("Emergency requests (MongoDB)", () => {
     const a = await createRequest(body({ bloodGroup: "O-", city: "Lucknow" }), randomUUID(), ctx());
     await createRequest(body({ bloodGroup: "O-", city: "Kanpur" }), randomUUID(), ctx());
     const c = await createRequest(body({ bloodGroup: "AB+", city: "lucknow" }), randomUUID(), ctx());
-    await adminUpdateStatus(c.publicRequestId, "verified", undefined, admin, ctx());
+    await adminUpdateStatus(c.publicRequestId, "partially_fulfilled", undefined, admin, ctx());
 
     const all = await listRequests({});
     expect(all.stats.total).toBe(3);
-    expect(all.stats.byStatus).toMatchObject({ pending_verification: 2, verified: 1, fulfilled: 0 });
+    expect(all.stats.byStatus).toMatchObject({ active: 2, partially_fulfilled: 1, pending_verification: 0, fulfilled: 0 });
     expect((await listRequests({ bloodGroup: "O-" })).requests).toHaveLength(2);
     expect((await listRequests({ city: "LUCKNOW" })).requests).toHaveLength(2);
-    expect((await listRequests({ status: "verified" })).requests.map((r) => r.publicRequestId)).toEqual([c.publicRequestId]);
+    expect((await listRequests({ status: "partially_fulfilled" })).requests.map((r) => r.publicRequestId)).toEqual([c.publicRequestId]);
     expect((await listRequests({ q: a.publicRequestId })).requests).toHaveLength(1);
   });
 });

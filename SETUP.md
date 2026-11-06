@@ -339,7 +339,9 @@ The full design is in WHATSAPP_BOT.md §10.
 
 ## Phase 6: automated discovery, outreach and zone-wise donor waves
 
-The design is in WHATSAPP_BOT.md §11 and SYSTEM_DESIGN.md §14.
+The design is in WHATSAPP_BOT.md §11 and SYSTEM_DESIGN.md §14. For the verified operating guide
+(status of every component, configuration, testing and troubleshooting), see
+[docs/DONOR_ALERTS_AND_BLOOD_CENTRE_NETWORK.md](docs/DONOR_ALERTS_AND_BLOOD_CENTRE_NETWORK.md).
 
 ### Processes to run
 | Process | Command | Notes |

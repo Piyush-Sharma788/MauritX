@@ -15,7 +15,7 @@ export type AiProviderName = (typeof AI_PROVIDERS)[number];
 
 /** Used when AI_MODEL isn't set. Model names change over time: set AI_MODEL to override. */
 export const DEFAULT_AI_MODELS: Record<Exclude<AiProviderName, "none">, string> = {
-  gemini: "gemini-2.5-flash",
+  gemini: "gemini-3.5-flash", // gemini-2.5-flash was retired for new API keys (404, Nov 2026)
   openai: "gpt-4o-mini",
   anthropic: "claude-opus-5-5",
 };
